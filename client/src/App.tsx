@@ -7,33 +7,36 @@ import { FileView } from './components/FileView'
 import { TopBar } from './components/TopBar'
 import { useReview } from './store'
 
-/** Shown while a note draft is open but another file is being browsed. */
+/** Shown while the active draft belongs to a file other than the open one. */
 function DraftPill() {
-  const draft = useReview((s) => s.draft)
+  const drafts = useReview((s) => s.drafts)
+  const activeDraftId = useReview((s) => s.activeDraftId)
   const selectedPath = useReview((s) => s.selectedPath)
   const openFile = useReview((s) => s.openFile)
   const cancelDraft = useReview((s) => s.cancelDraft)
 
-  if (draft === null || draft.path === selectedPath) return null
+  const active =
+    drafts.find((d) => d.id === activeDraftId) ?? drafts.at(-1)
+  if (active === undefined || active.path === selectedPath) return null
 
   return (
     <div className="fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-lg border border-accent bg-panel px-3 py-2 text-xs shadow-xl">
       <span className="text-soft">
-        note in progress on{' '}
+        {drafts.length > 1 ? `${drafts.length} notes in progress; active on` : 'note in progress on'}{' '}
         <span className="font-mono text-ink">
-          {draft.path}:L{draft.startLine}
+          {active.path}:L{active.startLine}
         </span>{' '}
-        — select code here to add a reference
+        — “+ ref” on a selection here adds a reference to it
       </span>
       <button
         className="rounded bg-accent px-2 py-1 font-medium text-white hover:bg-accent-strong"
-        onClick={() => void openFile(draft.path)}
+        onClick={() => void openFile(active.path)}
       >
         back to note
       </button>
       <button
         className="text-soft hover:text-ink"
-        onClick={cancelDraft}
+        onClick={() => cancelDraft(active.id)}
       >
         discard
       </button>

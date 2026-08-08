@@ -12,12 +12,15 @@ import type {
 import { api } from './api'
 
 export interface Draft {
+  id: number
   path: string
   side: Side
   startLine: number
   endLine: number
   body: string
 }
+
+let draft_seq = 0
 
 export type Theme = 'dark' | 'light'
 
@@ -44,7 +47,8 @@ interface ReviewState {
   baseContent: FileContent | null
   sourceContent: FileContent | null
   threads: Thread[]
-  draft: Draft | null
+  drafts: Draft[]
+  activeDraftId: number | null
   error: string | null
   connected: boolean
   promptCopied: boolean
@@ -62,10 +66,11 @@ interface ReviewState {
   openFile: (path: string, status?: ChangedFile['status'] | 'unchanged') => Promise<void>
   setShowAll: (showAll: boolean) => Promise<void>
   startDraft: (side: Side, startLine: number, endLine: number) => void
-  updateDraftBody: (body: string) => void
+  updateDraftBody: (id: number, body: string) => void
   insertDraftRef: (path: string, startLine: number, endLine: number) => void
-  cancelDraft: () => void
-  submitDraft: () => Promise<void>
+  setActiveDraft: (id: number) => void
+  cancelDraft: (id: number) => void
+  submitDraft: (id: number) => Promise<void>
   reply: (threadId: number, body: string) => Promise<void>
   resolveThread: (threadId: number) => Promise<void>
   reopenThread: (threadId: number) => Promise<void>
@@ -99,7 +104,8 @@ export const useReview = create<ReviewState>((set, get) => {
         selectedPath: null,
         baseContent: null,
         sourceContent: null,
-        draft: null,
+        drafts: [],
+        activeDraftId: null,
         error: null,
       })
       const first = files[0]
@@ -126,7 +132,8 @@ export const useReview = create<ReviewState>((set, get) => {
     baseContent: null,
     sourceContent: null,
     threads: [],
-    draft: null,
+    drafts: [],
+    activeDraftId: null,
     error: null,
     connected: false,
     promptCopied: false,
@@ -228,42 +235,85 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     startDraft: (side, startLine, endLine) => {
-      const { selectedPath } = get()
+      const { selectedPath, drafts } = get()
       if (selectedPath === null) return
+      draft_seq += 1
+      const draft: Draft = {
+        id: draft_seq,
+        path: selectedPath,
+        side,
+        startLine,
+        endLine,
+        body: '',
+      }
+      set({ drafts: [...drafts, draft], activeDraftId: draft.id })
+    },
+
+    updateDraftBody: (id, body) => {
       set({
-        draft: { path: selectedPath, side, startLine, endLine, body: '' },
+        drafts: get().drafts.map((d) => (d.id === id ? { ...d, body } : d)),
       })
     },
 
-    updateDraftBody: (body) => {
-      const { draft } = get()
-      if (draft === null) return
-      set({ draft: { ...draft, body } })
-    },
-
     insertDraftRef: (path, startLine, endLine) => {
-      const { draft } = get()
-      if (draft === null) return
+      const { drafts, activeDraftId } = get()
+      const target =
+        drafts.find((d) => d.id === activeDraftId) ?? drafts.at(-1)
+      if (target === undefined) return
       const ref =
         startLine === endLine
           ? `@${path}:L${startLine}`
           : `@${path}:L${startLine}-L${endLine}`
       const body =
-        draft.body === '' || /\s$/.test(draft.body)
-          ? `${draft.body}${ref} `
-          : `${draft.body} ${ref} `
-      set({ draft: { ...draft, body } })
+        target.body === '' || /\s$/.test(target.body)
+          ? `${target.body}${ref} `
+          : `${target.body} ${ref} `
+      set({
+        drafts: get().drafts.map((d) =>
+          d.id === target.id ? { ...d, body } : d,
+        ),
+      })
     },
 
-    cancelDraft: () => set({ draft: null }),
+    setActiveDraft: (id) => {
+      if (get().drafts.some((d) => d.id === id)) {
+        set({ activeDraftId: id })
+      }
+    },
 
-    submitDraft: async () => {
-      const { session, draft } = get()
-      if (session === null || draft === null) return
+    cancelDraft: (id) => {
+      const drafts = get().drafts.filter((d) => d.id !== id)
+      set({
+        drafts,
+        activeDraftId:
+          get().activeDraftId === id
+            ? (drafts.at(-1)?.id ?? null)
+            : get().activeDraftId,
+      })
+    },
+
+    submitDraft: async (id) => {
+      const { session, drafts } = get()
+      const draft = drafts.find((d) => d.id === id)
+      if (session === null || draft === undefined) return
       const body = draft.body.trim()
       if (body === '') return
-      const thread = await api.createThread(session.id, { ...draft, body })
-      set({ threads: [...get().threads, thread], draft: null })
+      const thread = await api.createThread(session.id, {
+        path: draft.path,
+        side: draft.side,
+        startLine: draft.startLine,
+        endLine: draft.endLine,
+        body,
+      })
+      const remaining = get().drafts.filter((d) => d.id !== id)
+      set({
+        threads: [...get().threads, thread],
+        drafts: remaining,
+        activeDraftId:
+          get().activeDraftId === id
+            ? (remaining.at(-1)?.id ?? null)
+            : get().activeDraftId,
+      })
     },
 
     reply: async (threadId, body) => {

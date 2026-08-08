@@ -34,18 +34,14 @@ function editorOptions(
   }
 }
 
-/**
- * With no draft open, a capture gesture starts one. With a draft in
- * progress (any file), the same gesture inserts a path:Lx-Ly reference
- * into it instead.
- */
-function captureRange(side: Side, startLine: number, endLine: number): void {
+function startNote(side: Side, startLine: number, endLine: number): void {
+  useReview.getState().startDraft(side, startLine, endLine)
+}
+
+function refToActiveNote(startLine: number, endLine: number): void {
   const state = useReview.getState()
-  if (state.draft !== null && state.selectedPath !== null) {
-    state.insertDraftRef(state.selectedPath, startLine, endLine)
-    return
-  }
-  state.startDraft(side, startLine, endLine)
+  if (state.selectedPath === null) return
+  state.insertDraftRef(state.selectedPath, startLine, endLine)
 }
 
 function useGutterDraft() {
@@ -63,6 +59,9 @@ function useGutterDraft() {
     instance.onMouseUp((event) => {
       if (!armed) return
       armed = false
+      // with drafts open the gesture is ambiguous (new note vs reference);
+      // the selection widget offers both, so don't decide here
+      if (useReview.getState().drafts.length > 0) return
       const selection = instance.getSelection()
       if (selection !== null && !selection.isEmpty()) {
         let end = selection.endLineNumber
@@ -70,21 +69,21 @@ function useGutterDraft() {
         if (selection.endColumn === 1 && end > selection.startLineNumber) {
           end -= 1
         }
-        captureRange(side, selection.startLineNumber, end)
+        startNote(side, selection.startLineNumber, end)
         return
       }
       const line = event.target.position?.lineNumber
       if (line !== undefined) {
-        captureRange(side, line, line)
+        startNote(side, line, line)
       }
     })
   }
 }
 
 /**
- * Floating "+ note" button that follows a non-empty selection. Gutter clicks
- * race against Monaco's own selection handling; a content widget on the live
- * selection is the reliable path to range comments.
+ * Floating buttons that follow a non-empty selection: "+ note" starts a new
+ * comment block; "+ ref" (shown while drafts are open) pushes the selected
+ * range into the active draft.
  */
 function useSelectionNote(
   instance: editor.ICodeEditor | null,
@@ -95,8 +94,10 @@ function useSelectionNote(
     if (instance === null) return
     const node = document.createElement('div')
     node.className = 'stickie-selection-note'
-    const button = document.createElement('button')
-    node.appendChild(button)
+    const note_button = document.createElement('button')
+    node.appendChild(note_button)
+    const ref_button = document.createElement('button')
+    if (hasDraft) node.appendChild(ref_button)
     let range: { start: number; end: number } | null = null
 
     const widget: editor.IContentWidget = {
@@ -132,19 +133,25 @@ function useSelectionNote(
           range.end === range.start
             ? `L${range.start}`
             : `L${range.start}–L${range.end}`
-        button.textContent = hasDraft ? `+ ref ${span}` : `+ note ${span}`
+        note_button.textContent = `+ note ${span}`
+        ref_button.textContent = `+ ref ${span}`
       }
       instance.layoutContentWidget(widget)
     })
 
-    button.onmousedown = (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      if (range === null) return
-      captureRange(side, range.start, range.end)
-      range = null
-      instance.layoutContentWidget(widget)
-    }
+    const capture = (action: (start: number, end: number) => void) =>
+      (event: MouseEvent) => {
+        event.preventDefault()
+        event.stopPropagation()
+        if (range === null) return
+        action(range.start, range.end)
+        range = null
+        instance.layoutContentWidget(widget)
+      }
+    note_button.onmousedown = capture((start, end) =>
+      startNote(side, start, end),
+    )
+    ref_button.onmousedown = capture(refToActiveNote)
 
     return () => {
       subscription.dispose()
@@ -163,7 +170,7 @@ export function FileView() {
   const baseContent = useReview((s) => s.baseContent)
   const sourceContent = useReview((s) => s.sourceContent)
   const threads = useReview((s) => s.threads)
-  const draft = useReview((s) => s.draft)
+  const drafts = useReview((s) => s.drafts)
   const theme = useReview((s) => s.theme)
   const attachGutter = useGutterDraft()
   const width = useWindowWidth()
@@ -200,7 +207,7 @@ export function FileView() {
     clearReveal()
   }, [reveal, selectedPath, reveal_editor, content_ready, clearReveal])
 
-  const has_draft = draft !== null
+  const has_draft = drafts.length > 0
   useSelectionNote(originalEditor, 'base', has_draft)
   useSelectionNote(modifiedEditor, 'source', has_draft)
   useSelectionNote(
@@ -219,10 +226,8 @@ export function FileView() {
 
   const file_threads = (side: Side) =>
     threads.filter((t) => t.path === selectedPath && t.side === side)
-  const file_draft = (side: Side) =>
-    draft !== null && draft.path === selectedPath && draft.side === side
-      ? draft
-      : null
+  const file_drafts = (side: Side) =>
+    drafts.filter((d) => d.path === selectedPath && d.side === side)
 
   const binary = baseContent?.binary === true || sourceContent?.binary === true
   const language = languageFor(selectedPath)
@@ -300,12 +305,12 @@ export function FileView() {
             <CommentLayer
               editorInstance={originalEditor}
               threads={file_threads('base')}
-              draft={file_draft('base')}
+              drafts={file_drafts('base')}
             />
             <CommentLayer
               editorInstance={modifiedEditor}
               threads={file_threads('source')}
-              draft={file_draft('source')}
+              drafts={file_drafts('source')}
             />
           </>
         )}
@@ -325,7 +330,7 @@ export function FileView() {
             <CommentLayer
               editorInstance={singleEditor}
               threads={file_threads(single_side)}
-              draft={file_draft(single_side)}
+              drafts={file_drafts(single_side)}
             />
           </>
         )}

@@ -16,32 +16,29 @@ interface ZoneEntry {
 interface Props {
   editorInstance: editor.ICodeEditor | null
   threads: Thread[]
-  draft: Draft | null
+  drafts: Draft[]
 }
 
 /**
- * Renders comment threads (and the in-progress draft) as Monaco view zones,
+ * Renders comment threads (and in-progress drafts) as Monaco view zones,
  * with React content portaled into each zone's DOM node. Zone heights track
  * rendered content via ResizeObserver.
  */
-export function CommentLayer({ editorInstance, threads, draft }: Props) {
+export function CommentLayer({ editorInstance, threads, drafts }: Props) {
   const [entries, setEntries] = useState<ZoneEntry[]>([])
   const entriesRef = useRef<ZoneEntry[]>([])
 
   const signature = [
     ...threads.map((t) => `${t.id}:${t.endLine}:${t.status}:${t.messages.length}`),
-    draft === null ? '' : `draft:${draft.endLine}`,
+    ...drafts.map((d) => `d${d.id}:${d.endLine}`),
   ].join('|')
 
   useEffect(() => {
     if (editorInstance === null) return
-    const items: { key: string; line: number }[] = threads.map((t) => ({
-      key: `t${t.id}`,
-      line: t.endLine,
-    }))
-    if (draft !== null) {
-      items.push({ key: 'draft', line: draft.endLine })
-    }
+    const items: { key: string; line: number }[] = [
+      ...threads.map((t) => ({ key: `t${t.id}`, line: t.endLine })),
+      ...drafts.map((d) => ({ key: `d${d.id}`, line: d.endLine })),
+    ]
     const created: ZoneEntry[] = []
     editorInstance.changeViewZones((accessor) => {
       for (const item of items) {
@@ -83,8 +80,10 @@ export function CommentLayer({ editorInstance, threads, draft }: Props) {
       {entries.map((entry) =>
         createPortal(
           <Measured onHeight={(h) => relayout(entry.key, h)}>
-            {entry.key === 'draft' ? (
-              <DraftForm />
+            {entry.key.startsWith('d') ? (
+              <DraftForm
+                draft={drafts.find((d) => `d${d.id}` === entry.key)}
+              />
             ) : (
               <ThreadCard
                 thread={threads.find((t) => `t${t.id}` === entry.key)}

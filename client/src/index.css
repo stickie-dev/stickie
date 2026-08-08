@@ -46,6 +46,8 @@
 
 .stickie-selection-note {
   z-index: 20;
+  display: flex;
+  gap: 4px;
 }
 
 .stickie-selection-note button {
