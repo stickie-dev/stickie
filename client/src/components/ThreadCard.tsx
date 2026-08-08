@@ -105,7 +105,7 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
           </div>
         ))}
         {showReply ? (
-          <div className="flex gap-2">
+          <div className="flex gap-2 border-t border-edge pt-2">
             <input
               autoFocus
               className="grow rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
@@ -125,12 +125,14 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
             </button>
           </div>
         ) : (
-          <button
-            className="text-xs text-soft hover:text-ink"
-            onClick={() => setShowReply(true)}
-          >
-            reply…
-          </button>
+          <div className="border-t border-edge pt-1.5">
+            <button
+              className="text-xs text-soft hover:text-ink"
+              onClick={() => setShowReply(true)}
+            >
+              reply…
+            </button>
+          </div>
         )}
       </div>
     </div>

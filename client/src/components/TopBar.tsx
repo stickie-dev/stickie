@@ -39,6 +39,7 @@ export function TopBar() {
 
   return (
     <header className="flex items-center gap-3 border-b border-edge px-3 py-2 text-xs">
+      <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
       <span className="font-bold tracking-wide text-ink">stickie</span>
       <span
         className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-faint'}`}

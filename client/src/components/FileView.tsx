@@ -44,124 +44,124 @@ function refToActiveNote(startLine: number, endLine: number): void {
   state.insertDraftRef(state.selectedPath, startLine, endLine)
 }
 
-function useGutterDraft() {
-  return (instance: editor.ICodeEditor, side: Side) => {
-    let armed = false
-    instance.onMouseDown((event) => {
-      const target_type = event.target.type
-      armed =
-        target_type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS ||
-        target_type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN
-    })
-    // the draft opens on mouseup so a drag across line numbers becomes a
-    // range note; reading the selection at mousedown races Monaco's own
-    // click-selects-line handling
-    instance.onMouseUp((event) => {
-      if (!armed) return
-      armed = false
-      // with drafts open the gesture is ambiguous (new note vs reference);
-      // the selection widget offers both, so don't decide here
-      if (useReview.getState().drafts.length > 0) return
-      const selection = instance.getSelection()
-      if (selection !== null && !selection.isEmpty()) {
-        let end = selection.endLineNumber
-        // a full-line gutter selection ends at column 1 of the next line
-        if (selection.endColumn === 1 && end > selection.startLineNumber) {
-          end -= 1
-        }
-        startNote(side, selection.startLineNumber, end)
-        return
-      }
-      const line = event.target.position?.lineNumber
-      if (line !== undefined) {
-        startNote(side, line, line)
-      }
-    })
+interface CaptureTarget {
+  x: number
+  y: number
+  side: Side
+  startLine: number
+  endLine: number
+}
+
+function selectionLines(
+  selection: ReturnType<editor.ICodeEditor['getSelection']>,
+): { start: number; end: number } | null {
+  if (selection === null || selection.isEmpty()) return null
+  let end = selection.endLineNumber
+  // a full-line selection ends at column 1 of the following line
+  if (selection.endColumn === 1 && end > selection.startLineNumber) {
+    end -= 1
   }
+  return { start: selection.startLineNumber, end }
 }
 
 /**
- * Floating buttons that follow a non-empty selection: "+ note" starts a new
- * comment block; "+ ref" (shown while drafts are open) pushes the selected
- * range into the active draft.
+ * Wires an editor's mouse events to the capture flow. A gutter gesture with
+ * no drafts open starts a note directly; any other selection surfaces the
+ * action buttons at the mouse position.
  */
-function useSelectionNote(
-  instance: editor.ICodeEditor | null,
-  side: Side,
-  hasDraft: boolean,
-): void {
-  useEffect(() => {
-    if (instance === null) return
-    const node = document.createElement('div')
-    node.className = 'stickie-selection-note'
-    const note_button = document.createElement('button')
-    node.appendChild(note_button)
-    const ref_button = document.createElement('button')
-    if (hasDraft) node.appendChild(ref_button)
-    let range: { start: number; end: number } | null = null
-
-    const widget: editor.IContentWidget = {
-      getId: () => `stickie-selection-note-${side}`,
-      getDomNode: () => node,
-      getPosition: () => {
-        if (range === null) return { position: null, preference: [] }
-        const column =
-          instance.getModel()?.getLineMaxColumn(range.end) ?? 1
-        return {
-          position: { lineNumber: range.end, column },
-          preference: [
-            monaco.editor.ContentWidgetPositionPreference.BELOW,
-            monaco.editor.ContentWidgetPositionPreference.ABOVE,
-          ],
-        }
-      },
-    }
-    instance.addContentWidget(widget)
-
-    const subscription = instance.onDidChangeCursorSelection((event) => {
-      const selection = event.selection
-      if (selection.isEmpty()) {
-        range = null
-      } else {
-        let end = selection.endLineNumber
-        // a full-line selection ends at column 1 of the following line
-        if (selection.endColumn === 1 && end > selection.startLineNumber) {
-          end -= 1
-        }
-        range = { start: selection.startLineNumber, end }
-        const span =
-          range.end === range.start
-            ? `L${range.start}`
-            : `L${range.start}–L${range.end}`
-        note_button.textContent = `+ note ${span}`
-        ref_button.textContent = `+ ref ${span}`
-      }
-      instance.layoutContentWidget(widget)
+function makeCaptureAttacher(
+  setTarget: (target: CaptureTarget | null) => void,
+) {
+  return (instance: editor.ICodeEditor, side: Side) => {
+    let gutter_armed = false
+    instance.onMouseDown((event) => {
+      const target_type = event.target.type
+      gutter_armed =
+        target_type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS ||
+        target_type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN
     })
-
-    const capture = (action: (start: number, end: number) => void) =>
-      (event: MouseEvent) => {
-        event.preventDefault()
-        event.stopPropagation()
-        if (range === null) return
-        action(range.start, range.end)
-        range = null
-        instance.layoutContentWidget(widget)
+    instance.onMouseUp((event) => {
+      const was_gutter = gutter_armed
+      gutter_armed = false
+      const lines = selectionLines(instance.getSelection())
+      const no_drafts = useReview.getState().drafts.length === 0
+      if (was_gutter && no_drafts) {
+        const range =
+          lines ??
+          (event.target.position === null || event.target.position === undefined
+            ? null
+            : {
+                start: event.target.position.lineNumber,
+                end: event.target.position.lineNumber,
+              })
+        if (range !== null) startNote(side, range.start, range.end)
+        setTarget(null)
+        return
       }
-    note_button.onmousedown = capture((start, end) =>
-      startNote(side, start, end),
-    )
-    ref_button.onmousedown = capture(refToActiveNote)
+      if (lines === null) return
+      const browser = event.event.browserEvent
+      setTarget({
+        x: browser.clientX,
+        y: browser.clientY,
+        side,
+        startLine: lines.start,
+        endLine: lines.end,
+      })
+    })
+    instance.onDidChangeCursorSelection((event) => {
+      if (event.selection.isEmpty()) setTarget(null)
+    })
+    instance.onDidScrollChange(() => setTarget(null))
+  }
+}
 
-    return () => {
-      subscription.dispose()
-      try {
-        instance.removeContentWidget(widget)
-      } catch {
-        // editor already disposed
-      }
-    }
-  }, [instance, side, hasDraft])
+/** Equal-width note/ref actions rendered just below the mouse position. */
+function CaptureActions({
+  target,
+  onDone,
+}: {
+  target: CaptureTarget
+  onDone: () => void
+}) {
+  const hasDraft = useReview((s) => s.drafts.length > 0)
+  const span =
+    target.startLine === target.endLine
+      ? `L${target.startLine}`
+      : `L${target.startLine}–L${target.endLine}`
+
+  const button_classes =
+    'px-3 py-1.5 text-xs whitespace-nowrap text-ink hover:bg-overlay'
+
+  return (
+    <div
+      className="fixed z-50 grid -translate-x-1/2 grid-flow-col auto-cols-fr overflow-hidden rounded-md border border-edge bg-panel shadow-xl"
+      style={{
+        left: Math.min(Math.max(target.x, 120), window.innerWidth - 120),
+        top: target.y + 12,
+      }}
+    >
+      <button
+        className={button_classes}
+        onClick={() => {
+          startNote(target.side, target.startLine, target.endLine)
+          onDone()
+        }}
+      >
+        + note {span}
+      </button>
+      {hasDraft && (
+        <button
+          className={`${button_classes} border-l border-edge`}
+          onClick={() => {
+            refToActiveNote(target.startLine, target.endLine)
+            onDone()
+          }}
+        >
+          ↗ ref {span}
+        </button>
+      )}
+    </div>
+  )
 }
 
 export function FileView() {
@@ -172,12 +172,14 @@ export function FileView() {
   const threads = useReview((s) => s.threads)
   const drafts = useReview((s) => s.drafts)
   const theme = useReview((s) => s.theme)
-  const attachGutter = useGutterDraft()
   const width = useWindowWidth()
   const [sideBySideOverride, setSideBySideOverride] = useState<boolean | null>(
     null,
   )
   const [collapseUnchanged, setCollapseUnchanged] = useState(true)
+  const [captureTarget, setCaptureTarget] = useState<CaptureTarget | null>(
+    null,
+  )
   const [originalEditor, setOriginalEditor] =
     useState<editor.ICodeEditor | null>(null)
   const [modifiedEditor, setModifiedEditor] =
@@ -185,6 +187,7 @@ export function FileView() {
   const [singleEditor, setSingleEditor] = useState<editor.ICodeEditor | null>(
     null,
   )
+  const attachCapture = makeCaptureAttacher(setCaptureTarget)
 
   const sideBySide = sideBySideOverride ?? width >= side_by_side_min_width
   const monaco_theme = theme === 'dark' ? 'vs-dark' : 'vs'
@@ -207,14 +210,9 @@ export function FileView() {
     clearReveal()
   }, [reveal, selectedPath, reveal_editor, content_ready, clearReveal])
 
-  const has_draft = drafts.length > 0
-  useSelectionNote(originalEditor, 'base', has_draft)
-  useSelectionNote(modifiedEditor, 'source', has_draft)
-  useSelectionNote(
-    singleEditor,
-    sourceContent?.content != null ? 'source' : 'base',
-    has_draft,
-  )
+  useEffect(() => {
+    setCaptureTarget(null)
+  }, [selectedPath])
 
   if (selectedPath === null) {
     return (
@@ -298,8 +296,8 @@ export function FileView() {
                 const modified = diff.getModifiedEditor()
                 setOriginalEditor(original)
                 setModifiedEditor(modified)
-                attachGutter(original, 'base')
-                attachGutter(modified, 'source')
+                attachCapture(original, 'base')
+                attachCapture(modified, 'source')
               }}
             />
             <CommentLayer
@@ -324,7 +322,7 @@ export function FileView() {
               options={editorOptions(width)}
               onMount={(instance) => {
                 setSingleEditor(instance)
-                attachGutter(instance, single_side)
+                attachCapture(instance, single_side)
               }}
             />
             <CommentLayer
@@ -335,6 +333,12 @@ export function FileView() {
           </>
         )}
       </div>
+      {captureTarget !== null && (
+        <CaptureActions
+          target={captureTarget}
+          onDone={() => setCaptureTarget(null)}
+        />
+      )}
     </div>
   )
 }
