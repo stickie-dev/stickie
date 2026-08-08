@@ -11,8 +11,10 @@ model is specific to one provider.
 ## The loop
 
 1. The user reviews changes in the stickie UI and leaves line-anchored notes.
-2. The agent fetches open notes:
-   `GET http://localhost:4870/api/sessions/<id>/threads?status=open`
+2. The agent fetches the work order — markdown first, built for LLM
+   consumption: `GET http://localhost:4870/api/sessions/<id>/prompt`
+   (JSON when structured fields are needed:
+   `GET /api/sessions/<id>/threads?status=open`)
 3. The agent addresses each note in the working tree.
 4. The agent replies and resolves:
    `POST /api/threads/<id>/reply` with `{"author": "agent", "body": "..."}`

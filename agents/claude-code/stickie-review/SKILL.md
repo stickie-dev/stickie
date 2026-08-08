@@ -14,15 +14,22 @@ working tree you are editing. Your job: fetch them, fix them, close them out.
    `http://localhost:4870`. If exactly one session exists, use it. If the
    user named a session or repo, match it.
 
-2. Fetch open notes:
+2. Fetch the work order as markdown:
+
+   ```sh
+   curl -s "http://localhost:4870/api/sessions/<id>/prompt"
+   ```
+
+   It lists every unresolved note with its location, the code snippet as
+   captured, and the discussion so far. Line numbers are re-anchored to the
+   current file state at fetch time.
+
+   When you need structured fields instead (filtering by status or side,
+   exact line numbers as data), use the JSON form:
 
    ```sh
    curl -s "http://localhost:4870/api/sessions/<id>/threads?status=open"
    ```
-
-   Each thread has `path`, `startLine`/`endLine` (re-anchored to the current
-   file state at fetch time), a `snippet` captured when the note was written,
-   and `messages` (the discussion so far).
 
 3. For each thread, in order:
    - Read the current file around `startLine`–`endLine`. If the code there
