@@ -577,7 +577,27 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
         await reanchorThreads(store, session, store.listThreads(session.id))
       ).filter((t) => t.status !== 'resolved')
       const api_base = new URL(c.req.url).origin
-      return c.text(buildPrompt(session, threads, api_base), 200)
+      const source_cache = new Map<string, string | null>()
+      const readSource = async (path: string): Promise<string | null> => {
+        const cached = source_cache.get(path)
+        if (cached !== undefined) return cached
+        let content: string | null = null
+        try {
+          const blob = await fileAtSide(
+            session.repoPath,
+            session.source,
+            session.baseSha,
+            'source',
+            path,
+          )
+          content = blob.content
+        } catch {
+          // unreadable or unsafe ref target: leave it to the agent
+        }
+        source_cache.set(path, content)
+        return content
+      }
+      return c.text(await buildPrompt(session, threads, api_base, readSource), 200)
     },
   )
 

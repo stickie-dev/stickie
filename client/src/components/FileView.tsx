@@ -169,6 +169,24 @@ export function FileView() {
   const sideBySide = sideBySideOverride ?? width >= side_by_side_min_width
   const monaco_theme = theme === 'dark' ? 'vs-dark' : 'vs'
 
+  const reveal = useReview((s) => s.reveal)
+  const clearReveal = useReview((s) => s.clearReveal)
+  const reveal_editor = modifiedEditor ?? singleEditor
+  const content_ready = sourceContent !== null || baseContent !== null
+  useEffect(() => {
+    if (
+      reveal === null ||
+      reveal.path !== selectedPath ||
+      reveal_editor === null ||
+      !content_ready
+    ) {
+      return
+    }
+    reveal_editor.revealLineInCenter(reveal.line)
+    reveal_editor.setPosition({ lineNumber: reveal.line, column: 1 })
+    clearReveal()
+  }, [reveal, selectedPath, reveal_editor, content_ready, clearReveal])
+
   useSelectionNote(originalEditor, 'base')
   useSelectionNote(modifiedEditor, 'source')
   useSelectionNote(

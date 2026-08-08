@@ -48,7 +48,10 @@ interface ReviewState {
   connected: boolean
   promptCopied: boolean
   theme: Theme
+  reveal: { path: string; line: number } | null
 
+  openRef: (path: string, line: number) => Promise<void>
+  clearReveal: () => void
   toggleTheme: () => void
   init: () => Promise<void>
   addRepo: (path: string) => Promise<void>
@@ -125,6 +128,14 @@ export const useReview = create<ReviewState>((set, get) => {
     connected: false,
     promptCopied: false,
     theme: initialTheme(),
+    reveal: null,
+
+    openRef: async (path, line) => {
+      await get().openFile(path)
+      set({ reveal: { path, line } })
+    },
+
+    clearReveal: () => set({ reveal: null }),
 
     toggleTheme: () => {
       const theme = get().theme === 'dark' ? 'light' : 'dark'

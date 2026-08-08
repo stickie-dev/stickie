@@ -36,7 +36,7 @@ export function DraftForm() {
         ref={textareaRef}
         rows={2}
         className="w-full resize-y rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
-        placeholder="What should change here? (⌘↵ to submit, Esc to cancel)"
+        placeholder="What should change here? Reference other code as path:L10-L20. (⌘↵ to submit, Esc to cancel)"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {

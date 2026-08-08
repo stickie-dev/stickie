@@ -2,6 +2,37 @@ import { useState } from 'react'
 import type { Thread } from '@stickie/shared'
 import { useReview } from '../store'
 
+const ref_pattern = /([\w./-]+:L\d+(?:-L?\d+)?)/g
+
+/** Render path:L10 / path:L10-L20 references as jump links. */
+function MessageBody({ body }: { body: string }) {
+  const openRef = useReview((s) => s.openRef)
+  const parts = body.split(ref_pattern)
+  return (
+    <span className="whitespace-pre-wrap text-ink">
+      {' '}
+      {parts.map((part, i) => {
+        const match = /^([\w./-]+):L(\d+)/.exec(part)
+        if (i % 2 === 1 && match !== null) {
+          const path = match[1] ?? ''
+          const line = Number(match[2])
+          return (
+            <button
+              key={i}
+              className="rounded bg-accent/10 px-1 font-mono text-accent hover:bg-accent/20"
+              title={`open ${path}`}
+              onClick={() => void openRef(path, line)}
+            >
+              {part}
+            </button>
+          )
+        }
+        return <span key={i}>{part}</span>
+      })}
+    </span>
+  )
+}
+
 const status_styles: Record<Thread['status'], string> = {
   open: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40',
   resolved:
@@ -70,7 +101,7 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
             >
               {message.author}
             </span>
-            <span className="whitespace-pre-wrap text-ink"> {message.body}</span>
+            <MessageBody body={message.body} />
           </div>
         ))}
         {showReply ? (
