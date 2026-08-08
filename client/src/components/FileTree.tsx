@@ -118,12 +118,42 @@ export function FileTree() {
     })
   }
 
-  const renderDir = (dir: TreeDir, depth: number): React.ReactNode => (
+  const renderFile = (file: TreeFile) => (
+    <button
+      key={file.path}
+      className={`flex w-full items-center gap-2 py-1 pr-2 pl-2 text-left font-mono hover:bg-overlay ${selectedPath === file.path ? 'bg-overlay' : ''}`}
+      onClick={() => void openFile(file.path, file.status ?? undefined)}
+      title={
+        file.oldPath !== undefined
+          ? `${file.oldPath} → ${file.path}`
+          : file.path
+      }
+    >
+      <span
+        className={`w-3 shrink-0 ${file.status !== null ? status_color[file.status] : 'text-faint'}`}
+      >
+        {file.status !== null ? status_letter[file.status] : ''}
+      </span>
+      <span
+        className={`truncate ${file.status !== null ? 'text-ink' : 'text-soft'}`}
+      >
+        {file.name}
+      </span>
+      {open_count(file.path) > 0 && (
+        <span className="ml-auto shrink-0 rounded-full bg-amber-500/20 px-1.5 text-amber-700 dark:text-amber-300">
+          {open_count(file.path)}
+        </span>
+      )}
+    </button>
+  )
+
+  // each nesting level is a bordered container, so indentation and the
+  // vertical guide line come from the same structure
+  const renderDir = (dir: TreeDir): React.ReactNode => (
     <div key={dir.path}>
       {dir.name !== '' && (
         <button
           className="flex w-full items-center gap-1 px-2 py-1 text-left hover:bg-overlay"
-          style={{ paddingLeft: depth * 12 + 8 }}
           onClick={() => toggleDir(dir.path)}
         >
           <span className="w-3 shrink-0 text-faint">
@@ -133,42 +163,14 @@ export function FileTree() {
         </button>
       )}
       {(dir.name === '' || !collapsed.has(dir.path)) && (
-        <>
-          {dir.dirs.map((child) =>
-            renderDir(child, dir.name === '' ? depth : depth + 1),
-          )}
-          {dir.files.map((file) => (
-            <button
-              key={file.path}
-              className={`flex w-full items-center gap-2 py-1 pr-2 text-left font-mono hover:bg-overlay ${selectedPath === file.path ? 'bg-overlay' : ''}`}
-              style={{
-                paddingLeft: (dir.name === '' ? depth : depth + 1) * 12 + 12,
-              }}
-              onClick={() => void openFile(file.path, file.status ?? undefined)}
-              title={
-                file.oldPath !== undefined
-                  ? `${file.oldPath} → ${file.path}`
-                  : file.path
-              }
-            >
-              <span
-                className={`w-3 shrink-0 ${file.status !== null ? status_color[file.status] : 'text-faint'}`}
-              >
-                {file.status !== null ? status_letter[file.status] : ''}
-              </span>
-              <span
-                className={`truncate ${file.status !== null ? 'text-ink' : 'text-soft'}`}
-              >
-                {file.name}
-              </span>
-              {open_count(file.path) > 0 && (
-                <span className="ml-auto shrink-0 rounded-full bg-amber-500/20 px-1.5 text-amber-700 dark:text-amber-300">
-                  {open_count(file.path)}
-                </span>
-              )}
-            </button>
-          ))}
-        </>
+        <div
+          className={
+            dir.name === '' ? '' : 'ml-[13px] border-l border-edge/70'
+          }
+        >
+          {dir.dirs.map((child) => renderDir(child))}
+          {dir.files.map(renderFile)}
+        </div>
       )}
     </div>
   )
@@ -190,7 +192,7 @@ export function FileTree() {
         </button>
       </div>
       <div className="min-h-0 grow overflow-y-auto py-1 text-xs">
-        {renderDir(tree, 0)}
+        {renderDir(tree)}
         {!showAll && files.length === 0 && (
           <p className="px-3 py-2 text-faint">No changes to review.</p>
         )}

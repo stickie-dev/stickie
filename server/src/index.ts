@@ -39,6 +39,17 @@ hub.onEvent((event) => {
   }
 })
 
+// index.html must never be heuristically cached or the browser keeps
+// serving a stale bundle after rebuilds; hashed assets can cache forever
+app.use('*', async (c, next) => {
+  await next()
+  const pathname = new URL(c.req.url).pathname
+  if (pathname.startsWith('/assets/')) {
+    c.res.headers.set('cache-control', 'public, max-age=31536000, immutable')
+  } else if (!pathname.startsWith('/api/')) {
+    c.res.headers.set('cache-control', 'no-cache')
+  }
+})
 app.use('*', serveStatic({ root: client_dist }))
 app.get('*', serveStatic({ path: path.join(client_dist, 'index.html') }))
 

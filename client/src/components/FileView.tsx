@@ -37,29 +37,33 @@ function editorOptions(
 function useGutterDraft() {
   const startDraft = useReview((s) => s.startDraft)
   return (instance: editor.ICodeEditor, side: Side) => {
+    let armed = false
     instance.onMouseDown((event) => {
       const target_type = event.target.type
-      if (
-        target_type !== monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS &&
-        target_type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN
-      ) {
+      armed =
+        target_type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS ||
+        target_type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN
+    })
+    // the draft opens on mouseup so a drag across line numbers becomes a
+    // range note; reading the selection at mousedown races Monaco's own
+    // click-selects-line handling
+    instance.onMouseUp((event) => {
+      if (!armed) return
+      armed = false
+      const selection = instance.getSelection()
+      if (selection !== null && !selection.isEmpty()) {
+        let end = selection.endLineNumber
+        // a full-line gutter selection ends at column 1 of the next line
+        if (selection.endColumn === 1 && end > selection.startLineNumber) {
+          end -= 1
+        }
+        startDraft(side, selection.startLineNumber, end)
         return
       }
       const line = event.target.position?.lineNumber
-      if (line === undefined) return
-      const selection = instance.getSelection()
-      let start = line
-      let end = line
-      if (
-        selection !== null &&
-        !selection.isEmpty() &&
-        selection.startLineNumber <= line &&
-        line <= selection.endLineNumber
-      ) {
-        start = selection.startLineNumber
-        end = selection.endLineNumber
+      if (line !== undefined) {
+        startDraft(side, line, line)
       }
-      startDraft(side, start, end)
     })
   }
 }
@@ -106,10 +110,12 @@ function useSelectionNote(
       if (selection.isEmpty()) {
         range = null
       } else {
-        range = {
-          start: selection.startLineNumber,
-          end: selection.endLineNumber,
+        let end = selection.endLineNumber
+        // a full-line selection ends at column 1 of the following line
+        if (selection.endColumn === 1 && end > selection.startLineNumber) {
+          end -= 1
         }
+        range = { start: selection.startLineNumber, end }
         button.textContent =
           range.end === range.start
             ? `+ note L${range.start}`
@@ -151,6 +157,7 @@ export function FileView() {
   const [sideBySideOverride, setSideBySideOverride] = useState<boolean | null>(
     null,
   )
+  const [collapseUnchanged, setCollapseUnchanged] = useState(true)
   const [originalEditor, setOriginalEditor] =
     useState<editor.ICodeEditor | null>(null)
   const [modifiedEditor, setModifiedEditor] =
@@ -205,6 +212,14 @@ export function FileView() {
         {has_both && (
           <button
             className="shrink-0 text-soft hover:text-ink"
+            onClick={() => setCollapseUnchanged(!collapseUnchanged)}
+          >
+            {collapseUnchanged ? 'expand unchanged' : 'collapse unchanged'}
+          </button>
+        )}
+        {has_both && (
+          <button
+            className="shrink-0 text-soft hover:text-ink"
             onClick={() => setSideBySideOverride(!sideBySide)}
           >
             {sideBySide ? 'inline view' : 'side-by-side view'}
@@ -233,6 +248,12 @@ export function FileView() {
               options={{
                 ...editorOptions(width),
                 renderSideBySide: sideBySide,
+                hideUnchangedRegions: {
+                  enabled: collapseUnchanged,
+                  contextLineCount: 2,
+                  minimumLineCount: 4,
+                  revealLineCount: 20,
+                },
               }}
               onMount={(diff) => {
                 const original = diff.getOriginalEditor()
