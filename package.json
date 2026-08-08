@@ -4,6 +4,9 @@
   "private": true,
   "description": "Not another Editor — Notes for Agents. Local review surface for agent-made changes.",
   "type": "module",
+  "bin": {
+    "stickie": "./bin/stickie.js"
+  },
   "engines": {
     "node": ">=22"
   },
