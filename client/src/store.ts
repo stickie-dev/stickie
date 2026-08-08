@@ -16,6 +16,7 @@ export interface Draft {
   side: Side
   startLine: number
   endLine: number
+  body: string
 }
 
 export type Theme = 'dark' | 'light'
@@ -61,8 +62,10 @@ interface ReviewState {
   openFile: (path: string, status?: ChangedFile['status'] | 'unchanged') => Promise<void>
   setShowAll: (showAll: boolean) => Promise<void>
   startDraft: (side: Side, startLine: number, endLine: number) => void
+  updateDraftBody: (body: string) => void
+  insertDraftRef: (path: string, startLine: number, endLine: number) => void
   cancelDraft: () => void
-  submitDraft: (body: string) => Promise<void>
+  submitDraft: () => Promise<void>
   reply: (threadId: number, body: string) => Promise<void>
   resolveThread: (threadId: number) => Promise<void>
   reopenThread: (threadId: number) => Promise<void>
@@ -195,10 +198,11 @@ export const useReview = create<ReviewState>((set, get) => {
       const { session, files } = get()
       if (session === null) return
       const resolved = status ?? statusOf(files, path)
+      // the draft survives navigation so other files can be browsed and
+      // referenced while composing
       set({
         selectedPath: path,
         selectedStatus: resolved,
-        draft: null,
         baseContent: null,
         sourceContent: null,
       })
@@ -226,14 +230,38 @@ export const useReview = create<ReviewState>((set, get) => {
     startDraft: (side, startLine, endLine) => {
       const { selectedPath } = get()
       if (selectedPath === null) return
-      set({ draft: { path: selectedPath, side, startLine, endLine } })
+      set({
+        draft: { path: selectedPath, side, startLine, endLine, body: '' },
+      })
+    },
+
+    updateDraftBody: (body) => {
+      const { draft } = get()
+      if (draft === null) return
+      set({ draft: { ...draft, body } })
+    },
+
+    insertDraftRef: (path, startLine, endLine) => {
+      const { draft } = get()
+      if (draft === null) return
+      const ref =
+        startLine === endLine
+          ? `${path}:L${startLine}`
+          : `${path}:L${startLine}-L${endLine}`
+      const body =
+        draft.body === '' || /\s$/.test(draft.body)
+          ? `${draft.body}${ref} `
+          : `${draft.body} ${ref} `
+      set({ draft: { ...draft, body } })
     },
 
     cancelDraft: () => set({ draft: null }),
 
-    submitDraft: async (body) => {
+    submitDraft: async () => {
       const { session, draft } = get()
       if (session === null || draft === null) return
+      const body = draft.body.trim()
+      if (body === '') return
       const thread = await api.createThread(session.id, { ...draft, body })
       set({ threads: [...get().threads, thread], draft: null })
     },

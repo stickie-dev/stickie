@@ -7,6 +7,40 @@ import { FileView } from './components/FileView'
 import { TopBar } from './components/TopBar'
 import { useReview } from './store'
 
+/** Shown while a note draft is open but another file is being browsed. */
+function DraftPill() {
+  const draft = useReview((s) => s.draft)
+  const selectedPath = useReview((s) => s.selectedPath)
+  const openFile = useReview((s) => s.openFile)
+  const cancelDraft = useReview((s) => s.cancelDraft)
+
+  if (draft === null || draft.path === selectedPath) return null
+
+  return (
+    <div className="fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-lg border border-accent bg-panel px-3 py-2 text-xs shadow-xl">
+      <span className="text-soft">
+        note in progress on{' '}
+        <span className="font-mono text-ink">
+          {draft.path}:L{draft.startLine}
+        </span>{' '}
+        — select code here to add a reference
+      </span>
+      <button
+        className="rounded bg-accent px-2 py-1 font-medium text-white hover:bg-accent-strong"
+        onClick={() => void openFile(draft.path)}
+      >
+        back to note
+      </button>
+      <button
+        className="text-soft hover:text-ink"
+        onClick={cancelDraft}
+      >
+        discard
+      </button>
+    </div>
+  )
+}
+
 export function App() {
   const init = useReview((s) => s.init)
   const repos = useReview((s) => s.repos)
@@ -70,6 +104,7 @@ export function App() {
           </main>
         </div>
       )}
+      <DraftPill />
     </div>
   )
 }

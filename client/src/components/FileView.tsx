@@ -34,8 +34,21 @@ function editorOptions(
   }
 }
 
+/**
+ * With no draft open, a capture gesture starts one. With a draft in
+ * progress (any file), the same gesture inserts a path:Lx-Ly reference
+ * into it instead.
+ */
+function captureRange(side: Side, startLine: number, endLine: number): void {
+  const state = useReview.getState()
+  if (state.draft !== null && state.selectedPath !== null) {
+    state.insertDraftRef(state.selectedPath, startLine, endLine)
+    return
+  }
+  state.startDraft(side, startLine, endLine)
+}
+
 function useGutterDraft() {
-  const startDraft = useReview((s) => s.startDraft)
   return (instance: editor.ICodeEditor, side: Side) => {
     let armed = false
     instance.onMouseDown((event) => {
@@ -57,12 +70,12 @@ function useGutterDraft() {
         if (selection.endColumn === 1 && end > selection.startLineNumber) {
           end -= 1
         }
-        startDraft(side, selection.startLineNumber, end)
+        captureRange(side, selection.startLineNumber, end)
         return
       }
       const line = event.target.position?.lineNumber
       if (line !== undefined) {
-        startDraft(side, line, line)
+        captureRange(side, line, line)
       }
     })
   }
@@ -76,9 +89,8 @@ function useGutterDraft() {
 function useSelectionNote(
   instance: editor.ICodeEditor | null,
   side: Side,
+  hasDraft: boolean,
 ): void {
-  const startDraft = useReview((s) => s.startDraft)
-
   useEffect(() => {
     if (instance === null) return
     const node = document.createElement('div')
@@ -116,10 +128,11 @@ function useSelectionNote(
           end -= 1
         }
         range = { start: selection.startLineNumber, end }
-        button.textContent =
+        const span =
           range.end === range.start
-            ? `+ note L${range.start}`
-            : `+ note L${range.start}–L${range.end}`
+            ? `L${range.start}`
+            : `L${range.start}–L${range.end}`
+        button.textContent = hasDraft ? `+ ref ${span}` : `+ note ${span}`
       }
       instance.layoutContentWidget(widget)
     })
@@ -128,7 +141,7 @@ function useSelectionNote(
       event.preventDefault()
       event.stopPropagation()
       if (range === null) return
-      startDraft(side, range.start, range.end)
+      captureRange(side, range.start, range.end)
       range = null
       instance.layoutContentWidget(widget)
     }
@@ -141,7 +154,7 @@ function useSelectionNote(
         // editor already disposed
       }
     }
-  }, [instance, side, startDraft])
+  }, [instance, side, hasDraft])
 }
 
 export function FileView() {
@@ -187,11 +200,13 @@ export function FileView() {
     clearReveal()
   }, [reveal, selectedPath, reveal_editor, content_ready, clearReveal])
 
-  useSelectionNote(originalEditor, 'base')
-  useSelectionNote(modifiedEditor, 'source')
+  const has_draft = draft !== null
+  useSelectionNote(originalEditor, 'base', has_draft)
+  useSelectionNote(modifiedEditor, 'source', has_draft)
   useSelectionNote(
     singleEditor,
     sourceContent?.content != null ? 'source' : 'base',
+    has_draft,
   )
 
   if (selectedPath === null) {
