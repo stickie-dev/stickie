@@ -26,8 +26,8 @@ export function DraftForm() {
   }
 
   return (
-    <div className="rounded-md border border-sky-700 bg-zinc-800 p-2 text-sm shadow-lg">
-      <div className="mb-1 text-xs text-zinc-400">
+    <div className="rounded-md border border-accent bg-panel p-2 text-sm shadow-lg">
+      <div className="mb-1 text-xs text-soft">
         New note on L{draft.startLine}
         {draft.endLine !== draft.startLine ? `–L${draft.endLine}` : ''} (
         {draft.side} side)
@@ -35,7 +35,7 @@ export function DraftForm() {
       <textarea
         ref={textareaRef}
         rows={2}
-        className="w-full resize-y rounded border border-zinc-600 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-sky-500"
+        className="w-full resize-y rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
         placeholder="What should change here? (⌘↵ to submit, Esc to cancel)"
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -46,13 +46,13 @@ export function DraftForm() {
       />
       <div className="mt-1 flex justify-end gap-2">
         <button
-          className="rounded px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+          className="rounded px-2 py-1 text-xs text-soft hover:text-ink"
           onClick={cancelDraft}
         >
           cancel
         </button>
         <button
-          className="rounded bg-sky-600 px-2 py-1 text-xs text-white hover:bg-sky-500"
+          className="rounded bg-accent px-2 py-1 text-xs text-white hover:bg-accent-strong"
           onClick={() => void submit()}
         >
           comment

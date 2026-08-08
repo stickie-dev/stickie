@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { FsEvent } from '@stickie/shared'
 import './monacoSetup'
 import { AddRepo } from './components/AddRepo'
-import { FileList } from './components/FileList'
+import { FileTree } from './components/FileTree'
 import { FileView } from './components/FileView'
 import { TopBar } from './components/TopBar'
 import { useReview } from './store'
@@ -13,6 +13,11 @@ export function App() {
   const error = useReview((s) => s.error)
   const refresh = useReview((s) => s.refresh)
   const setConnected = useReview((s) => s.setConnected)
+  const theme = useReview((s) => s.theme)
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme])
 
   useEffect(() => {
     void init()
@@ -46,10 +51,10 @@ export function App() {
   }, [refresh, setConnected])
 
   return (
-    <div className="flex h-screen flex-col bg-zinc-900 text-zinc-100">
+    <div className="flex h-screen flex-col bg-surface text-ink">
       <TopBar />
       {error !== null && (
-        <div className="border-b border-rose-900 bg-rose-950 px-3 py-1.5 text-xs text-rose-300">
+        <div className="border-b border-rose-300 bg-rose-100 px-3 py-1.5 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-300">
           {error}
         </div>
       )}
@@ -57,8 +62,8 @@ export function App() {
         <AddRepo />
       ) : (
         <div className="flex min-h-0 grow">
-          <aside className="w-72 shrink-0 border-r border-zinc-800">
-            <FileList />
+          <aside className="w-64 shrink-0 border-r border-edge">
+            <FileTree />
           </aside>
           <main className="min-w-0 grow">
             <FileView />

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DiffEditor, Editor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { monaco } from '../monacoSetup'
@@ -7,14 +7,31 @@ import { languageFor } from '../languages'
 import { useReview } from '../store'
 import { CommentLayer } from './CommentLayer'
 
-const editor_options: editor.IStandaloneEditorConstructionOptions = {
-  readOnly: true,
-  minimap: { enabled: false },
-  scrollBeyondLastLine: false,
-  automaticLayout: true,
-  glyphMargin: false,
-  renderLineHighlight: 'none',
-  fontSize: 12,
+const side_by_side_min_width = 1440
+
+function useWindowWidth(): number {
+  const [width, setWidth] = useState(window.innerWidth)
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return width
+}
+
+function editorOptions(
+  width: number,
+): editor.IStandaloneEditorConstructionOptions {
+  return {
+    readOnly: true,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    automaticLayout: true,
+    glyphMargin: false,
+    renderLineHighlight: 'none',
+    fontSize: width < 1440 ? 11 : width < 1800 ? 12 : 13,
+    wordWrap: 'on',
+  }
 }
 
 function useGutterDraft() {
@@ -47,6 +64,80 @@ function useGutterDraft() {
   }
 }
 
+/**
+ * Floating "+ note" button that follows a non-empty selection. Gutter clicks
+ * race against Monaco's own selection handling; a content widget on the live
+ * selection is the reliable path to range comments.
+ */
+function useSelectionNote(
+  instance: editor.ICodeEditor | null,
+  side: Side,
+): void {
+  const startDraft = useReview((s) => s.startDraft)
+
+  useEffect(() => {
+    if (instance === null) return
+    const node = document.createElement('div')
+    node.className = 'stickie-selection-note'
+    const button = document.createElement('button')
+    node.appendChild(button)
+    let range: { start: number; end: number } | null = null
+
+    const widget: editor.IContentWidget = {
+      getId: () => `stickie-selection-note-${side}`,
+      getDomNode: () => node,
+      getPosition: () => {
+        if (range === null) return { position: null, preference: [] }
+        const column =
+          instance.getModel()?.getLineMaxColumn(range.end) ?? 1
+        return {
+          position: { lineNumber: range.end, column },
+          preference: [
+            monaco.editor.ContentWidgetPositionPreference.BELOW,
+            monaco.editor.ContentWidgetPositionPreference.ABOVE,
+          ],
+        }
+      },
+    }
+    instance.addContentWidget(widget)
+
+    const subscription = instance.onDidChangeCursorSelection((event) => {
+      const selection = event.selection
+      if (selection.isEmpty()) {
+        range = null
+      } else {
+        range = {
+          start: selection.startLineNumber,
+          end: selection.endLineNumber,
+        }
+        button.textContent =
+          range.end === range.start
+            ? `+ note L${range.start}`
+            : `+ note L${range.start}–L${range.end}`
+      }
+      instance.layoutContentWidget(widget)
+    })
+
+    button.onmousedown = (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (range === null) return
+      startDraft(side, range.start, range.end)
+      range = null
+      instance.layoutContentWidget(widget)
+    }
+
+    return () => {
+      subscription.dispose()
+      try {
+        instance.removeContentWidget(widget)
+      } catch {
+        // editor already disposed
+      }
+    }
+  }, [instance, side, startDraft])
+}
+
 export function FileView() {
   const selectedPath = useReview((s) => s.selectedPath)
   const selectedStatus = useReview((s) => s.selectedStatus)
@@ -54,18 +145,33 @@ export function FileView() {
   const sourceContent = useReview((s) => s.sourceContent)
   const threads = useReview((s) => s.threads)
   const draft = useReview((s) => s.draft)
+  const theme = useReview((s) => s.theme)
   const attachGutter = useGutterDraft()
-  const [sideBySide, setSideBySide] = useState(true)
+  const width = useWindowWidth()
+  const [sideBySideOverride, setSideBySideOverride] = useState<boolean | null>(
+    null,
+  )
   const [originalEditor, setOriginalEditor] =
     useState<editor.ICodeEditor | null>(null)
   const [modifiedEditor, setModifiedEditor] =
     useState<editor.ICodeEditor | null>(null)
-  const [singleEditor, setSingleEditor] =
-    useState<editor.ICodeEditor | null>(null)
+  const [singleEditor, setSingleEditor] = useState<editor.ICodeEditor | null>(
+    null,
+  )
+
+  const sideBySide = sideBySideOverride ?? width >= side_by_side_min_width
+  const monaco_theme = theme === 'dark' ? 'vs-dark' : 'vs'
+
+  useSelectionNote(originalEditor, 'base')
+  useSelectionNote(modifiedEditor, 'source')
+  useSelectionNote(
+    singleEditor,
+    sourceContent?.content != null ? 'source' : 'base',
+  )
 
   if (selectedPath === null) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+      <div className="flex h-full items-center justify-center text-sm text-faint">
         Select a file to review
       </div>
     )
@@ -82,28 +188,24 @@ export function FileView() {
   const language = languageFor(selectedPath)
   const has_both =
     baseContent?.content != null && sourceContent?.content != null
-  const loading =
-    !binary &&
-    baseContent === null &&
-    sourceContent === null
+  const loading = !binary && baseContent === null && sourceContent === null
 
-  const single_side: Side =
-    sourceContent?.content != null ? 'source' : 'base'
+  const single_side: Side = sourceContent?.content != null ? 'source' : 'base'
   const single_content =
     single_side === 'source' ? sourceContent?.content : baseContent?.content
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-zinc-800 px-3 py-1.5 text-xs">
-        <span className="font-mono text-zinc-200">{selectedPath}</span>
-        <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-400">
+      <div className="flex items-center gap-3 border-b border-edge px-3 py-1.5 text-xs">
+        <span className="truncate font-mono text-ink">{selectedPath}</span>
+        <span className="rounded bg-overlay px-1.5 py-0.5 text-soft">
           {selectedStatus}
         </span>
         <span className="grow" />
         {has_both && (
           <button
-            className="text-zinc-400 hover:text-zinc-200"
-            onClick={() => setSideBySide(!sideBySide)}
+            className="shrink-0 text-soft hover:text-ink"
+            onClick={() => setSideBySideOverride(!sideBySide)}
           >
             {sideBySide ? 'inline view' : 'side-by-side view'}
           </button>
@@ -111,12 +213,12 @@ export function FileView() {
       </div>
       <div className="min-h-0 grow">
         {binary && (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+          <div className="flex h-full items-center justify-center text-sm text-faint">
             Binary file — nothing to review
           </div>
         )}
         {loading && (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+          <div className="flex h-full items-center justify-center text-sm text-faint">
             loading…
           </div>
         )}
@@ -127,8 +229,11 @@ export function FileView() {
               original={baseContent?.content ?? ''}
               modified={sourceContent?.content ?? ''}
               language={language}
-              theme="vs-dark"
-              options={{ ...editor_options, renderSideBySide: sideBySide }}
+              theme={monaco_theme}
+              options={{
+                ...editorOptions(width),
+                renderSideBySide: sideBySide,
+              }}
               onMount={(diff) => {
                 const original = diff.getOriginalEditor()
                 const modified = diff.getModifiedEditor()
@@ -156,8 +261,8 @@ export function FileView() {
               key={selectedPath}
               value={single_content}
               language={language}
-              theme="vs-dark"
-              options={editor_options}
+              theme={monaco_theme}
+              options={editorOptions(width)}
               onMount={(instance) => {
                 setSingleEditor(instance)
                 attachGutter(instance, single_side)

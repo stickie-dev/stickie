@@ -18,6 +18,16 @@ export interface Draft {
   endLine: number
 }
 
+export type Theme = 'dark' | 'light'
+
+function initialTheme(): Theme {
+  const stored = localStorage.getItem('stickie-theme')
+  if (stored === 'dark' || stored === 'light') return stored
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'dark'
+    : 'light'
+}
+
 interface ReviewState {
   repos: RepoInfo[]
   activeRepoId: number | null
@@ -37,7 +47,9 @@ interface ReviewState {
   error: string | null
   connected: boolean
   promptCopied: boolean
+  theme: Theme
 
+  toggleTheme: () => void
   init: () => Promise<void>
   addRepo: (path: string) => Promise<void>
   selectRepo: (repoId: number) => Promise<void>
@@ -112,6 +124,13 @@ export const useReview = create<ReviewState>((set, get) => {
     error: null,
     connected: false,
     promptCopied: false,
+    theme: initialTheme(),
+
+    toggleTheme: () => {
+      const theme = get().theme === 'dark' ? 'light' : 'dark'
+      localStorage.setItem('stickie-theme', theme)
+      set({ theme })
+    },
 
     init: async () => {
       try {
