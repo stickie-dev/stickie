@@ -41,6 +41,10 @@ proxying to the server on :4870).
 
 ## API (agent-facing)
 
+Interactive docs: **http://localhost:4870/api/docs** (Swagger UI); machine
+spec at `/api/openapi.json`. The routes are defined with zod schemas, so the
+spec is generated from the code and cannot drift.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/repos` | registered repos |

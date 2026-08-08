@@ -1,5 +1,9 @@
 # Agent integration
 
+Interactive API docs live at `http://localhost:4870/api/docs`; the OpenAPI
+spec at `/api/openapi.json` can seed generated clients if pasting curl
+commands ever stops being enough.
+
 Stickie is agent-agnostic. Any coding agent that can issue HTTP requests (or
 receive pasted text) can consume review notes. Nothing in the API or data
 model is specific to one provider.
