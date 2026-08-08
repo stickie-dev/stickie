@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { ChangedFile } from '@stickie/shared'
+import { fileIconUrl, folderIconUrl } from '../fileIcons'
 import { useReview } from '../store'
 
 const status_letter: Record<ChangedFile['status'], string> = {
@@ -118,34 +119,40 @@ export function FileTree() {
     })
   }
 
-  const renderFile = (file: TreeFile) => (
-    <button
-      key={file.path}
-      className={`flex w-full items-center gap-2 py-1 pr-2 pl-2 text-left font-mono hover:bg-overlay ${selectedPath === file.path ? 'bg-overlay' : ''}`}
-      onClick={() => void openFile(file.path, file.status ?? undefined)}
-      title={
-        file.oldPath !== undefined
-          ? `${file.oldPath} → ${file.path}`
-          : file.path
-      }
-    >
-      <span
-        className={`w-3 shrink-0 ${file.status !== null ? status_color[file.status] : 'text-faint'}`}
+  const renderFile = (file: TreeFile) => {
+    const icon = fileIconUrl(file.name)
+    return (
+      <button
+        key={file.path}
+        className={`flex w-full items-center gap-1.5 py-1 pr-2 pl-2 text-left font-mono hover:bg-overlay ${selectedPath === file.path ? 'bg-overlay' : ''}`}
+        onClick={() => void openFile(file.path, file.status ?? undefined)}
+        title={
+          file.oldPath !== undefined
+            ? `${file.oldPath} → ${file.path}`
+            : file.path
+        }
       >
-        {file.status !== null ? status_letter[file.status] : ''}
-      </span>
-      <span
-        className={`truncate ${file.status !== null ? 'text-ink' : 'text-soft'}`}
-      >
-        {file.name}
-      </span>
-      {open_count(file.path) > 0 && (
-        <span className="ml-auto shrink-0 rounded-full bg-amber-500/20 px-1.5 text-amber-700 dark:text-amber-300">
-          {open_count(file.path)}
+        {icon !== null && <img src={icon} alt="" className="h-4 w-4 shrink-0" />}
+        <span
+          className={`truncate ${file.status !== null ? 'text-ink' : 'text-soft'}`}
+        >
+          {file.name}
         </span>
-      )}
-    </button>
-  )
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          {open_count(file.path) > 0 && (
+            <span className="rounded-full bg-amber-500/20 px-1.5 text-amber-700 dark:text-amber-300">
+              {open_count(file.path)}
+            </span>
+          )}
+          {file.status !== null && (
+            <span className={`w-3 ${status_color[file.status]}`}>
+              {status_letter[file.status]}
+            </span>
+          )}
+        </span>
+      </button>
+    )
+  }
 
   // each nesting level is a bordered container, so indentation and the
   // vertical guide line come from the same structure
@@ -153,12 +160,18 @@ export function FileTree() {
     <div key={dir.path}>
       {dir.name !== '' && (
         <button
-          className="flex w-full items-center gap-1 px-2 py-1 text-left hover:bg-overlay"
+          className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-overlay"
           onClick={() => toggleDir(dir.path)}
         >
-          <span className="w-3 shrink-0 text-faint">
+          <span className="w-2 shrink-0 text-faint">
             {collapsed.has(dir.path) ? '▸' : '▾'}
           </span>
+          {(() => {
+            const icon = folderIconUrl(dir.name, !collapsed.has(dir.path))
+            return icon !== null ? (
+              <img src={icon} alt="" className="h-4 w-4 shrink-0" />
+            ) : null
+          })()}
           <span className="truncate text-soft">{dir.name}</span>
         </button>
       )}
