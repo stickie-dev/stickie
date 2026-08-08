@@ -6,9 +6,12 @@ export interface CodeRef {
   endLine: number
 }
 
-const ref_pattern = /([\w./-]+):L(\d+)(?:-L?(\d+))?/g
+const ref_pattern = /@([\w./-]+):L(\d+)(?:-L?(\d+))?/g
 
-/** Find path:L10 / path:L10-L20 references inside a note body. */
+/**
+ * Find @path:L10 / @path:L10-L20 references inside a note body. The @ sigil
+ * is what makes a mention live; a bare path:L10 stays free text.
+ */
 export function parseRefs(body: string): CodeRef[] {
   const refs: CodeRef[] = []
   for (const match of body.matchAll(ref_pattern)) {

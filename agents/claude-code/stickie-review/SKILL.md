@@ -47,8 +47,9 @@ working tree you are editing. Your job: fetch them, fix them, close them out.
      curl -s -X POST http://localhost:4870/api/threads/<tid>/resolve
      ```
 
-4. Notes may reference other locations as `path:L10` or `path:L10-L20`.
-   Short referenced blocks arrive inlined in the prompt (content as of fetch
+4. Notes may reference other locations as `@path:L10` or `@path:L10-L20`
+   (the @ marks a live reference; a bare path is just prose). Short
+   referenced blocks arrive inlined in the prompt (content as of fetch
    time); for longer ones, read the file at that range yourself.
 
 5. Threads with `"status": "detached"` reference code that no longer exists.

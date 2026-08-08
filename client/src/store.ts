@@ -246,8 +246,8 @@ export const useReview = create<ReviewState>((set, get) => {
       if (draft === null) return
       const ref =
         startLine === endLine
-          ? `${path}:L${startLine}`
-          : `${path}:L${startLine}-L${endLine}`
+          ? `@${path}:L${startLine}`
+          : `@${path}:L${startLine}-L${endLine}`
       const body =
         draft.body === '' || /\s$/.test(draft.body)
           ? `${draft.body}${ref} `

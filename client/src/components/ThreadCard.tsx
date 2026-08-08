@@ -2,9 +2,9 @@ import { useState } from 'react'
 import type { Thread } from '@stickie/shared'
 import { useReview } from '../store'
 
-const ref_pattern = /([\w./-]+:L\d+(?:-L?\d+)?)/g
+const ref_pattern = /(@[\w./-]+:L\d+(?:-L?\d+)?)/g
 
-/** Render path:L10 / path:L10-L20 references as jump links. */
+/** Render @path:L10 / @path:L10-L20 references as jump links. */
 function MessageBody({ body }: { body: string }) {
   const openRef = useReview((s) => s.openRef)
   const parts = body.split(ref_pattern)
@@ -12,7 +12,7 @@ function MessageBody({ body }: { body: string }) {
     <span className="whitespace-pre-wrap text-ink">
       {' '}
       {parts.map((part, i) => {
-        const match = /^([\w./-]+):L(\d+)/.exec(part)
+        const match = /^@([\w./-]+):L(\d+)/.exec(part)
         if (i % 2 === 1 && match !== null) {
           const path = match[1] ?? ''
           const line = Number(match[2])
