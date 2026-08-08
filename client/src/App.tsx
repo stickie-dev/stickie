@@ -1,44 +1,70 @@
-import { useEffect, useState } from 'react'
-import type { GitStatus } from '@stickie/shared'
+import { useEffect } from 'react'
+import type { FsEvent } from '@stickie/shared'
+import './monacoSetup'
+import { AddRepo } from './components/AddRepo'
+import { FileList } from './components/FileList'
+import { FileView } from './components/FileView'
+import { TopBar } from './components/TopBar'
+import { useReview } from './store'
 
 export function App() {
-  const [status, setStatus] = useState<GitStatus | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const init = useReview((s) => s.init)
+  const repos = useReview((s) => s.repos)
+  const error = useReview((s) => s.error)
+  const refresh = useReview((s) => s.refresh)
+  const setConnected = useReview((s) => s.setConnected)
 
   useEffect(() => {
-    fetch('/api/status')
-      .then(async (response) => {
-        const body = await response.json()
-        if (!response.ok) {
-          throw new Error(body.error ?? response.statusText)
+    void init()
+  }, [init])
+
+  useEffect(() => {
+    let socket: WebSocket | null = null
+    let closed = false
+    const connect = () => {
+      const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
+      socket = new WebSocket(`${protocol}://${location.host}/ws`)
+      socket.onopen = () => setConnected(true)
+      socket.onmessage = (message) => {
+        try {
+          const event = JSON.parse(message.data as string) as FsEvent
+          if (event.type === 'fs') void refresh(event.repoPath)
+        } catch {
+          // ignore malformed frames
         }
-        setStatus(body)
-      })
-      .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e))
-      })
-  }, [])
+      }
+      socket.onclose = () => {
+        setConnected(false)
+        if (!closed) setTimeout(connect, 2000)
+      }
+    }
+    connect()
+    return () => {
+      closed = true
+      socket?.close()
+    }
+  }, [refresh, setConnected])
 
   return (
-    <main className="mx-auto max-w-2xl p-8 font-mono">
-      <h1 className="text-2xl font-bold">stickie</h1>
-      <p className="mt-1 text-sm text-gray-500">
-        Not another Editor — Notes for Agents
-      </p>
-      <section className="mt-6 rounded border border-gray-300 p-4 text-sm">
-        {error !== null && <p className="text-red-600">{error}</p>}
-        {status === null && error === null && <p>loading…</p>}
-        {status !== null && (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-            <dt className="text-gray-500">repo</dt>
-            <dd>{status.repoPath}</dd>
-            <dt className="text-gray-500">branch</dt>
-            <dd>{status.branch}</dd>
-            <dt className="text-gray-500">changed files</dt>
-            <dd>{status.clean ? 'none (clean)' : status.changedFiles}</dd>
-          </dl>
-        )}
-      </section>
-    </main>
+    <div className="flex h-screen flex-col bg-zinc-900 text-zinc-100">
+      <TopBar />
+      {error !== null && (
+        <div className="border-b border-rose-900 bg-rose-950 px-3 py-1.5 text-xs text-rose-300">
+          {error}
+        </div>
+      )}
+      {repos.length === 0 ? (
+        <AddRepo />
+      ) : (
+        <div className="flex min-h-0 grow">
+          <aside className="w-72 shrink-0 border-r border-zinc-800">
+            <FileList />
+          </aside>
+          <main className="min-w-0 grow">
+            <FileView />
+          </main>
+        </div>
+      )}
+    </div>
   )
 }

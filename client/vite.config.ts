@@ -7,6 +7,10 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://localhost:4870',
+      '/ws': { target: 'ws://localhost:4870', ws: true },
     },
+  },
+  build: {
+    chunkSizeWarningLimit: 4000,
   },
 })

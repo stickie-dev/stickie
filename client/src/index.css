@@ -1,1 +1,7 @@
 @import 'tailwindcss';
+
+/* monaco view zones default to pointer-events none; comment widgets need input */
+.stickie-zone {
+  pointer-events: auto;
+  z-index: 10;
+}
