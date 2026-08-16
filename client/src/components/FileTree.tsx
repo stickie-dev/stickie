@@ -83,6 +83,7 @@ export function FileTree() {
   const selectedPath = useReview((s) => s.selectedPath)
   const openFile = useReview((s) => s.openFile)
   const threads = useReview((s) => s.threads)
+  const viewed = useReview((s) => s.viewed)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
   const status_by_path = useMemo(
@@ -134,11 +135,14 @@ export function FileTree() {
       >
         {icon !== null && <img src={icon} alt="" className="h-4 w-4 shrink-0" />}
         <span
-          className={`truncate ${file.status !== null ? 'text-ink' : 'text-soft'}`}
+          className={`truncate ${viewed.has(file.path) ? 'text-faint line-through decoration-edge' : file.status !== null ? 'text-ink' : 'text-soft'}`}
         >
           {file.name}
         </span>
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          {viewed.has(file.path) && (
+            <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+          )}
           {open_count(file.path) > 0 && (
             <span className="rounded-full bg-amber-500/20 px-1.5 text-amber-700 dark:text-amber-300">
               {open_count(file.path)}

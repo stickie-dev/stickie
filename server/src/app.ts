@@ -16,6 +16,7 @@ import {
   repoRoot,
   resolveRef,
 } from './git.js'
+import { findDefinitions, findReferences } from './nav.js'
 import type { Store } from './store.js'
 import type { WatchHub } from './watcher.js'
 
@@ -50,8 +51,26 @@ const session_schema = z
     source: source_schema,
     baseRef: z.string(),
     baseSha: z.string(),
+    baseStale: z.boolean().optional(),
   })
   .openapi('Session')
+
+function sourceRoot(session: Session): string {
+  return session.source.kind === 'worktree'
+    ? session.source.value
+    : session.repoPath
+}
+
+/** A symbolic HEAD base goes stale as soon as the worktree commits. */
+async function isBaseStale(session: Session): Promise<boolean> {
+  if (session.baseRef !== 'HEAD') return false
+  try {
+    const current = await resolveRef(sourceRoot(session), 'HEAD')
+    return current !== session.baseSha
+  } catch {
+    return false
+  }
+}
 
 const targets_schema = z
   .object({
@@ -107,6 +126,8 @@ const thread_schema = z
     endLine: z.number().int(),
     snippet: z.string(),
     status: z.enum(['open', 'resolved', 'detached']),
+    pending: z.boolean(),
+    origin: z.string().nullable(),
     createdAt: z.string(),
     messages: z.array(message_schema),
   })
@@ -125,6 +146,8 @@ const thread_body = z.object({
   endLine: z.number().int().positive(),
   body: z.string().min(1),
   author: z.enum(['user', 'agent']).default('user'),
+  // user notes default into the pending review batch; agent notes post
+  pending: z.boolean().optional(),
 })
 
 const message_body = z.object({
@@ -319,19 +342,59 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       method: 'get',
       path: '/api/sessions/{id}',
       tags: ['sessions'],
-      summary: 'Session details',
+      summary: 'Session details, including base staleness',
       request: { params: id_param },
       responses: {
         200: json_response(session_schema, 'The session'),
         404: not_found,
       },
     }),
-    (c) => {
+    async (c) => {
       const session = store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      return c.json(session, 200)
+      return c.json({ ...session, baseStale: await isBaseStale(session) }, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/sessions/{id}/repin',
+      tags: ['sessions'],
+      summary: 'Re-pin a stale HEAD base and carry open threads forward',
+      description:
+        'Creates (or reuses) the session at the current HEAD and moves all ' +
+        'unresolved threads to it; resolved threads stay with the old ' +
+        'session as history. Only valid for sessions with baseRef=HEAD.',
+      request: { params: id_param },
+      responses: {
+        200: json_response(session_schema, 'The re-pinned session'),
+        400: bad_request,
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const session = store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      if (session.baseRef !== 'HEAD') {
+        return c.json({ error: 'only HEAD-based sessions can re-pin' }, 400)
+      }
+      const current = await resolveRef(sourceRoot(session), 'HEAD')
+      if (current === session.baseSha) {
+        return c.json({ ...session, baseStale: false }, 200)
+      }
+      const next = store.getOrCreateSession(
+        session.repoId,
+        session.source,
+        'HEAD',
+        current,
+      )
+      store.moveOpenThreads(session.id, next.id)
+      return c.json({ ...next, baseStale: false }, 200)
     },
   )
 
@@ -424,10 +487,14 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       path: '/api/sessions/{id}/threads',
       tags: ['threads'],
       summary: 'List note threads, re-anchored to current content',
+      description:
+        'Pending (unsubmitted) notes are excluded by default so agents only ' +
+        'see submitted reviews; the UI passes include_pending=1.',
       request: {
         params: id_param,
         query: z.object({
           status: z.enum(['open', 'resolved', 'detached']).optional(),
+          include_pending: z.coerce.boolean().optional(),
         }),
       },
       responses: {
@@ -440,12 +507,10 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      const { status } = c.req.valid('query')
-      const threads = await reanchorThreads(
-        store,
-        session,
-        store.listThreads(session.id),
-      )
+      const { status, include_pending } = c.req.valid('query')
+      const threads = (
+        await reanchorThreads(store, session, store.listThreads(session.id))
+      ).filter((t) => include_pending === true || !t.pending)
       return c.json(
         status === undefined
           ? threads
@@ -501,6 +566,7 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
         snippet,
         body.author,
         body.body,
+        { pending: body.pending ?? body.author === 'user' },
       )
       return c.json(thread, 201)
     },
@@ -575,7 +641,7 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       }
       const threads = (
         await reanchorThreads(store, session, store.listThreads(session.id))
-      ).filter((t) => t.status !== 'resolved')
+      ).filter((t) => t.status !== 'resolved' && !t.pending)
       const api_base = new URL(c.req.url).origin
       const source_cache = new Map<string, string | null>()
       const readSource = async (path: string): Promise<string | null> => {
@@ -598,6 +664,182 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
         return content
       }
       return c.text(await buildPrompt(session, threads, api_base, readSource), 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/sessions/{id}/submit-review',
+      tags: ['threads'],
+      summary: 'Post every pending note of the session to the agent',
+      request: { params: id_param },
+      responses: {
+        200: json_response(
+          z.object({ posted: z.number().int() }),
+          'How many notes were posted',
+        ),
+        404: not_found,
+      },
+    }),
+    (c) => {
+      const session = store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      return c.json({ posted: store.postPending(session.id) }, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/threads/{id}/post',
+      tags: ['threads'],
+      summary: 'Post a single pending note immediately',
+      request: { params: id_param },
+      responses: {
+        200: json_response(thread_schema, 'Updated thread'),
+        404: not_found,
+      },
+    }),
+    (c) => {
+      const thread = store.getThread(c.req.valid('param').id)
+      if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
+      store.setThreadPending(thread.id, false)
+      const updated = store.getThread(thread.id)
+      if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
+      return c.json(updated, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/sessions/{id}/viewed',
+      tags: ['sessions'],
+      summary: 'Paths marked as viewed in this session',
+      request: { params: id_param },
+      responses: {
+        200: json_response(z.array(z.string()), 'Viewed paths'),
+        404: not_found,
+      },
+    }),
+    (c) => {
+      const session = store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      return c.json(store.listViewed(session.id), 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/sessions/{id}/viewed',
+      tags: ['sessions'],
+      summary: 'Mark or unmark a file as viewed',
+      request: {
+        params: id_param,
+        body: json_body(
+          z.object({ path: z.string().min(1), viewed: z.boolean() }),
+        ),
+      },
+      responses: {
+        200: json_response(z.object({ ok: z.boolean() }), 'Stored'),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const session = store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      const body = c.req.valid('json')
+      store.setViewed(session.id, body.path, body.viewed)
+      return c.json({ ok: true }, 200)
+    },
+  )
+
+  const nav_hit_schema = z
+    .object({
+      repoPath: z.string(),
+      path: z.string(),
+      line: z.number().int(),
+      preview: z.string(),
+    })
+    .openapi('NavHit')
+
+  const navRoot = (session: Session): string =>
+    session.source.kind === 'worktree' ? session.source.value : session.repoPath
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/sessions/{id}/nav/definitions',
+      tags: ['navigation'],
+      summary: 'Grep-grade definition candidates for a symbol',
+      request: {
+        params: id_param,
+        query: z.object({ name: z.string().min(1), language: z.string() }),
+      },
+      responses: {
+        200: json_response(z.array(nav_hit_schema), 'Definition candidates'),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const session = store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      const { name, language } = c.req.valid('query')
+      return c.json(await findDefinitions(navRoot(session), name, language), 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/sessions/{id}/nav/references',
+      tags: ['navigation'],
+      summary: 'Word-boundary references for a symbol',
+      description:
+        'scope=workspace sweeps every registered repository — useful for ' +
+        'blast-radius checks on shared code.',
+      request: {
+        params: id_param,
+        query: z.object({
+          name: z.string().min(1),
+          scope: z.enum(['repo', 'workspace']).default('repo'),
+        }),
+      },
+      responses: {
+        200: json_response(z.array(nav_hit_schema), 'References'),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const session = store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      const { name, scope } = c.req.valid('query')
+      if (scope === 'repo') {
+        return c.json(await findReferences(navRoot(session), name), 200)
+      }
+      const roots = [
+        navRoot(session),
+        ...store
+          .listRepos()
+          .map((r) => r.path)
+          .filter((p) => p !== session.repoPath),
+      ]
+      const all = await Promise.all(
+        roots.map((root) => findReferences(root, name).catch(() => [])),
+      )
+      return c.json(all.flat(), 200)
     },
   )
 

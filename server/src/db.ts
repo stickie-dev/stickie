@@ -40,7 +40,35 @@ create table if not exists messages (
   body text not null,
   created_at text not null default (datetime('now'))
 );
+
+create table if not exists viewed_files (
+  session_id integer not null references sessions(id) on delete cascade,
+  path text not null,
+  viewed_at text not null default (datetime('now')),
+  primary key (session_id, path)
+);
 `
+
+const thread_columns: [string, string][] = [
+  ['pending', 'pending integer not null default 0'],
+  ['origin', 'origin text'],
+  ['external_id', 'external_id text'],
+]
+
+function ensureColumns(db: DatabaseSync): void {
+  const existing = new Set(
+    (
+      db.prepare(`pragma table_info(threads)`).all() as unknown as {
+        name: string
+      }[]
+    ).map((c) => c.name),
+  )
+  for (const [name, ddl] of thread_columns) {
+    if (!existing.has(name)) {
+      db.exec(`alter table threads add column ${ddl}`)
+    }
+  }
+}
 
 export function defaultDbPath(): string {
   const dir = path.join(os.homedir(), '.stickie')
@@ -53,5 +81,6 @@ export function openDb(file: string = defaultDbPath()): DatabaseSync {
   db.exec('pragma journal_mode = wal')
   db.exec('pragma foreign_keys = on')
   db.exec(schema)
+  ensureColumns(db)
   return db
 }

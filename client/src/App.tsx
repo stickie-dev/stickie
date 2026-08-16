@@ -4,7 +4,9 @@ import './monacoSetup'
 import { AddRepo } from './components/AddRepo'
 import { FileTree } from './components/FileTree'
 import { FileView } from './components/FileView'
+import { Toasts } from './components/Toasts'
 import { TopBar } from './components/TopBar'
+import { UsagesPanel } from './components/UsagesPanel'
 import { useReview } from './store'
 
 /** Shown while the active draft belongs to a file other than the open one. */
@@ -98,16 +100,20 @@ export function App() {
       {repos.length === 0 ? (
         <AddRepo />
       ) : (
-        <div className="flex min-h-0 grow">
-          <aside className="w-64 shrink-0 border-r border-edge">
-            <FileTree />
-          </aside>
-          <main className="min-w-0 grow">
-            <FileView />
-          </main>
+        <div className="flex min-h-0 grow flex-col">
+          <div className="flex min-h-0 grow">
+            <aside className="w-64 shrink-0 border-r border-edge">
+              <FileTree />
+            </aside>
+            <main className="min-w-0 grow">
+              <FileView />
+            </main>
+          </div>
+          <UsagesPanel />
         </div>
       )}
       <DraftPill />
+      <Toasts />
     </div>
   )
 }

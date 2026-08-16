@@ -26,6 +26,10 @@ the only output.
 - **Agent loop** — open notes via REST, agent replies and resolves; or the
   zero-integration *Copy prompt* export for pasting into anything
 - **Multi-repo** — one server, any number of registered repositories
+- **Grep-grade navigation** — cmd/ctrl+click jumps to definitions
+  (per-language regex heuristics over bundled ripgrep, no indexer daemon);
+  right-click *Find usages* opens a hit panel, optionally sweeping every
+  registered repo at once for cross-repo blast-radius checks
 
 ## Run
 

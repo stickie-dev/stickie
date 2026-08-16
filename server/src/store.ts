@@ -34,6 +34,9 @@ interface ThreadRow {
   blob_sha: string | null
   snippet: string
   status: string
+  pending: number
+  origin: string | null
+  external_id: string | null
   created_at: string
 }
 
@@ -115,13 +118,25 @@ export class Store {
     snippet: string,
     author: Author,
     body: string,
+    options: { pending?: boolean; origin?: string; externalId?: string } = {},
   ): Thread {
     const result = this.db
       .prepare(
-        `insert into threads (session_id, path, side, start_line, end_line, blob_sha, snippet)
-         values (?, ?, ?, ?, ?, ?, ?)`,
+        `insert into threads (session_id, path, side, start_line, end_line, blob_sha, snippet, pending, origin, external_id)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(sessionId, path, side, startLine, endLine, blobSha, snippet)
+      .run(
+        sessionId,
+        path,
+        side,
+        startLine,
+        endLine,
+        blobSha,
+        snippet,
+        options.pending === true ? 1 : 0,
+        options.origin ?? null,
+        options.externalId ?? null,
+      )
     const threadId = Number(result.lastInsertRowid)
     this.addMessage(threadId, author, body)
     const thread = this.getThread(threadId)
@@ -168,6 +183,63 @@ export class Store {
       .run(status, threadId)
   }
 
+  /** Post every pending note of a session; returns how many were posted. */
+  postPending(sessionId: number): number {
+    const result = this.db
+      .prepare(
+        'update threads set pending = 0 where session_id = ? and pending = 1',
+      )
+      .run(sessionId)
+    return Number(result.changes)
+  }
+
+  setThreadPending(threadId: number, pending: boolean): void {
+    this.db
+      .prepare('update threads set pending = ? where id = ?')
+      .run(pending ? 1 : 0, threadId)
+  }
+
+  findThreadByExternalId(sessionId: number, externalId: string): Thread | undefined {
+    const row = this.db
+      .prepare(
+        'select * from threads where session_id = ? and external_id = ?',
+      )
+      .get(sessionId, externalId) as unknown as ThreadRow | undefined
+    return row === undefined ? undefined : this.threadFromRow(row)
+  }
+
+  setViewed(sessionId: number, path: string, viewed: boolean): void {
+    if (viewed) {
+      this.db
+        .prepare(
+          'insert into viewed_files (session_id, path) values (?, ?) on conflict do nothing',
+        )
+        .run(sessionId, path)
+    } else {
+      this.db
+        .prepare('delete from viewed_files where session_id = ? and path = ?')
+        .run(sessionId, path)
+    }
+  }
+
+  listViewed(sessionId: number): string[] {
+    return (
+      this.db
+        .prepare('select path from viewed_files where session_id = ?')
+        .all(sessionId) as unknown as { path: string }[]
+    ).map((r) => r.path)
+  }
+
+  /** Carry unresolved threads over to a re-pinned session. */
+  moveOpenThreads(fromSessionId: number, toSessionId: number): number {
+    const result = this.db
+      .prepare(
+        `update threads set session_id = ? where session_id = ? and status != 'resolved'`,
+      )
+      .run(toSessionId, fromSessionId)
+    return Number(result.changes)
+  }
+
   setThreadAnchor(threadId: number, startLine: number, endLine: number): void {
     this.db
       .prepare('update threads set start_line = ?, end_line = ? where id = ?')
@@ -189,6 +261,8 @@ export class Store {
       endLine: row.end_line,
       snippet: row.snippet,
       status: row.status as ThreadStatus,
+      pending: row.pending === 1,
+      origin: row.origin,
       createdAt: row.created_at,
       messages,
     }

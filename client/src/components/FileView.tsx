@@ -3,6 +3,8 @@ import { DiffEditor, Editor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { monaco } from '../monacoSetup'
 import type { Side } from '@stickie/shared'
+import { api } from '../api'
+import type { NavHit } from '../api'
 import { languageFor } from '../languages'
 import { useReview } from '../store'
 import { CommentLayer } from './CommentLayer'
@@ -52,6 +54,34 @@ interface CaptureTarget {
   endLine: number
 }
 
+interface DefinitionPick {
+  x: number
+  y: number
+  name: string
+  hits: NavHit[]
+}
+
+/**
+ * Cmd/ctrl+click on an identifier: one grep-grade definition jumps
+ * directly; several open a candidate picker; none flashes a notice.
+ */
+async function goToDefinition(
+  name: string,
+  x: number,
+  y: number,
+  setPick: (pick: DefinitionPick | null) => void,
+): Promise<void> {
+  const state = useReview.getState()
+  if (state.session === null || state.selectedPath === null) return
+  const language = languageFor(state.selectedPath)
+  const hits = await api.definitions(state.session.id, name, language)
+  if (hits.length === 1 && hits[0] !== undefined) {
+    await state.openHit(hits[0])
+    return
+  }
+  setPick({ x, y, name, hits })
+}
+
 function selectionLines(
   selection: ReturnType<editor.ICodeEditor['getSelection']>,
 ): { start: number; end: number } | null {
@@ -71,14 +101,77 @@ function selectionLines(
  */
 function makeCaptureAttacher(
   setTarget: (target: CaptureTarget | null) => void,
+  setPick: (pick: DefinitionPick | null) => void,
 ) {
-  return (instance: editor.ICodeEditor, side: Side) => {
+  return (instance: editor.IStandaloneCodeEditor, side: Side) => {
     let gutter_armed = false
     instance.onMouseDown((event) => {
       const target_type = event.target.type
+      if (
+        (event.event.metaKey || event.event.ctrlKey) &&
+        target_type === monaco.editor.MouseTargetType.CONTENT_TEXT &&
+        event.target.position != null
+      ) {
+        const word = instance
+          .getModel()
+          ?.getWordAtPosition(event.target.position)
+        if (word != null) {
+          const browser = event.event.browserEvent
+          void goToDefinition(
+            word.word,
+            browser.clientX,
+            browser.clientY,
+            setPick,
+          )
+        }
+        gutter_armed = false
+        return
+      }
       gutter_armed =
         target_type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS ||
         target_type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN
+    })
+    instance.addAction({
+      id: 'stickie.findUsages',
+      label: 'Find usages',
+      contextMenuGroupId: 'navigation',
+      contextMenuOrder: 1,
+      run: (ed) => {
+        const position = ed.getPosition()
+        const word =
+          position === null
+            ? null
+            : ed.getModel()?.getWordAtPosition(position)
+        if (word != null) {
+          void useReview.getState().openUsages(word.word, 'repo')
+        }
+      },
+    })
+    instance.addAction({
+      id: 'stickie.goToDefinition',
+      label: 'Go to definition (⌘click)',
+      contextMenuGroupId: 'navigation',
+      contextMenuOrder: 0,
+      run: (ed) => {
+        const position = ed.getPosition()
+        const word =
+          position === null
+            ? null
+            : ed.getModel()?.getWordAtPosition(position)
+        if (word != null) {
+          const coords =
+            position === null
+              ? { left: 200, top: 200 }
+              : ed.getScrolledVisiblePosition(position) ?? { left: 200, top: 200 }
+          const dom = ed.getDomNode()?.getBoundingClientRect()
+          void goToDefinition(
+            word.word,
+            (dom?.x ?? 0) + coords.left,
+            (dom?.y ?? 0) + coords.top + 20,
+            setPick,
+          )
+        }
+      },
     })
     instance.onMouseUp((event) => {
       const was_gutter = gutter_armed
@@ -180,6 +273,9 @@ export function FileView() {
   const [captureTarget, setCaptureTarget] = useState<CaptureTarget | null>(
     null,
   )
+  const [definitionPick, setDefinitionPick] = useState<DefinitionPick | null>(
+    null,
+  )
   const [originalEditor, setOriginalEditor] =
     useState<editor.ICodeEditor | null>(null)
   const [modifiedEditor, setModifiedEditor] =
@@ -187,7 +283,94 @@ export function FileView() {
   const [singleEditor, setSingleEditor] = useState<editor.ICodeEditor | null>(
     null,
   )
-  const attachCapture = makeCaptureAttacher(setCaptureTarget)
+  const [diffEditor, setDiffEditor] =
+    useState<editor.IStandaloneDiffEditor | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const attachCapture = makeCaptureAttacher(setCaptureTarget, setDefinitionPick)
+  const viewed = useReview((s) => s.viewed)
+  const toggleViewed = useReview((s) => s.toggleViewed)
+  const files = useReview((s) => s.files)
+  const openFile = useReview((s) => s.openFile)
+
+  // review keyboard flow; inert while any input has focus
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (
+        target !== null &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      const state = useReview.getState()
+      const paths = state.files.map((f) => f.path)
+      const index = state.selectedPath === null
+        ? -1
+        : paths.indexOf(state.selectedPath)
+      switch (event.key) {
+        case 'j':
+        case 'k': {
+          if (paths.length === 0) return
+          const next =
+            event.key === 'j'
+              ? Math.min(index + 1, paths.length - 1)
+              : Math.max(index - 1, 0)
+          const path = paths[next]
+          if (path !== undefined && path !== state.selectedPath) {
+            void state.openFile(path)
+          }
+          break
+        }
+        case 'v': {
+          if (state.selectedPath !== null) {
+            void state.toggleViewed(state.selectedPath)
+          }
+          break
+        }
+        case 'n':
+        case 'p': {
+          const diff = diffEditor
+          if (diff === null) return
+          const changes = diff.getLineChanges() ?? []
+          if (changes.length === 0) return
+          const modified = diff.getModifiedEditor()
+          const line = modified.getPosition()?.lineNumber ?? 1
+          const starts = changes.map((change) =>
+            change.modifiedStartLineNumber > 0
+              ? change.modifiedStartLineNumber
+              : Math.max(1, change.modifiedEndLineNumber),
+          )
+          const targetLine =
+            event.key === 'n'
+              ? (starts.find((s) => s > line) ?? starts[0])
+              : ([...starts].reverse().find((s) => s < line) ?? starts.at(-1))
+          if (targetLine !== undefined) {
+            modified.revealLineInCenter(targetLine)
+            modified.setPosition({ lineNumber: targetLine, column: 1 })
+            modified.focus()
+          }
+          break
+        }
+        case '?': {
+          setHelpOpen((open) => !open)
+          break
+        }
+        case 'Escape': {
+          setHelpOpen(false)
+          break
+        }
+        default:
+          return
+      }
+      event.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [diffEditor])
 
   const sideBySide = sideBySideOverride ?? width >= side_by_side_min_width
   const monaco_theme = theme === 'dark' ? 'vs-dark' : 'vs'
@@ -205,13 +388,31 @@ export function FileView() {
     ) {
       return
     }
-    reveal_editor.revealLineInCenter(reveal.line)
-    reveal_editor.setPosition({ lineNumber: reveal.line, column: 1 })
-    clearReveal()
-  }, [reveal, selectedPath, reveal_editor, content_ready, clearReveal])
+    // a collapsed unchanged region swallows reveals into it; expand first
+    // and let the effect re-run once the option has applied
+    if (collapseUnchanged && modifiedEditor !== null) {
+      setCollapseUnchanged(false)
+      return
+    }
+    const timer = setTimeout(() => {
+      reveal_editor.revealLineInCenter(reveal.line)
+      reveal_editor.setPosition({ lineNumber: reveal.line, column: 1 })
+      clearReveal()
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [
+    reveal,
+    selectedPath,
+    reveal_editor,
+    content_ready,
+    clearReveal,
+    collapseUnchanged,
+    modifiedEditor,
+  ])
 
   useEffect(() => {
     setCaptureTarget(null)
+    setDefinitionPick(null)
   }, [selectedPath])
 
   if (selectedPath === null) {
@@ -244,7 +445,22 @@ export function FileView() {
         <span className="rounded bg-overlay px-1.5 py-0.5 text-soft">
           {selectedStatus}
         </span>
+        <label className="flex shrink-0 cursor-pointer items-center gap-1 text-soft hover:text-ink">
+          <input
+            type="checkbox"
+            checked={viewed.has(selectedPath)}
+            onChange={() => void toggleViewed(selectedPath)}
+          />
+          viewed
+        </label>
         <span className="grow" />
+        <button
+          className="shrink-0 text-faint hover:text-ink"
+          title="keyboard shortcuts"
+          onClick={() => setHelpOpen(true)}
+        >
+          ?
+        </button>
         {has_both && (
           <button
             className="shrink-0 text-soft hover:text-ink"
@@ -294,6 +510,7 @@ export function FileView() {
               onMount={(diff) => {
                 const original = diff.getOriginalEditor()
                 const modified = diff.getModifiedEditor()
+                setDiffEditor(diff)
                 setOriginalEditor(original)
                 setModifiedEditor(modified)
                 attachCapture(original, 'base')
@@ -339,6 +556,84 @@ export function FileView() {
           onDone={() => setCaptureTarget(null)}
         />
       )}
+      {definitionPick !== null && (
+        <DefinitionPicker
+          pick={definitionPick}
+          onDone={() => setDefinitionPick(null)}
+        />
+      )}
+      {helpOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => setHelpOpen(false)}
+        >
+          <div className="w-80 rounded-lg border border-edge bg-panel p-4 text-sm shadow-2xl">
+            <h2 className="mb-2 font-semibold text-ink">Keyboard shortcuts</h2>
+            <dl className="grid grid-cols-[3rem_1fr] gap-y-1 text-xs">
+              <dt className="font-mono text-soft">j / k</dt>
+              <dd className="text-ink">next / previous changed file</dd>
+              <dt className="font-mono text-soft">n / p</dt>
+              <dd className="text-ink">next / previous change in file</dd>
+              <dt className="font-mono text-soft">v</dt>
+              <dd className="text-ink">toggle viewed for current file</dd>
+              <dt className="font-mono text-soft">⌘click</dt>
+              <dd className="text-ink">go to definition</dd>
+              <dt className="font-mono text-soft">?</dt>
+              <dd className="text-ink">this help</dd>
+              <dt className="font-mono text-soft">esc</dt>
+              <dd className="text-ink">close overlays / discard draft</dd>
+            </dl>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Candidate list when a symbol has several (or zero) grep-grade matches. */
+function DefinitionPicker({
+  pick,
+  onDone,
+}: {
+  pick: DefinitionPick
+  onDone: () => void
+}) {
+  const openHit = useReview((s) => s.openHit)
+  return (
+    <div
+      className="fixed z-50 max-h-64 w-[28rem] -translate-x-1/2 overflow-y-auto rounded-md border border-edge bg-panel text-xs shadow-xl"
+      style={{
+        left: Math.min(Math.max(pick.x, 240), window.innerWidth - 240),
+        top: pick.y + 12,
+      }}
+    >
+      <div className="flex items-center border-b border-edge px-3 py-1.5">
+        <span className="text-soft">
+          {pick.hits.length === 0
+            ? `No definition found for `
+            : `${pick.hits.length} definitions of `}
+          <span className="font-mono text-ink">{pick.name}</span>
+        </span>
+        <span className="grow" />
+        <button className="text-soft hover:text-ink" onClick={onDone}>
+          close
+        </button>
+      </div>
+      {pick.hits.map((hit) => (
+        <button
+          key={`${hit.path}:${hit.line}`}
+          className="flex w-full gap-2 px-3 py-1 text-left font-mono hover:bg-overlay"
+          onClick={() => {
+            void openHit(hit)
+            onDone()
+          }}
+        >
+          <span className="shrink-0 text-soft">
+            {hit.path}:{hit.line}
+          </span>
+          <span className="truncate text-faint">{hit.preview.trim()}</span>
+        </button>
+      ))}
     </div>
   )
 }

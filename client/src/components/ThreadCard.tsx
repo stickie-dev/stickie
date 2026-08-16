@@ -43,6 +43,7 @@ const status_styles: Record<Thread['status'], string> = {
 
 export function ThreadCard({ thread }: { thread: Thread | undefined }) {
   const reply = useReview((s) => s.reply)
+  const postThread = useReview((s) => s.postThread)
   const resolveThread = useReview((s) => s.resolveThread)
   const reopenThread = useReview((s) => s.reopenThread)
   const [replyText, setReplyText] = useState('')
@@ -72,7 +73,26 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
           {' · thread '}
           {thread.id}
         </span>
+        {thread.pending && (
+          <span className="rounded border border-violet-500/40 bg-violet-500/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-violet-700 dark:text-violet-300">
+            pending
+          </span>
+        )}
+        {thread.origin !== null && (
+          <span className="rounded border border-edge px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-soft">
+            {thread.origin}
+          </span>
+        )}
         <span className="grow" />
+        {thread.pending && (
+          <button
+            className="mr-2 text-xs text-violet-700 hover:underline dark:text-violet-300"
+            title="make this note visible to agents without submitting the whole review"
+            onClick={() => void postThread(thread.id)}
+          >
+            post now
+          </button>
+        )}
         {thread.status === 'open' ? (
           <button
             className="text-xs text-emerald-600 hover:underline dark:text-emerald-400"

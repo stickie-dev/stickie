@@ -59,7 +59,9 @@ if (add_repo !== undefined && (await isGitRepo(add_repo))) {
 }
 
 const port = Number(process.env.PORT ?? default_port)
-const server = serve({ fetch: app.fetch, port }, (info) => {
+// a local review server holding source code must not listen on the network
+const hostname = process.env.STICKIE_HOST ?? '127.0.0.1'
+const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
   console.log(`stickie server on http://localhost:${info.port}`)
 })
 injectWebSocket(server)

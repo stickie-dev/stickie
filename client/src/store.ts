@@ -10,6 +10,7 @@ import type {
   Thread,
 } from '@stickie/shared'
 import { api } from './api'
+import type { NavHit } from './api'
 
 export interface Draft {
   id: number
@@ -23,6 +24,14 @@ export interface Draft {
 let draft_seq = 0
 
 export type Theme = 'dark' | 'light'
+
+export interface Toast {
+  id: number
+  kind: 'error' | 'info'
+  text: string
+}
+
+let toast_seq = 0
 
 function initialTheme(): Theme {
   const stored = localStorage.getItem('stickie-theme')
@@ -47,6 +56,7 @@ interface ReviewState {
   baseContent: FileContent | null
   sourceContent: FileContent | null
   threads: Thread[]
+  viewed: Set<string>
   drafts: Draft[]
   activeDraftId: number | null
   error: string | null
@@ -54,7 +64,14 @@ interface ReviewState {
   promptCopied: boolean
   theme: Theme
   reveal: { path: string; line: number } | null
+  usages: { name: string; scope: 'repo' | 'workspace'; hits: NavHit[] } | null
+  toasts: Toast[]
 
+  pushToast: (kind: Toast['kind'], text: string) => void
+  dismissToast: (id: number) => void
+  openUsages: (name: string, scope: 'repo' | 'workspace') => Promise<void>
+  closeUsages: () => void
+  openHit: (hit: NavHit) => Promise<void>
   openRef: (path: string, line: number) => Promise<void>
   clearReveal: () => void
   toggleTheme: () => void
@@ -71,6 +88,10 @@ interface ReviewState {
   setActiveDraft: (id: number) => void
   cancelDraft: (id: number) => void
   submitDraft: (id: number) => Promise<void>
+  repin: () => Promise<void>
+  submitReview: () => Promise<void>
+  postThread: (threadId: number) => Promise<void>
+  toggleViewed: (path: string) => Promise<void>
   reply: (threadId: number, body: string) => Promise<void>
   resolveThread: (threadId: number) => Promise<void>
   reopenThread: (threadId: number) => Promise<void>
@@ -86,20 +107,26 @@ function statusOf(
   return files.find((f) => f.path === path)?.status ?? 'unchanged'
 }
 
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 export const useReview = create<ReviewState>((set, get) => {
   async function startSession(): Promise<void> {
     const { activeRepoId, source, baseRef } = get()
     if (activeRepoId === null || source === null) return
     try {
       const session = await api.createSession(activeRepoId, source, baseRef)
-      const [files, threads] = await Promise.all([
+      const [files, threads, viewed] = await Promise.all([
         api.diff(session.id),
-        api.threads(session.id),
+        api.threads(session.id, true),
+        api.viewed(session.id),
       ])
       set({
         session,
         files,
         threads,
+        viewed: new Set(viewed),
         allFiles: null,
         selectedPath: null,
         baseContent: null,
@@ -132,6 +159,7 @@ export const useReview = create<ReviewState>((set, get) => {
     baseContent: null,
     sourceContent: null,
     threads: [],
+    viewed: new Set<string>(),
     drafts: [],
     activeDraftId: null,
     error: null,
@@ -139,6 +167,52 @@ export const useReview = create<ReviewState>((set, get) => {
     promptCopied: false,
     theme: initialTheme(),
     reveal: null,
+    usages: null,
+    toasts: [],
+
+    pushToast: (kind, text) => {
+      toast_seq += 1
+      const toast: Toast = { id: toast_seq, kind, text }
+      set({ toasts: [...get().toasts, toast] })
+      setTimeout(() => {
+        set({ toasts: get().toasts.filter((t) => t.id !== toast.id) })
+      }, 5000)
+    },
+
+    dismissToast: (id) => {
+      set({ toasts: get().toasts.filter((t) => t.id !== id) })
+    },
+
+    openUsages: async (name, scope) => {
+      const { session } = get()
+      if (session === null) return
+      try {
+        const hits = await api.references(session.id, name, scope)
+        set({ usages: { name, scope, hits } })
+      } catch (error) {
+        get().pushToast('error', `usages: ${message(error)}`)
+      }
+    },
+
+    closeUsages: () => set({ usages: null }),
+
+    openHit: async (hit) => {
+      const { session, repos } = get()
+      const active_root =
+        session === null
+          ? null
+          : session.source.kind === 'worktree'
+            ? session.source.value
+            : session.repoPath
+      if (session !== null && hit.repoPath !== active_root) {
+        const target =
+          repos.find((r) => r.path === hit.repoPath) ??
+          repos.find((r) => hit.repoPath.startsWith(r.path))
+        if (target === undefined) return
+        await get().selectRepo(target.id)
+      }
+      await get().openRef(hit.path, hit.line)
+    },
 
     openRef: async (path, line) => {
       await get().openFile(path)
@@ -298,13 +372,19 @@ export const useReview = create<ReviewState>((set, get) => {
       if (session === null || draft === undefined) return
       const body = draft.body.trim()
       if (body === '') return
-      const thread = await api.createThread(session.id, {
-        path: draft.path,
-        side: draft.side,
-        startLine: draft.startLine,
-        endLine: draft.endLine,
-        body,
-      })
+      let thread: Thread
+      try {
+        thread = await api.createThread(session.id, {
+          path: draft.path,
+          side: draft.side,
+          startLine: draft.startLine,
+          endLine: draft.endLine,
+          body,
+        })
+      } catch (error) {
+        get().pushToast('error', `note: ${message(error)}`)
+        return
+      }
       const remaining = get().drafts.filter((d) => d.id !== id)
       set({
         threads: [...get().threads, thread],
@@ -317,32 +397,106 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     reply: async (threadId, body) => {
-      const updated = await api.reply(threadId, 'user', body)
-      set({
-        threads: get().threads.map((t) => (t.id === threadId ? updated : t)),
-      })
+      try {
+        const updated = await api.reply(threadId, 'user', body)
+        set({
+          threads: get().threads.map((t) => (t.id === threadId ? updated : t)),
+        })
+      } catch (error) {
+        get().pushToast('error', `reply: ${message(error)}`)
+      }
     },
 
     resolveThread: async (threadId) => {
-      const updated = await api.resolve(threadId)
-      set({
-        threads: get().threads.map((t) => (t.id === threadId ? updated : t)),
-      })
+      try {
+        const updated = await api.resolve(threadId)
+        set({
+          threads: get().threads.map((t) => (t.id === threadId ? updated : t)),
+        })
+      } catch (error) {
+        get().pushToast('error', `resolve: ${message(error)}`)
+      }
     },
 
     reopenThread: async (threadId) => {
-      const updated = await api.reopen(threadId)
-      set({
-        threads: get().threads.map((t) => (t.id === threadId ? updated : t)),
-      })
+      try {
+        const updated = await api.reopen(threadId)
+        set({
+          threads: get().threads.map((t) => (t.id === threadId ? updated : t)),
+        })
+      } catch (error) {
+        get().pushToast('error', `reopen: ${message(error)}`)
+      }
     },
 
     copyPrompt: async () => {
       const { session } = get()
       if (session === null) return
-      await navigator.clipboard.writeText(await api.prompt(session.id))
-      set({ promptCopied: true })
-      setTimeout(() => set({ promptCopied: false }), 2000)
+      try {
+        await navigator.clipboard.writeText(await api.prompt(session.id))
+        set({ promptCopied: true })
+        setTimeout(() => set({ promptCopied: false }), 2000)
+      } catch (error) {
+        get().pushToast('error', `copy prompt: ${message(error)}`)
+      }
+    },
+
+    submitReview: async () => {
+      const { session } = get()
+      if (session === null) return
+      try {
+        const { posted } = await api.submitReview(session.id)
+        set({ threads: await api.threads(session.id, true) })
+        get().pushToast('info', `review submitted — ${posted} note${posted === 1 ? '' : 's'} posted`)
+      } catch (error) {
+        get().pushToast('error', `submit review: ${message(error)}`)
+      }
+    },
+
+    postThread: async (threadId) => {
+      try {
+        const updated = await api.postThread(threadId)
+        set({
+          threads: get().threads.map((t) => (t.id === threadId ? updated : t)),
+        })
+      } catch (error) {
+        get().pushToast('error', `post note: ${message(error)}`)
+      }
+    },
+
+    toggleViewed: async (path) => {
+      const { session, viewed } = get()
+      if (session === null) return
+      const next = new Set(viewed)
+      const now_viewed = !next.has(path)
+      if (now_viewed) next.add(path)
+      else next.delete(path)
+      set({ viewed: next })
+      try {
+        await api.setViewed(session.id, path, now_viewed)
+      } catch (error) {
+        get().pushToast('error', `viewed: ${message(error)}`)
+      }
+    },
+
+    repin: async () => {
+      const { session, selectedPath } = get()
+      if (session === null) return
+      try {
+        const next = await api.repin(session.id)
+        const [files, threads, viewed] = await Promise.all([
+          api.diff(next.id),
+          api.threads(next.id, true),
+          api.viewed(next.id),
+        ])
+        set({ session: next, files, threads, viewed: new Set(viewed) })
+        get().pushToast('info', `base re-pinned to ${next.baseSha.slice(0, 8)}`)
+        if (selectedPath !== null) {
+          await get().openFile(selectedPath)
+        }
+      } catch (error) {
+        get().pushToast('error', `re-pin: ${message(error)}`)
+      }
     },
 
     refresh: async (repoPath) => {
@@ -353,11 +507,15 @@ export const useReview = create<ReviewState>((set, get) => {
           ? session.source.value
           : session.repoPath
       if (watched !== repoPath) return
-      const [files, threads] = await Promise.all([
+      const [files, threads, fresh] = await Promise.all([
         api.diff(session.id),
-        api.threads(session.id),
+        api.threads(session.id, true),
+        api.session(session.id).catch(() => null),
       ])
       set({ files, threads })
+      if (fresh !== null && get().session?.id === session.id) {
+        set({ session: fresh })
+      }
       if (selectedPath !== null) {
         const status = statusOf(files, selectedPath)
         if (status !== selectedStatus || status !== 'unchanged') {

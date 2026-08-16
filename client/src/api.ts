@@ -10,6 +10,13 @@ import type {
   Thread,
 } from '@stickie/shared'
 
+export interface NavHit {
+  repoPath: string
+  path: string
+  line: number
+  preview: string
+}
+
 async function toJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => ({}))
@@ -40,6 +47,12 @@ export const api = {
   createSession: (repoId: number, source: ReviewSource, baseRef?: string) =>
     post('/api/sessions', { repoId, source, baseRef }).then(toJson<Session>),
 
+  session: (sessionId: number) =>
+    fetch(`/api/sessions/${sessionId}`).then(toJson<Session>),
+
+  repin: (sessionId: number) =>
+    post(`/api/sessions/${sessionId}/repin`, {}).then(toJson<Session>),
+
   diff: (sessionId: number) =>
     fetch(`/api/sessions/${sessionId}/diff`).then(toJson<ChangedFile[]>),
 
@@ -51,8 +64,26 @@ export const api = {
       `/api/sessions/${sessionId}/file?path=${encodeURIComponent(path)}&side=${side}`,
     ).then(toJson<FileContent>),
 
-  threads: (sessionId: number) =>
-    fetch(`/api/sessions/${sessionId}/threads`).then(toJson<Thread[]>),
+  threads: (sessionId: number, includePending = false) =>
+    fetch(
+      `/api/sessions/${sessionId}/threads${includePending ? '?include_pending=1' : ''}`,
+    ).then(toJson<Thread[]>),
+
+  submitReview: (sessionId: number) =>
+    post(`/api/sessions/${sessionId}/submit-review`, {}).then(
+      toJson<{ posted: number }>,
+    ),
+
+  postThread: (threadId: number) =>
+    post(`/api/threads/${threadId}/post`, {}).then(toJson<Thread>),
+
+  viewed: (sessionId: number) =>
+    fetch(`/api/sessions/${sessionId}/viewed`).then(toJson<string[]>),
+
+  setViewed: (sessionId: number, path: string, viewed: boolean) =>
+    post(`/api/sessions/${sessionId}/viewed`, { path, viewed }).then(
+      toJson<{ ok: boolean }>,
+    ),
 
   createThread: (
     sessionId: number,
@@ -76,6 +107,16 @@ export const api = {
 
   reopen: (threadId: number) =>
     post(`/api/threads/${threadId}/reopen`, {}).then(toJson<Thread>),
+
+  definitions: (sessionId: number, name: string, language: string) =>
+    fetch(
+      `/api/sessions/${sessionId}/nav/definitions?name=${encodeURIComponent(name)}&language=${encodeURIComponent(language)}`,
+    ).then(toJson<NavHit[]>),
+
+  references: (sessionId: number, name: string, scope: 'repo' | 'workspace') =>
+    fetch(
+      `/api/sessions/${sessionId}/nav/references?name=${encodeURIComponent(name)}&scope=${scope}`,
+    ).then(toJson<NavHit[]>),
 
   prompt: async (sessionId: number) => {
     const response = await fetch(`/api/sessions/${sessionId}/prompt`)

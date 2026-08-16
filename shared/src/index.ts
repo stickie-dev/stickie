@@ -46,6 +46,8 @@ export interface Session {
   source: ReviewSource
   baseRef: string
   baseSha: string
+  /** true when baseRef is symbolic (HEAD) and has moved past baseSha */
+  baseStale?: boolean
 }
 
 export type FileChangeStatus =
@@ -92,6 +94,10 @@ export interface Thread {
   endLine: number
   snippet: string
   status: ThreadStatus
+  /** pending notes are drafts of a review batch, invisible to agents */
+  pending: boolean
+  /** e.g. "gitlab" for imported threads */
+  origin: string | null
   createdAt: string
   messages: ThreadMessage[]
 }

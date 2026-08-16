@@ -16,6 +16,7 @@ export function TopBar() {
   const session = useReview((s) => s.session)
   const baseRef = useReview((s) => s.baseRef)
   const setBase = useReview((s) => s.setBase)
+  const repin = useReview((s) => s.repin)
   const copyPrompt = useReview((s) => s.copyPrompt)
   const promptCopied = useReview((s) => s.promptCopied)
   const connected = useReview((s) => s.connected)
@@ -23,7 +24,11 @@ export function TopBar() {
   const theme = useReview((s) => s.theme)
   const toggleTheme = useReview((s) => s.toggleTheme)
 
+  const submitReview = useReview((s) => s.submitReview)
   const open_threads = threads.filter((t) => t.status === 'open').length
+  const pending_count = threads.filter(
+    (t) => t.pending && t.status === 'open',
+  ).length
 
   const source_key = (s: ReviewSource) => `${s.kind}:${s.value}`
   const parse_source = (key: string): ReviewSource => {
@@ -108,11 +113,29 @@ export function TopBar() {
       {session !== null && (
         <span className="text-faint">@ {session.baseSha.slice(0, 8)}</span>
       )}
+      {session?.baseStale === true && (
+        <button
+          className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300"
+          title="HEAD moved past the pinned base; re-pin and carry open notes forward"
+          onClick={() => void repin()}
+        >
+          base moved — re-pin
+        </button>
+      )}
 
       <span className="grow" />
       <span className="text-soft">
         {open_threads} open note{open_threads === 1 ? '' : 's'}
       </span>
+      {pending_count > 0 && (
+        <button
+          className="rounded bg-emerald-600 px-2.5 py-1 font-medium text-white hover:bg-emerald-500"
+          title="post all pending notes so agents can see them"
+          onClick={() => void submitReview()}
+        >
+          Submit review ({pending_count})
+        </button>
+      )}
       <button
         className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
         title="toggle theme"
