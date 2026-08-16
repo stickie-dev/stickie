@@ -108,6 +108,11 @@ export const api = {
   reopen: (threadId: number) =>
     post(`/api/threads/${threadId}/reopen`, {}).then(toJson<Thread>),
 
+  importMr: (sessionId: number, mr: string) =>
+    post(`/api/sessions/${sessionId}/import-mr`, { mr }).then(
+      toJson<{ imported: number; skipped: number }>,
+    ),
+
   definitions: (sessionId: number, name: string, language: string) =>
     fetch(
       `/api/sessions/${sessionId}/nav/definitions?name=${encodeURIComponent(name)}&language=${encodeURIComponent(language)}`,

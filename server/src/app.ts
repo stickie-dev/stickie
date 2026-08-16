@@ -7,15 +7,23 @@ import {
   changedFiles,
   defaultBranch,
   fileAtSide,
+  gitOrigin,
   gitStatus,
   isGitRepo,
   listAllFiles,
   listRecentBranches,
+  listRecentCommits,
   listWorktrees,
   mergeBase,
   repoRoot,
   resolveRef,
 } from './git.js'
+import {
+  fetchMrDiscussions,
+  gitlabConfig,
+  parseMrRef,
+  projectFromRemote,
+} from './gitlab.js'
 import { findDefinitions, findReferences } from './nav.js'
 import type { Store } from './store.js'
 import type { WatchHub } from './watcher.js'
@@ -84,6 +92,13 @@ const targets_schema = z
     ),
     branches: z.array(
       z.object({ name: z.string(), lastCommitAt: z.string() }),
+    ),
+    recentCommits: z.array(
+      z.object({
+        sha: z.string(),
+        shortSha: z.string(),
+        subject: z.string(),
+      }),
     ),
     defaultBranch: z.string(),
   })
@@ -261,14 +276,17 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
     async (c) => {
       const repo = store.getRepo(c.req.valid('param').id)
       if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
-      const [worktrees, branches, default_branch] = await Promise.all([
-        listWorktrees(repo.path),
-        listRecentBranches(repo.path),
-        defaultBranch(repo.path),
-      ])
+      const [worktrees, branches, recentCommits, default_branch] =
+        await Promise.all([
+          listWorktrees(repo.path),
+          listRecentBranches(repo.path),
+          listRecentCommits(repo.path),
+          defaultBranch(repo.path),
+        ])
       const targets: TargetOptions = {
         worktrees,
         branches,
+        recentCommits,
         defaultBranch: default_branch,
       }
       return c.json(targets, 200)
@@ -759,6 +777,102 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       const body = c.req.valid('json')
       store.setViewed(session.id, body.path, body.viewed)
       return c.json({ ok: true }, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/sessions/{id}/import-mr',
+      tags: ['threads'],
+      summary: 'Import unresolved GitLab MR diff discussions as threads',
+      description:
+        'Requires GITLAB_TOKEN (and GITLAB_URL for self-hosted instances) in ' +
+        'the server environment. Accepts an MR iid, !iid, or full URL; the ' +
+        'project is inferred from the origin remote when not in the URL. ' +
+        'Already-imported discussions are skipped by their discussion id.',
+      request: {
+        params: id_param,
+        body: json_body(z.object({ mr: z.string().min(1) })),
+      },
+      responses: {
+        200: json_response(
+          z.object({ imported: z.number().int(), skipped: z.number().int() }),
+          'Import result',
+        ),
+        400: bad_request,
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const session = store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      const config = gitlabConfig()
+      if (config === null) {
+        return c.json(
+          { error: 'GITLAB_TOKEN is not set in the server environment' },
+          400,
+        )
+      }
+      const ref = parseMrRef(c.req.valid('json').mr)
+      if (ref === null) {
+        return c.json({ error: 'expected an MR iid, !iid, or full URL' }, 400)
+      }
+      let project = ref.projectPath
+      if (project === null) {
+        const remote = await gitOrigin(sourceRoot(session))
+        project = remote === null ? null : projectFromRemote(remote)
+      }
+      if (project === null) {
+        return c.json(
+          { error: 'could not infer the GitLab project from the origin remote' },
+          400,
+        )
+      }
+      const notes = await fetchMrDiscussions(config, project, ref.iid)
+      let imported = 0
+      let skipped = 0
+      for (const note of notes) {
+        if (
+          store.findThreadByExternalId(session.id, note.externalId) !==
+          undefined
+        ) {
+          skipped += 1
+          continue
+        }
+        const blob = await fileAtSide(
+          session.repoPath,
+          session.source,
+          session.baseSha,
+          note.side,
+          note.path,
+        ).catch(() => null)
+        if (blob === null || blob.content === null) {
+          skipped += 1
+          continue
+        }
+        const line = Math.min(note.line, blob.content.split('\n').length)
+        const [first, ...rest] = note.messages
+        const thread = store.createThread(
+          session.id,
+          note.path,
+          note.side,
+          line,
+          line,
+          blob.blobSha,
+          extractSnippet(blob.content, line, line),
+          'user',
+          first ?? '',
+          { origin: 'gitlab', externalId: note.externalId },
+        )
+        for (const body of rest) {
+          store.addMessage(thread.id, 'user', body)
+        }
+        imported += 1
+      }
+      return c.json({ imported, skipped }, 200)
     },
   )
 

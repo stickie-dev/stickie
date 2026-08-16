@@ -33,9 +33,16 @@ export interface BranchInfo {
   lastCommitAt: string
 }
 
+export interface CommitInfo {
+  sha: string
+  shortSha: string
+  subject: string
+}
+
 export interface TargetOptions {
   worktrees: WorktreeInfo[]
   branches: BranchInfo[]
+  recentCommits: CommitInfo[]
   defaultBranch: string
 }
 

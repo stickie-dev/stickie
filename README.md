@@ -30,6 +30,16 @@ the only output.
   (per-language regex heuristics over bundled ripgrep, no indexer daemon);
   right-click *Find usages* opens a hit panel, optionally sweeping every
   registered repo at once for cross-repo blast-radius checks
+- **Review batches** — notes are *pending* until you hit Submit review, so
+  agents receive a finished review, not a stream; per-note *post now* when
+  you want immediacy
+- **Session continuity** — when HEAD moves past the pinned base (the agent
+  committed), one click re-pins and carries open notes forward
+- **Keyboard flow** — j/k files, n/p changes, v viewed, ? for help; viewed
+  files persist per session
+- **GitLab MR import** — pull unresolved MR diff discussions into a local
+  session (`GITLAB_TOKEN` + `GITLAB_URL` env), so agent fixes happen
+  locally against real review threads
 
 ## Run
 
@@ -39,9 +49,14 @@ pnpm build
 pnpm start          # serves UI + API on http://localhost:4870
 ```
 
-`node bin/stickie.js` additionally registers the current directory as a repo
-and opens the browser. During development: `pnpm dev` (client on :5173
-proxying to the server on :4870).
+`node bin/stickie.js [path] [--port n] [--db file] [--no-open]` additionally
+registers a repo (default: cwd) and opens the browser. During development:
+`pnpm dev` (client on :5173 proxying to the server on :4870).
+
+`pnpm package` assembles the publishable npm package under `dist-pkg/`.
+
+The server binds 127.0.0.1 only (`STICKIE_HOST` overrides). The GitLab import
+is the only outbound network call and only runs when you trigger it.
 
 ## API (agent-facing)
 

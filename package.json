@@ -1,8 +1,8 @@
 {
   "name": "stickie",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Not another Editor — Notes for Agents. Local review surface for agent-made changes.",
+  "description": "Not another Editor \u2014 Notes for Agents. Local review surface for agent-made changes.",
   "type": "module",
   "bin": {
     "stickie": "./bin/stickie.js"
@@ -15,7 +15,9 @@
     "build": "pnpm --filter @stickie/client build && pnpm --filter @stickie/server build",
     "start": "node server/dist/index.js",
     "test": "pnpm --recursive test",
-    "typecheck": "pnpm --recursive typecheck"
+    "typecheck": "pnpm --recursive typecheck",
+    "package": "pnpm build && node scripts/package.mjs"
   },
-  "packageManager": "pnpm@11.18.0"
+  "packageManager": "pnpm@11.18.0",
+  "license": "Apache-2.0"
 }

@@ -177,8 +177,11 @@ function makeCaptureAttacher(
       const was_gutter = gutter_armed
       gutter_armed = false
       const lines = selectionLines(instance.getSelection())
-      const no_drafts = useReview.getState().drafts.length === 0
-      if (was_gutter && no_drafts) {
+      const capture_state = useReview.getState()
+      const no_target =
+        capture_state.drafts.length === 0 &&
+        capture_state.activeReplyId === null
+      if (was_gutter && no_target) {
         const range =
           lines ??
           (event.target.position === null || event.target.position === undefined
@@ -216,7 +219,9 @@ function CaptureActions({
   target: CaptureTarget
   onDone: () => void
 }) {
-  const hasDraft = useReview((s) => s.drafts.length > 0)
+  const hasDraft = useReview(
+    (s) => s.drafts.length > 0 || s.activeReplyId !== null,
+  )
   const span =
     target.startLine === target.endLine
       ? `L${target.startLine}`

@@ -17,6 +17,7 @@ export function TopBar() {
   const baseRef = useReview((s) => s.baseRef)
   const setBase = useReview((s) => s.setBase)
   const repin = useReview((s) => s.repin)
+  const importMr = useReview((s) => s.importMr)
   const copyPrompt = useReview((s) => s.copyPrompt)
   const promptCopied = useReview((s) => s.promptCopied)
   const connected = useReview((s) => s.connected)
@@ -37,6 +38,14 @@ export function TopBar() {
       kind: key.slice(0, idx) as ReviewSource['kind'],
       value: key.slice(idx + 1),
     }
+  }
+
+  const changeSource = (key: string) => {
+    const parsed = parse_source(key)
+    // reviewing a single commit: diff it against its parent
+    const is_commit =
+      parsed.kind === 'ref' && /^[0-9a-f]{40}$/.test(parsed.value)
+    void setSource(parsed, is_commit ? `${parsed.value}^` : undefined)
   }
 
   const select_classes =
@@ -68,7 +77,7 @@ export function TopBar() {
       <select
         className={`max-w-72 ${select_classes}`}
         value={source === null ? '' : source_key(source)}
-        onChange={(e) => void setSource(parse_source(e.target.value))}
+        onChange={(e) => changeSource(e.target.value)}
       >
         {targets !== null && (
           <>
@@ -84,6 +93,13 @@ export function TopBar() {
               {targets.branches.map((branch) => (
                 <option key={branch.name} value={`ref:${branch.name}`}>
                   {branch.name}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="commits (vs parent)">
+              {targets.recentCommits.map((commit) => (
+                <option key={commit.sha} value={`ref:${commit.sha}`}>
+                  {commit.shortSha} {commit.subject.slice(0, 48)}
                 </option>
               ))}
             </optgroup>
@@ -136,6 +152,17 @@ export function TopBar() {
           Submit review ({pending_count})
         </button>
       )}
+      <button
+        className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
+        title="import unresolved GitLab MR discussions (needs GITLAB_TOKEN on the server)"
+        disabled={session === null}
+        onClick={() => {
+          const mr = window.prompt('MR iid, !iid, or full URL')
+          if (mr !== null && mr.trim() !== '') void importMr(mr)
+        }}
+      >
+        Import MR
+      </button>
       <button
         className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
         title="toggle theme"

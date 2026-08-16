@@ -59,6 +59,8 @@ interface ReviewState {
   viewed: Set<string>
   drafts: Draft[]
   activeDraftId: number | null
+  replyDrafts: Record<number, string>
+  activeReplyId: number | null
   error: string | null
   connected: boolean
   promptCopied: boolean
@@ -78,7 +80,7 @@ interface ReviewState {
   init: () => Promise<void>
   addRepo: (path: string) => Promise<void>
   selectRepo: (repoId: number) => Promise<void>
-  setSource: (source: ReviewSource) => Promise<void>
+  setSource: (source: ReviewSource, baseRef?: string) => Promise<void>
   setBase: (baseRef: string | undefined) => Promise<void>
   openFile: (path: string, status?: ChangedFile['status'] | 'unchanged') => Promise<void>
   setShowAll: (showAll: boolean) => Promise<void>
@@ -86,9 +88,12 @@ interface ReviewState {
   updateDraftBody: (id: number, body: string) => void
   insertDraftRef: (path: string, startLine: number, endLine: number) => void
   setActiveDraft: (id: number) => void
+  setActiveReply: (threadId: number | null) => void
+  updateReplyDraft: (threadId: number, body: string) => void
   cancelDraft: (id: number) => void
   submitDraft: (id: number) => Promise<void>
   repin: () => Promise<void>
+  importMr: (mr: string) => Promise<void>
   submitReview: () => Promise<void>
   postThread: (threadId: number) => Promise<void>
   toggleViewed: (path: string) => Promise<void>
@@ -162,6 +167,8 @@ export const useReview = create<ReviewState>((set, get) => {
     viewed: new Set<string>(),
     drafts: [],
     activeDraftId: null,
+    replyDrafts: {},
+    activeReplyId: null,
     error: null,
     connected: false,
     promptCopied: false,
@@ -265,8 +272,8 @@ export const useReview = create<ReviewState>((set, get) => {
       await startSession()
     },
 
-    setSource: async (source) => {
-      set({ source, baseRef: undefined })
+    setSource: async (source, baseRef) => {
+      set({ source, baseRef })
       await startSession()
     },
 
@@ -330,29 +337,45 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     insertDraftRef: (path, startLine, endLine) => {
-      const { drafts, activeDraftId } = get()
-      const target =
-        drafts.find((d) => d.id === activeDraftId) ?? drafts.at(-1)
-      if (target === undefined) return
+      const { drafts, activeDraftId, activeReplyId, replyDrafts } = get()
       const ref =
         startLine === endLine
           ? `@${path}:L${startLine}`
           : `@${path}:L${startLine}-L${endLine}`
-      const body =
-        target.body === '' || /\s$/.test(target.body)
-          ? `${target.body}${ref} `
-          : `${target.body} ${ref} `
+      const append = (body: string) =>
+        body === '' || /\s$/.test(body) ? `${body}${ref} ` : `${body} ${ref} `
+      // a focused reply box takes precedence over draft blocks
+      if (activeReplyId !== null) {
+        set({
+          replyDrafts: {
+            ...replyDrafts,
+            [activeReplyId]: append(replyDrafts[activeReplyId] ?? ''),
+          },
+        })
+        return
+      }
+      const target =
+        drafts.find((d) => d.id === activeDraftId) ?? drafts.at(-1)
+      if (target === undefined) return
       set({
         drafts: get().drafts.map((d) =>
-          d.id === target.id ? { ...d, body } : d,
+          d.id === target.id ? { ...d, body: append(d.body) } : d,
         ),
       })
     },
 
     setActiveDraft: (id) => {
       if (get().drafts.some((d) => d.id === id)) {
-        set({ activeDraftId: id })
+        set({ activeDraftId: id, activeReplyId: null })
       }
+    },
+
+    setActiveReply: (threadId) => {
+      set({ activeReplyId: threadId })
+    },
+
+    updateReplyDraft: (threadId, body) => {
+      set({ replyDrafts: { ...get().replyDrafts, [threadId]: body } })
     },
 
     cancelDraft: (id) => {
@@ -399,8 +422,13 @@ export const useReview = create<ReviewState>((set, get) => {
     reply: async (threadId, body) => {
       try {
         const updated = await api.reply(threadId, 'user', body)
+        const drafts = { ...get().replyDrafts }
+        delete drafts[threadId]
         set({
           threads: get().threads.map((t) => (t.id === threadId ? updated : t)),
+          replyDrafts: drafts,
+          activeReplyId:
+            get().activeReplyId === threadId ? null : get().activeReplyId,
         })
       } catch (error) {
         get().pushToast('error', `reply: ${message(error)}`)
@@ -438,6 +466,21 @@ export const useReview = create<ReviewState>((set, get) => {
         setTimeout(() => set({ promptCopied: false }), 2000)
       } catch (error) {
         get().pushToast('error', `copy prompt: ${message(error)}`)
+      }
+    },
+
+    importMr: async (mr) => {
+      const { session } = get()
+      if (session === null) return
+      try {
+        const result = await api.importMr(session.id, mr)
+        set({ threads: await api.threads(session.id, true) })
+        get().pushToast(
+          'info',
+          `MR import: ${result.imported} thread${result.imported === 1 ? '' : 's'} imported, ${result.skipped} skipped`,
+        )
+      } catch (error) {
+        get().pushToast('error', `MR import: ${message(error)}`)
       }
     },
 

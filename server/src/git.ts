@@ -10,6 +10,7 @@ import type {
   WorktreeInfo,
 } from '@stickie/shared'
 
+
 async function git(repo: string, args: string[]): Promise<string> {
   const { stdout } = await execa('git', ['-C', repo, ...args])
   return stdout
@@ -112,6 +113,25 @@ export async function listRecentBranches(
     })
 }
 
+export async function listRecentCommits(
+  repo: string,
+  limit = 15,
+): Promise<{ sha: string; shortSha: string; subject: string }[]> {
+  const out = await gitOrNull(repo, [
+    'log',
+    `--max-count=${limit}`,
+    '--format=%H%x09%h%x09%s',
+  ])
+  if (out === null) return []
+  return out
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => {
+      const [sha = '', shortSha = '', ...rest] = line.split('\t')
+      return { sha, shortSha, subject: rest.join('\t') }
+    })
+}
+
 export async function defaultBranch(repo: string): Promise<string> {
   const origin_head = await gitOrNull(repo, [
     'symbolic-ref',
@@ -131,6 +151,10 @@ export async function defaultBranch(repo: string): Promise<string> {
     }
   }
   return git(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])
+}
+
+export async function gitOrigin(repo: string): Promise<string | null> {
+  return gitOrNull(repo, ['remote', 'get-url', 'origin'])
 }
 
 export async function resolveRef(repo: string, ref: string): Promise<string> {

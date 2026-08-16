@@ -46,7 +46,11 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
   const postThread = useReview((s) => s.postThread)
   const resolveThread = useReview((s) => s.resolveThread)
   const reopenThread = useReview((s) => s.reopenThread)
-  const [replyText, setReplyText] = useState('')
+  const setActiveReply = useReview((s) => s.setActiveReply)
+  const updateReplyDraft = useReview((s) => s.updateReplyDraft)
+  const replyText = useReview((s) =>
+    thread === undefined ? '' : (s.replyDrafts[thread.id] ?? ''),
+  )
   const [showReply, setShowReply] = useState(false)
 
   if (thread === undefined) return null
@@ -55,8 +59,12 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
     const text = replyText.trim()
     if (text === '') return
     await reply(thread.id, text)
-    setReplyText('')
     setShowReply(false)
+  }
+
+  const closeReply = () => {
+    setShowReply(false)
+    setActiveReply(null)
   }
 
   return (
@@ -129,12 +137,13 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
             <input
               autoFocus
               className="grow rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
-              placeholder="reply…"
+              placeholder="reply… (select code anywhere to insert a reference)"
               value={replyText}
-              onChange={(e) => setReplyText(e.target.value)}
+              onChange={(e) => updateReplyDraft(thread.id, e.target.value)}
+              onFocus={() => setActiveReply(thread.id)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void submitReply()
-                if (e.key === 'Escape') setShowReply(false)
+                if (e.key === 'Escape') closeReply()
               }}
             />
             <button
