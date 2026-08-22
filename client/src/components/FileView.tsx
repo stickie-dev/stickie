@@ -7,7 +7,7 @@ import { api } from '../api'
 import type { NavHit } from '../api'
 import { flowJump } from '../flowNav'
 import { languageFor } from '../languages'
-import { useReview } from '../store'
+import { useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
 import { ContinuousDiff } from './ContinuousDiff'
 
@@ -23,8 +23,13 @@ function useWindowWidth(): number {
   return width
 }
 
+/**
+ * `wrap` follows the file's type (or its own toggle): prose and data wrap,
+ * code does not — and unwrapped code gets the usual width markers instead.
+ */
 function editorOptions(
   width: number,
+  wrap: boolean,
 ): editor.IStandaloneEditorConstructionOptions {
   const fontSize = width < 1440 ? 11.5 : width < 1800 ? 12.5 : 13
   return {
@@ -39,7 +44,8 @@ function editorOptions(
     fontLigatures: true,
     lineHeight: Math.round(fontSize * 1.7),
     letterSpacing: 0.2,
-    wordWrap: 'on',
+    wordWrap: wrap ? 'on' : 'off',
+    rulers: wrap ? [] : [80, 100, 120],
     padding: { top: 10, bottom: 10 },
     lineNumbersMinChars: 3,
     lineDecorationsWidth: 12,
@@ -167,6 +173,16 @@ function makeCaptureAttacher(
       gutter_armed =
         target_type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS ||
         target_type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN
+    })
+    instance.addAction({
+      id: 'stickie.toggleWrap',
+      label: 'Toggle soft wrap for this file',
+      contextMenuGroupId: 'view',
+      contextMenuOrder: 0,
+      run: () => {
+        const path = filePath ?? useReview.getState().selectedPath
+        if (path !== null) useReview.getState().toggleWrap(path)
+      },
     })
     instance.addAction({
       id: 'stickie.findUsages',
@@ -335,6 +351,12 @@ export function FileView() {
   const files = useReview((s) => s.files)
   const openFile = useReview((s) => s.openFile)
   const fileLoading = useReview((s) => s.fileLoading)
+  const wrapExtensions = useReview((s) => s.wrapExtensions)
+  const wrapOverrides = useReview((s) => s.wrapOverrides)
+  const wrap =
+    selectedPath === null
+      ? false
+      : wrapFor(selectedPath, wrapExtensions, wrapOverrides)
 
   // review keyboard flow; inert while any input has focus
   useEffect(() => {
@@ -512,7 +534,7 @@ export function FileView() {
             files={files}
             sessionId={session.id}
             repoId={activeRepoId ?? -1}
-            options={editorOptions(width)}
+            options={editorOptions(width, false)}
             sideBySide={sideBySide}
             theme={monaco_theme}
             attach={attachCapture}
@@ -542,8 +564,11 @@ export function FileView() {
     )
   }
 
+  // line 0 notes have no anchor to hang a zone on; the panel shows them
   const file_threads = (side: Side) =>
-    threads.filter((t) => t.path === selectedPath && t.side === side)
+    threads.filter(
+      (t) => t.path === selectedPath && t.side === side && t.startLine > 0,
+    )
   const file_drafts = (side: Side) =>
     drafts.filter(
       (d) =>
@@ -627,7 +652,7 @@ export function FileView() {
               language={language}
               theme={monaco_theme}
               options={{
-                ...editorOptions(width),
+                ...editorOptions(width, wrap),
                 renderSideBySide: sideBySide,
                 hideUnchangedRegions: {
                   enabled: collapseUnchanged,
@@ -664,7 +689,7 @@ export function FileView() {
               value={single_content}
               language={language}
               theme={monaco_theme}
-              options={editorOptions(width)}
+              options={editorOptions(width, wrap)}
               onMount={(instance) => {
                 setSingleEditor(instance)
                 attachCapture(instance, single_side)

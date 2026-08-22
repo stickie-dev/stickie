@@ -216,6 +216,16 @@ interface ReviewState {
   resolveThread: (threadId: number) => Promise<void>
   reopenThread: (threadId: number) => Promise<void>
   copyPrompt: () => Promise<void>
+  /** notes with no code anchor: on the open file, or on the review itself */
+  addNote: (scope: 'review' | 'file', body: string) => Promise<void>
+  /** the order Copy prompt uses; ids not listed follow by age */
+  promptOrder: number[]
+  moveInPromptOrder: (threadId: number, delta: number) => void
+  /** comma-separated extensions that open soft-wrapped, from settings */
+  wrapExtensions: string
+  /** per-file wrap decisions taken from the editor's context menu */
+  wrapOverrides: Record<string, boolean>
+  toggleWrap: (path: string) => void
   refresh: (repoPath: string) => Promise<void>
   syncThreads: (sessionId: number) => Promise<void>
   setConnected: (connected: boolean) => void
@@ -226,6 +236,43 @@ function statusOf(
   path: string,
 ): ChangedFile['status'] | 'unchanged' {
   return files.find((f) => f.path === path)?.status ?? 'unchanged'
+}
+
+/** Kept in step with the server's own default until settings are read. */
+const default_wrap_extensions = 'md,markdown,txt,rst,csv,log,json'
+
+/** Whether a file opens soft-wrapped: the file's own choice, else its type. */
+export function wrapFor(
+  path: string,
+  extensions: string,
+  overrides: Record<string, boolean>,
+): boolean {
+  const chosen = overrides[path]
+  if (chosen !== undefined) return chosen
+  const name = (path.split('/').at(-1) ?? '').toLowerCase()
+  const dot = name.lastIndexOf('.')
+  if (dot === -1) return false
+  const ext = name.slice(dot + 1)
+  return extensions
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase().replace(/^\./, ''))
+    .includes(ext)
+}
+
+/**
+ * The prompt order as ids: whatever the user arranged, then anything newer
+ * that has not been placed yet.
+ */
+export function orderedThreadIds(
+  threads: Thread[],
+  order: number[],
+): number[] {
+  const known = new Set(threads.map((t) => t.id))
+  const placed = order.filter((id) => known.has(id))
+  const rest = threads
+    .map((t) => t.id)
+    .filter((id) => !placed.includes(id))
+  return [...placed, ...rest]
 }
 
 function message(error: unknown): string {
@@ -464,6 +511,8 @@ export const useReview = create<ReviewState>((set, get) => {
     tabs: [],
     activeTabId: null,
     contentEpoch: 0,
+    wrapExtensions: default_wrap_extensions,
+    wrapOverrides: {},
     repoSessions: {},
     perRepo: {},
 
@@ -573,6 +622,10 @@ export const useReview = create<ReviewState>((set, get) => {
 
     init: async () => {
       try {
+        void api
+          .settings()
+          .then((settings) => set({ wrapExtensions: settings.wrapExtensions }))
+          .catch(() => undefined)
         const repos = await api.repos()
         set({ repos })
         await Promise.all(repos.map((r) => ensureRepoSession(r.id)))
@@ -1024,11 +1077,48 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
 
+    promptOrder: [],
+
+    addNote: async (scope, body) => {
+      const { session, selectedPath } = get()
+      if (session === null) return
+      const path = scope === 'file' ? (selectedPath ?? '') : ''
+      try {
+        const thread = await api.createThread(session.id, {
+          path,
+          side: 'source',
+          startLine: 0,
+          endLine: 0,
+          body,
+        })
+        set({ threads: [...get().threads, thread] })
+      } catch (error) {
+        get().pushToast('error', `note: ${message(error)}`)
+      }
+    },
+
+    moveInPromptOrder: (threadId, delta) => {
+      const current = orderedThreadIds(get().threads, get().promptOrder)
+      const from = current.indexOf(threadId)
+      const to = from + delta
+      if (from === -1 || to < 0 || to >= current.length) return
+      const next = [...current]
+      const [moved] = next.splice(from, 1)
+      if (moved === undefined) return
+      next.splice(to, 0, moved)
+      set({ promptOrder: next })
+    },
+
     copyPrompt: async () => {
       const { session } = get()
       if (session === null) return
       try {
-        await navigator.clipboard.writeText(await api.prompt(session.id))
+        await navigator.clipboard.writeText(
+          await api.prompt(
+            session.id,
+            orderedThreadIds(get().threads, get().promptOrder),
+          ),
+        )
         set({ promptCopied: true })
         setTimeout(() => set({ promptCopied: false }), 2000)
       } catch (error) {
@@ -1184,6 +1274,16 @@ export const useReview = create<ReviewState>((set, get) => {
           },
         })
       }
+    },
+
+    toggleWrap: (path) => {
+      const { wrapExtensions, wrapOverrides } = get()
+      set({
+        wrapOverrides: {
+          ...wrapOverrides,
+          [path]: !wrapFor(path, wrapExtensions, wrapOverrides),
+        },
+      })
     },
 
     setConnected: (connected) => set({ connected }),

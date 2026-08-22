@@ -34,6 +34,82 @@ export function parseRefs(body: string): CodeRef[] {
 
 const inline_ref_max_lines = 20
 
+// markdown info strings for the fences, so a pasted prompt highlights and an
+// agent can tell yaml from python without guessing from the path
+const fence_languages: Record<string, string> = {
+  bash: 'bash',
+  c: 'c',
+  cfg: 'ini',
+  conf: 'ini',
+  cpp: 'cpp',
+  cs: 'csharp',
+  css: 'css',
+  dockerfile: 'dockerfile',
+  go: 'go',
+  graphql: 'graphql',
+  h: 'c',
+  hcl: 'hcl',
+  hpp: 'cpp',
+  html: 'html',
+  ini: 'ini',
+  java: 'java',
+  js: 'javascript',
+  json: 'json',
+  jsx: 'jsx',
+  kt: 'kotlin',
+  lua: 'lua',
+  md: 'markdown',
+  mjs: 'javascript',
+  php: 'php',
+  pl: 'perl',
+  proto: 'protobuf',
+  ps1: 'powershell',
+  py: 'python',
+  pyi: 'python',
+  r: 'r',
+  rb: 'ruby',
+  rs: 'rust',
+  scala: 'scala',
+  sh: 'bash',
+  sql: 'sql',
+  swift: 'swift',
+  tf: 'hcl',
+  toml: 'toml',
+  ts: 'typescript',
+  tsx: 'tsx',
+  vue: 'vue',
+  xml: 'xml',
+  yaml: 'yaml',
+  yml: 'yaml',
+  zsh: 'bash',
+}
+
+const named_files: Record<string, string> = {
+  dockerfile: 'dockerfile',
+  makefile: 'makefile',
+}
+
+export function fenceLanguage(path: string): string {
+  const name = (path.split('/').at(-1) ?? '').toLowerCase()
+  const named = named_files[name]
+  if (named !== undefined) return named
+  const dot = name.lastIndexOf('.')
+  if (dot === -1) return ''
+  return fence_languages[name.slice(dot + 1)] ?? ''
+}
+
+/** The trailing instructions; `{api}` becomes the server's own address. */
+export const default_prompt_instructions = [
+  'Address each note. The line numbers were correct at capture time;',
+  'verify against the current file before editing. When done with a',
+  'note, reply and resolve it:',
+  '',
+  '```bash',
+  `curl -X POST {api}/api/threads/<id>/reply -H 'content-type: application/json' -d '{"author":"agent","body":"<what you did>"}'`,
+  'curl -X POST {api}/api/threads/<id>/resolve',
+  '```',
+].join('\n')
+
 function describeSource(session: Session): string {
   if (session.source.kind === 'worktree') {
     return `working tree at ${session.source.value}`
@@ -41,7 +117,7 @@ function describeSource(session: Session): string {
   return `ref ${session.source.value}`
 }
 
-function fenced(code: string): string[] {
+function fenced(code: string, language = ''): string[] {
   const longest_run = code
     .split('\n')
     .reduce(
@@ -49,7 +125,7 @@ function fenced(code: string): string[] {
       0,
     )
   const fence = '`'.repeat(Math.max(3, longest_run + 1))
-  return [fence, code, fence]
+  return [`${fence}${language}`, code, fence]
 }
 
 export async function buildPrompt(
@@ -57,6 +133,7 @@ export async function buildPrompt(
   threads: Thread[],
   apiBase: string,
   readSource: (repo: string | null, path: string) => Promise<string | null>,
+  instructions: string = default_prompt_instructions,
 ): Promise<string> {
   const lines: string[] = []
   lines.push('# Review notes (stickie)')
@@ -67,20 +144,31 @@ export async function buildPrompt(
   )
   lines.push('')
   for (const [index, thread] of threads.entries()) {
+    const anchored = thread.startLine > 0
     const range =
       thread.startLine === thread.endLine
         ? `L${thread.startLine}`
         : `L${thread.startLine}-L${thread.endLine}`
     const side = thread.side === 'base' ? ' (base side)' : ''
-    lines.push(`## ${index + 1}. ${thread.path}:${range}${side} [thread ${thread.id}]`)
-    const snippet_lines = thread.snippet.split('\n')
-    if (snippet_lines.length <= 40) {
-      lines.push('Code at capture time:')
-      lines.push(...fenced(thread.snippet))
-    } else {
-      lines.push(
-        `Code block is ${snippet_lines.length} lines — read it from the file directly.`,
-      )
+    const where = !anchored
+      ? thread.path === ''
+        ? 'whole review'
+        : `${thread.path} (whole file)`
+      : `${thread.path}:${range}${side}`
+    const state = thread.pending ? ' [not yet submitted]' : ''
+    lines.push(`## ${index + 1}. ${where} [thread ${thread.id}]${state}`)
+    lines.push('')
+    if (anchored) {
+      const snippet_lines = thread.snippet.split('\n')
+      if (snippet_lines.length <= 40) {
+        lines.push('Code at capture time:')
+        lines.push(...fenced(thread.snippet, fenceLanguage(thread.path)))
+      } else {
+        lines.push(
+          `Code block is ${snippet_lines.length} lines — read it from the file directly.`,
+        )
+      }
+      lines.push('')
     }
     const seen_refs = new Set<string>()
     for (const message of thread.messages) {
@@ -108,20 +196,15 @@ export async function buildPrompt(
           .join('\n')
         if (slice === '') continue
         lines.push(`  Referenced ${label} (current content):`)
-        lines.push(...fenced(slice).map((l) => `  ${l}`))
+        lines.push(
+          ...fenced(slice, fenceLanguage(ref.path)).map((l) => `  ${l}`),
+        )
       }
     }
     lines.push('')
   }
   lines.push('---')
-  lines.push('Address each note. The line numbers were correct at capture time;')
-  lines.push('verify against the current file before editing. When done with a')
-  lines.push('note, reply and resolve it:')
-  lines.push('```')
-  lines.push(
-    `curl -X POST ${apiBase}/api/threads/<id>/reply -H 'content-type: application/json' -d '{"author":"agent","body":"<what you did>"}'`,
-  )
-  lines.push(`curl -X POST ${apiBase}/api/threads/<id>/resolve`)
-  lines.push('```')
+  lines.push('')
+  lines.push(instructions.replaceAll('{api}', apiBase))
   return lines.join('\n')
 }

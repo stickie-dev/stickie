@@ -13,12 +13,16 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [token, setToken] = useState('')
   const [tokenEnv, setTokenEnv] = useState('')
   const [clearToken, setClearToken] = useState(false)
+  const [instructions, setInstructions] = useState('')
+  const [wrapExtensions, setWrapExtensions] = useState('')
 
   useEffect(() => {
     void api.settings().then((s) => {
       setState(s)
       setUrl(s.gitlabUrl ?? '')
       setTokenEnv(s.gitlabTokenEnv ?? '')
+      setInstructions(s.promptInstructions)
+      setWrapExtensions(s.wrapExtensions)
     })
   }, [])
 
@@ -27,6 +31,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       await api.saveSettings({
         gitlabUrl: url,
         gitlabTokenEnv: tokenEnv,
+        promptInstructions: instructions,
+        wrapExtensions: wrapExtensions,
         // untouched unless a new value was typed or clearing was requested
         ...(token !== '' ? { gitlabToken: token } : {}),
         ...(clearToken ? { gitlabToken: '' } : {}),
@@ -144,8 +150,55 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
         <section className="mt-5 space-y-2">
           <h3 className="text-xs font-semibold tracking-wide text-soft uppercase">
+            Copy prompt
+          </h3>
+          <label className="block text-xs text-soft">
+            Instructions appended after the notes
+            <textarea
+              rows={7}
+              className={`mt-1 ${field_classes} resize-y`}
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+            />
+          </label>
+          <p className="text-xs text-faint">
+            <span className="font-mono">{'{api}'}</span> becomes this server's
+            address. The notes themselves are always included — every
+            unresolved one, pending batch and all.
+            {state !== null &&
+              instructions.trim() !== state.defaultPromptInstructions.trim() && (
+                <>
+                  {' '}
+                  <button
+                    className="text-accent hover:underline"
+                    onClick={() =>
+                      setInstructions(state.defaultPromptInstructions)
+                    }
+                  >
+                    restore the default
+                  </button>
+                </>
+              )}
+          </p>
+        </section>
+
+        <section className="mt-5 space-y-2">
+          <h3 className="text-xs font-semibold tracking-wide text-soft uppercase">
             Appearance
           </h3>
+          <label className="block text-xs text-soft">
+            Soft-wrap these extensions (comma separated)
+            <input
+              className={`mt-1 ${field_classes}`}
+              placeholder="md,txt,json"
+              value={wrapExtensions}
+              onChange={(e) => setWrapExtensions(e.target.value)}
+            />
+          </label>
+          <p className="text-xs text-faint">
+            Any file can be wrapped or unwrapped on the spot from the
+            right-click menu in the editor.
+          </p>
           <label className="flex items-center gap-2 text-xs text-soft">
             Theme
             <button

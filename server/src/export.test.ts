@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { parseRefs } from './export.js'
+import type { Session, Thread } from '@stickie/shared'
+import { buildPrompt, fenceLanguage, parseRefs } from './export.js'
 
 describe('parseRefs', () => {
   it('finds @-prefixed single-line and range refs', () => {
@@ -34,5 +35,93 @@ describe('parseRefs', () => {
 
   it('ignores inverted ranges and plain prose', () => {
     expect(parseRefs('broken @x.py:L9-L3 and nothing else here')).toEqual([])
+  })
+})
+
+describe('fenceLanguage', () => {
+  it('maps extensions to markdown info strings', () => {
+    expect(fenceLanguage('app/main.py')).toBe('python')
+    expect(fenceLanguage('deploy/values.yml')).toBe('yaml')
+    expect(fenceLanguage('src/store.ts')).toBe('typescript')
+  })
+
+  it('recognises files named without an extension', () => {
+    expect(fenceLanguage('docker/Dockerfile')).toBe('dockerfile')
+  })
+
+  it('stays empty for anything unknown', () => {
+    expect(fenceLanguage('data/blob.xyz')).toBe('')
+    expect(fenceLanguage('LICENSE')).toBe('')
+  })
+})
+
+const session: Session = {
+  id: 1,
+  repoId: 1,
+  repoPath: '/repo',
+  source: { kind: 'worktree', value: '/repo' },
+  baseRef: 'master',
+  baseSha: 'abcdef1234',
+}
+
+function thread(over: Partial<Thread>): Thread {
+  return {
+    id: 1,
+    sessionId: 1,
+    path: 'app/main.py',
+    side: 'source',
+    startLine: 4,
+    endLine: 4,
+    snippet: 'x = 1',
+    status: 'open',
+    pending: false,
+    origin: null,
+    createdAt: '2026-08-22 10:00:00',
+    messages: [{ id: 1, author: 'user', body: 'rename this', createdAt: '' }],
+    ...over,
+  }
+}
+
+const noSource = async () => null
+
+describe('buildPrompt', () => {
+  it('tags snippet fences with the file language', async () => {
+    const text = await buildPrompt(session, [thread({})], 'http://x', noSource)
+    expect(text).toContain('```python')
+  })
+
+  it('reports an unanchored note by its scope instead of a line', async () => {
+    const whole_file = thread({ id: 2, startLine: 0, endLine: 0, snippet: '' })
+    const review = thread({ id: 3, path: '', startLine: 0, endLine: 0, snippet: '' })
+    const text = await buildPrompt(
+      session,
+      [whole_file, review],
+      'http://x',
+      noSource,
+    )
+    expect(text).toContain('## 1. app/main.py (whole file) [thread 2]')
+    expect(text).toContain('## 2. whole review [thread 3]')
+    expect(text).not.toContain('Code at capture time')
+  })
+
+  it('marks notes that are still in the pending batch', async () => {
+    const text = await buildPrompt(
+      session,
+      [thread({ pending: true })],
+      'http://x',
+      noSource,
+    )
+    expect(text).toContain('[not yet submitted]')
+  })
+
+  it('substitutes the api address into the instructions', async () => {
+    const text = await buildPrompt(
+      session,
+      [thread({})],
+      'http://localhost:4899',
+      noSource,
+      'reply at {api}/api/threads/<id>/reply',
+    )
+    expect(text).toContain('reply at http://localhost:4899/api/threads/<id>/reply')
   })
 })

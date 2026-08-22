@@ -10,7 +10,7 @@ import {
   setFlowScroller,
 } from '../flowNav'
 import { languageFor } from '../languages'
-import { useReview } from '../store'
+import { useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
 
 type Attach = (
@@ -57,6 +57,9 @@ function DiffSection({
   const viewed = useReview((s) => s.viewed)
   const toggleViewed = useReview((s) => s.toggleViewed)
   const selectedPath = useReview((s) => s.selectedPath)
+  const wrapExtensions = useReview((s) => s.wrapExtensions)
+  const wrapOverrides = useReview((s) => s.wrapOverrides)
+  const wrap = wrapFor(file.path, wrapExtensions, wrapOverrides)
 
   useEffect(() => {
     const el = containerRef.current
@@ -108,7 +111,9 @@ function DiffSection({
   }, [selectedPath, file.path])
 
   const file_threads = (side: Side) =>
-    threads.filter((t) => t.path === file.path && t.side === side)
+    threads.filter(
+      (t) => t.path === file.path && t.side === side && t.startLine > 0,
+    )
   const file_drafts = (side: Side) =>
     drafts.filter(
       (d) =>
@@ -144,6 +149,9 @@ function DiffSection({
 
   const section_options: editor.IStandaloneEditorConstructionOptions = {
     ...options,
+    // each file in the flow follows its own type's wrap decision
+    wordWrap: wrap ? 'on' : 'off',
+    rulers: wrap ? [] : [80, 100, 120],
     scrollBeyondLastLine: false,
     scrollbar: {
       vertical: 'hidden',

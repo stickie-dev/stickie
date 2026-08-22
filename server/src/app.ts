@@ -9,7 +9,7 @@ import type {
   ThreadEvent,
 } from '@stickie/shared'
 import { extractSnippet, reanchor } from './anchors.js'
-import { buildPrompt } from './export.js'
+import { buildPrompt, default_prompt_instructions } from './export.js'
 import {
   changedFiles,
   defaultBranch,
@@ -175,10 +175,12 @@ const session_body = z.object({
 })
 
 const thread_body = z.object({
-  path: z.string().min(1),
-  side: z.enum(['base', 'source']),
-  startLine: z.number().int().positive(),
-  endLine: z.number().int().positive(),
+  // line 0 marks a note with no code anchor: on a whole file when path is
+  // set, on the review itself when path is empty
+  path: z.string(),
+  side: z.enum(['base', 'source']).default('source'),
+  startLine: z.number().int().min(0),
+  endLine: z.number().int().min(0),
   body: z.string().min(1),
   author: z.enum(['user', 'agent']).default('user'),
   // user notes default into the pending review batch; agent notes post
@@ -204,6 +206,9 @@ function json_response<T extends z.ZodType>(schema: T, description: string) {
 
 const not_found = json_response(error_schema, 'Unknown resource')
 const bad_request = json_response(error_schema, 'Invalid request')
+
+// extensions whose files open soft-wrapped; prose and data, not code
+const default_wrap_extensions = 'md,markdown,txt,rst,csv,log,json'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -640,6 +645,22 @@ export function createApp(
       if (body.endLine < body.startLine) {
         return c.json({ error: 'endLine before startLine' }, 400)
       }
+      if (body.startLine === 0) {
+        const note = store.createThread(
+          session.id,
+          body.path,
+          body.side,
+          0,
+          0,
+          null,
+          '',
+          body.author,
+          body.body,
+          { pending: body.pending ?? body.author === 'user' },
+        )
+        threadChanged('created', note.sessionId, note.id)
+        return c.json(note, 201)
+      }
       const blob = await fileAtSide(
         session.repoPath,
         session.source,
@@ -821,7 +842,17 @@ export function createApp(
       path: '/api/sessions/{id}/prompt',
       tags: ['sessions'],
       summary: 'Self-contained text export of unresolved notes',
-      request: { params: id_param },
+      description:
+        'The manual paste path: every unresolved note, including the pending ' +
+        'batch, with the instruction block from settings. `order` lists ' +
+        'thread ids first, in that order; the rest follow by age.',
+      request: {
+        params: id_param,
+        query: z.object({
+          order: z.string().optional(),
+          include_pending: z.coerce.boolean().optional(),
+        }),
+      },
       responses: {
         200: {
           content: { 'text/plain': { schema: z.string() } },
@@ -835,9 +866,24 @@ export function createApp(
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      const threads = (
+      const { order, include_pending } = c.req.valid('query')
+      const with_pending = include_pending !== false
+      const unresolved = (
         await reanchorThreads(store, session, store.listThreads(session.id))
-      ).filter((t) => t.status !== 'resolved' && !t.pending)
+      ).filter((t) => t.status !== 'resolved' && (with_pending || !t.pending))
+      const wanted =
+        order === undefined
+          ? []
+          : order
+              .split(',')
+              .map((id) => Number(id.trim()))
+              .filter((id) => Number.isInteger(id))
+      const rank = new Map(wanted.map((id, index) => [id, index]))
+      const threads = [...unresolved].sort(
+        (a, b) =>
+          (rank.get(a.id) ?? rank.size + a.id) -
+          (rank.get(b.id) ?? rank.size + b.id),
+      )
       const api_base = new URL(c.req.url).origin
       const source_cache = new Map<string, string | null>()
       const repo_by_name = new Map(
@@ -874,7 +920,17 @@ export function createApp(
         source_cache.set(key, content)
         return content
       }
-      return c.text(await buildPrompt(session, threads, api_base, readSource), 200)
+      return c.text(
+        await buildPrompt(
+          session,
+          threads,
+          api_base,
+          readSource,
+          store.getSetting('prompt_instructions') ??
+            default_prompt_instructions,
+        ),
+        200,
+      )
     },
   )
 
@@ -996,6 +1052,9 @@ export function createApp(
             hasStoredToken: z.boolean(),
             effectiveUrl: z.string().nullable(),
             tokenSource: z.string().nullable(),
+            promptInstructions: z.string(),
+            defaultPromptInstructions: z.string(),
+            wrapExtensions: z.string(),
           }),
           'Settings state',
         ),
@@ -1011,6 +1070,11 @@ export function createApp(
           hasStoredToken: settings.token !== null && settings.token !== '',
           effectiveUrl: config?.url ?? null,
           tokenSource: config?.tokenSource ?? null,
+          promptInstructions:
+            store.getSetting('prompt_instructions') ??
+            default_prompt_instructions,
+          defaultPromptInstructions: default_prompt_instructions,
+          wrapExtensions: store.getSetting('wrap_extensions') ?? default_wrap_extensions,
         },
         200,
       )
@@ -1033,6 +1097,8 @@ export function createApp(
             gitlabUrl: z.string().optional(),
             gitlabToken: z.string().optional(),
             gitlabTokenEnv: z.string().optional(),
+            promptInstructions: z.string().optional(),
+            wrapExtensions: z.string().optional(),
           }),
         ),
       },
@@ -1050,6 +1116,12 @@ export function createApp(
       }
       if (body.gitlabTokenEnv !== undefined) {
         store.setSetting('gitlab_token_env', body.gitlabTokenEnv)
+      }
+      if (body.promptInstructions !== undefined) {
+        store.setSetting('prompt_instructions', body.promptInstructions.trim())
+      }
+      if (body.wrapExtensions !== undefined) {
+        store.setSetting('wrap_extensions', body.wrapExtensions.trim())
       }
       return c.json({ ok: true }, 200)
     },
@@ -1364,7 +1436,12 @@ async function reanchorThreads(
   const contents = new Map<string, string | null>()
   const result: Thread[] = []
   for (const thread of threads) {
-    if (thread.side !== 'source' || thread.status === 'resolved') {
+    // a note with no code anchor has nothing to re-locate
+    if (
+      thread.startLine === 0 ||
+      thread.side !== 'source' ||
+      thread.status === 'resolved'
+    ) {
       result.push(thread)
       continue
     }

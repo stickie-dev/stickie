@@ -86,8 +86,15 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
           {thread.status}
         </span>
         <span className="text-xs text-soft">
-          L{thread.startLine}
-          {thread.endLine !== thread.startLine ? `–L${thread.endLine}` : ''}
+          {thread.startLine === 0
+            ? thread.path === ''
+              ? 'review note'
+              : 'file note'
+            : `L${thread.startLine}${
+                thread.endLine !== thread.startLine
+                  ? `–L${thread.endLine}`
+                  : ''
+              }`}
           {' · thread '}
           {thread.id}
         </span>

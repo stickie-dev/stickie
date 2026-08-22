@@ -16,6 +16,10 @@ export interface SettingsState {
   hasStoredToken: boolean
   effectiveUrl: string | null
   tokenSource: string | null
+  promptInstructions: string
+  defaultPromptInstructions: string
+  /** comma-separated extensions that open soft-wrapped */
+  wrapExtensions: string
 }
 
 export interface CommitBetween {
@@ -149,6 +153,8 @@ export const api = {
     gitlabUrl?: string
     gitlabToken?: string
     gitlabTokenEnv?: string
+    promptInstructions?: string
+    wrapExtensions?: string
   }) =>
     fetch('/api/settings', {
       method: 'PUT',
@@ -188,8 +194,9 @@ export const api = {
       `/api/sessions/${sessionId}/nav/references?name=${encodeURIComponent(name)}&scope=${scope}`,
     ).then(toJson<NavHit[]>),
 
-  prompt: async (sessionId: number) => {
-    const response = await fetch(`/api/sessions/${sessionId}/prompt`)
+  prompt: async (sessionId: number, order: number[] = []) => {
+    const query = order.length === 0 ? '' : `?order=${order.join(',')}`
+    const response = await fetch(`/api/sessions/${sessionId}/prompt${query}`)
     if (!response.ok) throw new Error(response.statusText)
     return response.text()
   },
