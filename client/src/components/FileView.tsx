@@ -355,6 +355,7 @@ export function FileView() {
   const commits = useReview((s) => s.commits)
   const wrapExtensions = useReview((s) => s.wrapExtensions)
   const wrapOverrides = useReview((s) => s.wrapOverrides)
+  const toggleWrap = useReview((s) => s.toggleWrap)
   const wrap =
     selectedPath === null
       ? false
@@ -627,6 +628,13 @@ export function FileView() {
           onClick={() => setHelpOpen(true)}
         >
           ?
+        </button>
+        <button
+          className="shrink-0 text-soft hover:text-ink"
+          title="soft-wrap long lines in this file (also in the right-click menu)"
+          onClick={() => toggleWrap(selectedPath)}
+        >
+          {wrap ? 'no wrap' : 'wrap'}
         </button>
         {has_both && (
           <button

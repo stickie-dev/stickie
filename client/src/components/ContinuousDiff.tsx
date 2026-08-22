@@ -60,6 +60,7 @@ function DiffSection({
   const wrapExtensions = useReview((s) => s.wrapExtensions)
   const wrapOverrides = useReview((s) => s.wrapOverrides)
   const wrap = wrapFor(file.path, wrapExtensions, wrapOverrides)
+  const toggleWrap = useReview((s) => s.toggleWrap)
 
   useEffect(() => {
     const el = containerRef.current
@@ -177,6 +178,14 @@ function DiffSection({
           />
           viewed
         </label>
+        <span className="grow" />
+        <button
+          className="shrink-0 text-soft hover:text-ink"
+          title="soft-wrap long lines in this file (also in the right-click menu)"
+          onClick={() => toggleWrap(file.path)}
+        >
+          {wrap ? 'no wrap' : 'wrap'}
+        </button>
       </div>
       {!loaded && (
         <div className="flex h-24 items-center justify-center text-xs text-faint">
