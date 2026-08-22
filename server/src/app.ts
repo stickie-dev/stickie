@@ -699,6 +699,64 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
     },
   )
 
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/api/threads/{id}',
+      tags: ['threads'],
+      summary: 'Delete a thread and its messages',
+      request: { params: id_param },
+      responses: {
+        200: json_response(z.object({ ok: z.boolean() }), 'Deleted'),
+        404: not_found,
+      },
+    }),
+    (c) => {
+      const thread = store.getThread(c.req.valid('param').id)
+      if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
+      store.deleteThread(thread.id)
+      return c.json({ ok: true }, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/api/messages/{id}',
+      tags: ['threads'],
+      summary:
+        'Delete a user-authored message; deletes the thread when it was the last one',
+      request: { params: id_param },
+      responses: {
+        200: json_response(
+          z.object({
+            deletedThread: z.boolean(),
+            thread: thread_schema.nullable(),
+          }),
+          'Result',
+        ),
+        400: bad_request,
+        404: not_found,
+      },
+    }),
+    (c) => {
+      const message = store.getMessage(c.req.valid('param').id)
+      if (message === undefined) {
+        return c.json({ error: 'unknown message' }, 404)
+      }
+      if (message.author !== 'user') {
+        return c.json({ error: 'agent messages cannot be deleted' }, 400)
+      }
+      store.deleteMessage(message.id)
+      if (store.countMessages(message.threadId) === 0) {
+        store.deleteThread(message.threadId)
+        return c.json({ deletedThread: true, thread: null }, 200)
+      }
+      const thread = store.getThread(message.threadId)
+      return c.json({ deletedThread: false, thread: thread ?? null }, 200)
+    },
+  )
+
   const status_route = (action: 'resolve' | 'reopen') =>
     createRoute({
       method: 'post',

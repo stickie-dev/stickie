@@ -532,8 +532,13 @@ export function FileView() {
 
   const binary = baseContent?.binary === true || sourceContent?.binary === true
   const language = languageFor(selectedPath)
+  const has_any =
+    baseContent?.content != null || sourceContent?.content != null
+  // side-by-side renders one-sided files as a diff so added content sits
+  // right and deleted content sits left; inline keeps the plain editor
   const has_both =
-    baseContent?.content != null && sourceContent?.content != null
+    (baseContent?.content != null && sourceContent?.content != null) ||
+    (sideBySide && has_any)
   const loading = !binary && baseContent === null && sourceContent === null
 
   const single_side: Side = sourceContent?.content != null ? 'source' : 'base'

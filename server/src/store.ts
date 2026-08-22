@@ -193,6 +193,21 @@ export class Store {
     this.db.prepare('update messages set body = ? where id = ?').run(body, id)
   }
 
+  deleteMessage(id: number): void {
+    this.db.prepare('delete from messages where id = ?').run(id)
+  }
+
+  countMessages(threadId: number): number {
+    const row = this.db
+      .prepare('select count(*) as n from messages where thread_id = ?')
+      .get(threadId) as unknown as { n: number }
+    return row.n
+  }
+
+  deleteThread(id: number): void {
+    this.db.prepare('delete from threads where id = ?').run(id)
+  }
+
   setThreadStatus(threadId: number, status: ThreadStatus): void {
     this.db
       .prepare('update threads set status = ? where id = ?')

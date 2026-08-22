@@ -127,6 +127,16 @@ export const api = {
       body: JSON.stringify({ body }),
     }).then(toJson<Thread>),
 
+  deleteThread: (threadId: number) =>
+    fetch(`/api/threads/${threadId}`, { method: 'DELETE' }).then(
+      toJson<{ ok: boolean }>,
+    ),
+
+  deleteMessage: (messageId: number) =>
+    fetch(`/api/messages/${messageId}`, { method: 'DELETE' }).then(
+      toJson<{ deletedThread: boolean; thread: Thread | null }>,
+    ),
+
   resolve: (threadId: number) =>
     post(`/api/threads/${threadId}/resolve`, {}).then(toJson<Thread>),
 

@@ -54,6 +54,8 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
   const setActiveReply = useReview((s) => s.setActiveReply)
   const updateReplyDraft = useReview((s) => s.updateReplyDraft)
   const editMessage = useReview((s) => s.editMessage)
+  const deleteThread = useReview((s) => s.deleteThread)
+  const deleteMessage = useReview((s) => s.deleteMessage)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
   const replyText = useReview((s) =>
@@ -124,6 +126,17 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
             reopen
           </button>
         )}
+        <button
+          className="ml-2 text-xs text-rose-600 hover:underline dark:text-rose-400"
+          title="delete this note and its replies"
+          onClick={() => {
+            if (window.confirm('Delete this note and all its replies?')) {
+              void deleteThread(thread.id)
+            }
+          }}
+        >
+          delete
+        </button>
       </div>
       <div className="space-y-2 px-3 py-2">
         {thread.messages.map((message) =>
@@ -176,16 +189,25 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
               </span>
               <MessageBody body={message.body} />
               {message.author === 'user' && (
-                <button
-                  className="ml-1.5 hidden text-xs text-faint group-hover:inline hover:text-ink"
-                  title="edit this message"
-                  onClick={() => {
-                    setEditingId(message.id)
-                    setEditText(message.body)
-                  }}
-                >
-                  edit
-                </button>
+                <>
+                  <button
+                    className="ml-1.5 hidden text-xs text-faint group-hover:inline hover:text-ink"
+                    title="edit this message"
+                    onClick={() => {
+                      setEditingId(message.id)
+                      setEditText(message.body)
+                    }}
+                  >
+                    edit
+                  </button>
+                  <button
+                    className="ml-1.5 hidden text-xs text-faint group-hover:inline hover:text-rose-500"
+                    title="delete this message"
+                    onClick={() => void deleteMessage(thread.id, message.id)}
+                  >
+                    delete
+                  </button>
+                </>
               )}
             </div>
           ),

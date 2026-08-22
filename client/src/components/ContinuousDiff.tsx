@@ -102,7 +102,12 @@ function DiffSection({
     )
 
   const binary = base?.binary === true || source?.binary === true
-  const has_both = base?.content != null && source?.content != null
+  const has_any = base?.content != null || source?.content != null
+  // side-by-side renders one-sided files as a diff so added content sits
+  // right and deleted content sits left; inline keeps the plain editor
+  const has_both =
+    (base?.content != null && source?.content != null) ||
+    (sideBySide && has_any)
   const single_side: Side = source?.content != null ? 'source' : 'base'
   const single_content =
     single_side === 'source' ? source?.content : base?.content

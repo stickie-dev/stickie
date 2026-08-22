@@ -170,6 +170,8 @@ interface ReviewState {
   toggleViewed: (path: string) => Promise<void>
   reply: (threadId: number, body: string) => Promise<void>
   editMessage: (threadId: number, messageId: number, body: string) => Promise<void>
+  deleteThread: (threadId: number) => Promise<void>
+  deleteMessage: (threadId: number, messageId: number) => Promise<void>
   commentsOpen: boolean
   toggleComments: () => void
   resolveThread: (threadId: number) => Promise<void>
@@ -853,6 +855,31 @@ export const useReview = create<ReviewState>((set, get) => {
     commentsOpen: false,
 
     toggleComments: () => set({ commentsOpen: !get().commentsOpen }),
+
+    deleteThread: async (threadId) => {
+      try {
+        await api.deleteThread(threadId)
+        set({ threads: get().threads.filter((t) => t.id !== threadId) })
+      } catch (error) {
+        get().pushToast('error', `delete: ${message(error)}`)
+      }
+    },
+
+    deleteMessage: async (threadId, messageId) => {
+      try {
+        const result = await api.deleteMessage(messageId)
+        if (result.deletedThread || result.thread === null) {
+          set({ threads: get().threads.filter((t) => t.id !== threadId) })
+        } else {
+          const thread = result.thread
+          set({
+            threads: get().threads.map((t) => (t.id === threadId ? thread : t)),
+          })
+        }
+      } catch (error) {
+        get().pushToast('error', `delete: ${message(error)}`)
+      }
+    },
 
     editMessage: async (threadId, messageId, body) => {
       try {
