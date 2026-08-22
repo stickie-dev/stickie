@@ -25,6 +25,27 @@ Line numbers are re-anchored server-side on every fetch, so the positions in
 a fresh `GET` are current. A note whose code block no longer exists comes
 back with `"status": "detached"` — ask the user rather than guessing.
 
+## MCP
+
+For agents that speak MCP instead of curl, `stickie-mcp` bridges stdio JSON-RPC
+to a running server — five tools over the same routes:
+
+| Tool | Route | |
+| --- | --- | --- |
+| `list_reviews` | `GET /api/sessions` | read-only |
+| `get_review_notes` | `GET /api/sessions/:id/prompt` | read-only |
+| `list_notes` | `GET /api/sessions/:id/threads` | read-only |
+| `reply_to_note` | `POST /api/threads/:id/reply` | writes |
+| `resolve_note` | `POST /api/threads/:id/resolve` | writes |
+
+```sh
+claude mcp add stickie -- npx -y stickie stickie-mcp        # published install
+claude mcp add stickie -- node /path/to/stickie/bin/stickie-mcp.js
+```
+
+`--url http://host:port` (or `STICKIE_URL`) points it at a server that is not on
+`http://localhost:4870`. The bridge starts nothing: run stickie first.
+
 ## Zero-integration fallback
 
 The **Copy prompt** button in the UI (or `GET /api/sessions/<id>/prompt`)

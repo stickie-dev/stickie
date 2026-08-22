@@ -108,6 +108,27 @@ export class Store {
     return row === undefined ? undefined : sessionFromRow(row)
   }
 
+  /** Newest first, so an agent handed no id can take the obvious one. */
+  listSessions(): Session[] {
+    const rows = this.db
+      .prepare(
+        `select s.*, r.path as repo_path from sessions s
+         join repos r on r.id = s.repo_id order by s.id desc`,
+      )
+      .all() as unknown as SessionRow[]
+    return rows.map(sessionFromRow)
+  }
+
+  countOpenThreads(sessionId: number): number {
+    const row = this.db
+      .prepare(
+        `select count(*) as n from threads
+         where session_id = ? and status != 'resolved' and pending = 0`,
+      )
+      .get(sessionId) as unknown as { n: number }
+    return row.n
+  }
+
   createThread(
     sessionId: number,
     path: string,

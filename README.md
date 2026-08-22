@@ -14,7 +14,8 @@ the only output.
 - **Monaco diff review** — side-by-side or inline, full syntax highlighting,
   built from full file contents so every line is commentable, not just hunks
 - **Comment anywhere** — changed lines, unchanged lines, untouched files
-  (the *All files* tab), base or source side, single lines or ranges
+  (the *All files* tab), base or source side, single lines or ranges, or no
+  code at all: notes on a whole file or on the review itself
 - **Review targets** — source is any worktree's working tree or any branch;
   base defaults to HEAD (worktrees) or the merge-base with the default
   branch (branches), pinned at session creation
@@ -24,8 +25,10 @@ the only output.
 - **Re-anchoring** — notes store the code snippet they were written against
   and re-locate themselves after edits; a note whose code vanished turns
   `detached` instead of pointing at the wrong line
-- **Agent loop** — open notes via REST, agent replies and resolves; or the
-  zero-integration *Copy prompt* export for pasting into anything
+- **Agent loop** — open notes via REST or MCP (`stickie-mcp`, five tools over
+  the same routes), agent replies and resolves; or the zero-integration
+  *Copy prompt* export — markdown, language-tagged code fences, in an order
+  you can arrange — for pasting into anything
 - **Multi-repo workspace** — every registered repository lives in one
   project tree (PyCharm attach-style); click into any repo's files, and
   cross-repo references (`@repo:path:L10`) capture naturally while a note
@@ -84,7 +87,8 @@ spec is generated from the code and cannot drift.
 | POST | `/api/sessions/:id/threads` | create a note |
 | POST | `/api/threads/:id/reply` | `{author, body}` |
 | POST | `/api/threads/:id/resolve` · `/reopen` | close / reopen |
-| GET | `/api/sessions/:id/prompt` | self-contained text export |
+| GET | `/api/sessions/:id/prompt` | self-contained markdown export |
+| GET | `/api/sessions` | every review, newest first |
 
 See [agents/README.md](agents/README.md) for the integration guide and
 [agents/claude-code/](agents/claude-code/) for a ready-made Claude Code

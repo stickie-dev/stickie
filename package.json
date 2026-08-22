@@ -5,7 +5,8 @@
   "description": "Not another Editor \u2014 Notes for Agents. Local review surface for agent-made changes.",
   "type": "module",
   "bin": {
-    "stickie": "./bin/stickie.js"
+    "stickie": "./bin/stickie.js",
+    "stickie-mcp": "./bin/stickie-mcp.js"
   },
   "engines": {
     "node": ">=22"

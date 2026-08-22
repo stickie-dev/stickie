@@ -196,6 +196,15 @@ const repo_body = z.object({ path: z.string().min(1) })
 
 const id_param = z.object({ id: z.coerce.number().int() })
 
+// z.coerce.boolean() reads "0" as true, which is the opposite of what any
+// caller writing include_pending=0 means
+const flag_query = z
+  .string()
+  .optional()
+  .transform((value) =>
+    value === undefined ? undefined : value === '1' || value === 'true',
+  )
+
 function json_body<T extends z.ZodType>(schema: T) {
   return { content: { 'application/json': { schema } }, required: true }
 }
@@ -587,6 +596,34 @@ export function createApp(
   app.openapi(
     createRoute({
       method: 'get',
+      path: '/api/sessions',
+      tags: ['sessions'],
+      summary: 'Every review session, newest first',
+      description:
+        'For an agent handed no session id: one entry per review, with how ' +
+        'many notes are waiting on it.',
+      responses: {
+        200: json_response(
+          z.array(
+            session_schema.extend({ openNotes: z.number().int() }),
+          ),
+          'Sessions',
+        ),
+      },
+    }),
+    (c) =>
+      c.json(
+        store.listSessions().map((session) => ({
+          ...session,
+          openNotes: store.countOpenThreads(session.id),
+        })),
+        200,
+      ),
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
       path: '/api/sessions/{id}/threads',
       tags: ['threads'],
       summary: 'List note threads, re-anchored to current content',
@@ -597,7 +634,7 @@ export function createApp(
         params: id_param,
         query: z.object({
           status: z.enum(['open', 'resolved', 'detached']).optional(),
-          include_pending: z.coerce.boolean().optional(),
+          include_pending: flag_query,
         }),
       },
       responses: {
@@ -850,7 +887,7 @@ export function createApp(
         params: id_param,
         query: z.object({
           order: z.string().optional(),
-          include_pending: z.coerce.boolean().optional(),
+          include_pending: flag_query,
         }),
       },
       responses: {

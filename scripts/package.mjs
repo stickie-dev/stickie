@@ -44,7 +44,7 @@ fs.writeFileSync(
       description: root_pkg.description,
       license: 'Apache-2.0',
       type: 'module',
-      bin: { stickie: 'bin/stickie.js' },
+      bin: { stickie: 'bin/stickie.js', 'stickie-mcp': 'bin/stickie-mcp.js' },
       engines: { node: '>=22' },
       dependencies,
     },
