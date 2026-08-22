@@ -14,25 +14,41 @@ function DraftPill() {
   const drafts = useReview((s) => s.drafts)
   const activeDraftId = useReview((s) => s.activeDraftId)
   const selectedPath = useReview((s) => s.selectedPath)
+  const activeRepoId = useReview((s) => s.activeRepoId)
+  const repos = useReview((s) => s.repos)
+  const selectRepo = useReview((s) => s.selectRepo)
   const openFile = useReview((s) => s.openFile)
   const cancelDraft = useReview((s) => s.cancelDraft)
 
   const active =
     drafts.find((d) => d.id === activeDraftId) ?? drafts.at(-1)
-  if (active === undefined || active.path === selectedPath) return null
+  if (
+    active === undefined ||
+    (active.path === selectedPath && active.repoId === activeRepoId)
+  ) {
+    return null
+  }
+  const cross_repo = active.repoId !== activeRepoId
+  const repo_name = repos.find((r) => r.id === active.repoId)?.name
 
   return (
     <div className="fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-lg border border-accent bg-panel px-3 py-2 text-xs shadow-xl">
       <span className="text-soft">
         {drafts.length > 1 ? `${drafts.length} notes in progress; active on` : 'note in progress on'}{' '}
         <span className="font-mono text-ink">
+          {cross_repo && repo_name !== undefined ? `${repo_name}:` : ''}
           {active.path}:L{active.startLine}
         </span>{' '}
         — “+ ref” on a selection here adds a reference to it
       </span>
       <button
         className="rounded bg-accent px-2 py-1 font-medium text-white hover:bg-accent-strong"
-        onClick={() => void openFile(active.path)}
+        onClick={() => {
+          void (async () => {
+            if (cross_repo) await selectRepo(active.repoId)
+            await openFile(active.path)
+          })()
+        }}
       >
         back to note
       </button>

@@ -14,12 +14,23 @@ import type { NavHit } from './api'
 
 export interface Draft {
   id: number
+  repoId: number
+  sessionId: number
   path: string
   side: Side
   startLine: number
   endLine: number
   body: string
 }
+
+export interface NavEntry {
+  repoId: number
+  path: string
+  line: number
+}
+
+const nav_history_cap = 50
+let nav_restoring = false
 
 let draft_seq = 0
 
@@ -61,6 +72,7 @@ interface ReviewState {
   activeDraftId: number | null
   replyDrafts: Record<number, string>
   activeReplyId: number | null
+  activeReplyRepoId: number | null
   error: string | null
   connected: boolean
   promptCopied: boolean
@@ -68,6 +80,9 @@ interface ReviewState {
   reveal: { path: string; line: number } | null
   usages: { name: string; scope: 'repo' | 'workspace'; hits: NavHit[] } | null
   toasts: Toast[]
+  navHistory: NavEntry[]
+  navIndex: number
+  perRepo: Record<number, { source: ReviewSource; baseRef?: string; selectedPath?: string }>
 
   pushToast: (kind: Toast['kind'], text: string) => void
   dismissToast: (id: number) => void
@@ -75,6 +90,13 @@ interface ReviewState {
   closeUsages: () => void
   openHit: (hit: NavHit) => Promise<void>
   openRef: (path: string, line: number) => Promise<void>
+  openRefTarget: (
+    repoName: string | null,
+    path: string,
+    line: number,
+  ) => Promise<void>
+  navBack: () => Promise<void>
+  navForward: () => Promise<void>
   clearReveal: () => void
   toggleTheme: () => void
   init: () => Promise<void>
@@ -136,8 +158,6 @@ export const useReview = create<ReviewState>((set, get) => {
         selectedPath: null,
         baseContent: null,
         sourceContent: null,
-        drafts: [],
-        activeDraftId: null,
         error: null,
       })
       const first = files[0]
@@ -146,6 +166,43 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     } catch (error) {
       set({ error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  function recordNav(path: string, line: number): void {
+    if (nav_restoring) return
+    const { activeRepoId, navHistory, navIndex } = get()
+    if (activeRepoId === null) return
+    const current = navHistory[navIndex]
+    if (
+      current !== undefined &&
+      current.repoId === activeRepoId &&
+      current.path === path &&
+      current.line === line
+    ) {
+      return
+    }
+    const entries = [
+      ...navHistory.slice(0, navIndex + 1),
+      { repoId: activeRepoId, path, line },
+    ].slice(-nav_history_cap)
+    set({ navHistory: entries, navIndex: entries.length - 1 })
+  }
+
+  async function restoreNav(
+    entry: NavEntry | undefined,
+    index: number,
+  ): Promise<void> {
+    if (entry === undefined) return
+    nav_restoring = true
+    try {
+      if (entry.repoId !== get().activeRepoId) {
+        await get().selectRepo(entry.repoId)
+      }
+      await get().openFile(entry.path)
+      set({ reveal: { path: entry.path, line: entry.line }, navIndex: index })
+    } finally {
+      nav_restoring = false
     }
   }
 
@@ -169,6 +226,7 @@ export const useReview = create<ReviewState>((set, get) => {
     activeDraftId: null,
     replyDrafts: {},
     activeReplyId: null,
+    activeReplyRepoId: null,
     error: null,
     connected: false,
     promptCopied: false,
@@ -176,6 +234,9 @@ export const useReview = create<ReviewState>((set, get) => {
     reveal: null,
     usages: null,
     toasts: [],
+    navHistory: [],
+    navIndex: -1,
+    perRepo: {},
 
     pushToast: (kind, text) => {
       toast_seq += 1
@@ -224,6 +285,34 @@ export const useReview = create<ReviewState>((set, get) => {
     openRef: async (path, line) => {
       await get().openFile(path)
       set({ reveal: { path, line } })
+      recordNav(path, line)
+    },
+
+    openRefTarget: async (repoName, path, line) => {
+      const { repos, activeRepoId } = get()
+      if (repoName !== null) {
+        const target = repos.find((r) => r.name === repoName)
+        if (target === undefined) {
+          get().pushToast('error', `unknown repo in reference: ${repoName}`)
+          return
+        }
+        if (target.id !== activeRepoId) {
+          await get().selectRepo(target.id)
+        }
+      }
+      await get().openRef(path, line)
+    },
+
+    navBack: async () => {
+      const { navHistory, navIndex } = get()
+      if (navIndex <= 0) return
+      await restoreNav(navHistory[navIndex - 1], navIndex - 1)
+    },
+
+    navForward: async () => {
+      const { navHistory, navIndex } = get()
+      if (navIndex >= navHistory.length - 1) return
+      await restoreNav(navHistory[navIndex + 1], navIndex + 1)
     },
 
     clearReveal: () => set({ reveal: null }),
@@ -257,28 +346,56 @@ export const useReview = create<ReviewState>((set, get) => {
 
     selectRepo: async (repoId) => {
       const targets = await api.targets(repoId)
+      const cached = get().perRepo[repoId]
       const main = targets.worktrees.find((wt) => wt.isMain)
-      const source: ReviewSource | null =
-        main !== undefined
+      const source: ReviewSource =
+        cached?.source ??
+        (main !== undefined
           ? { kind: 'worktree', value: main.path }
-          : { kind: 'ref', value: targets.defaultBranch }
+          : { kind: 'ref', value: targets.defaultBranch })
       set({
         activeRepoId: repoId,
         targets,
         source,
-        baseRef: undefined,
+        baseRef: cached?.baseRef,
         showAll: false,
+        perRepo: {
+          ...get().perRepo,
+          [repoId]: { ...cached, source, baseRef: cached?.baseRef },
+        },
       })
       await startSession()
+      const remembered = get().perRepo[repoId]?.selectedPath
+      if (remembered !== undefined && remembered !== get().selectedPath) {
+        await get().openFile(remembered).catch(() => undefined)
+      }
     },
 
     setSource: async (source, baseRef) => {
+      const repoId = get().activeRepoId
       set({ source, baseRef })
+      if (repoId !== null) {
+        set({
+          perRepo: {
+            ...get().perRepo,
+            [repoId]: { ...get().perRepo[repoId], source, baseRef },
+          },
+        })
+      }
       await startSession()
     },
 
     setBase: async (baseRef) => {
+      const { activeRepoId, source } = get()
       set({ baseRef })
+      if (activeRepoId !== null && source !== null) {
+        set({
+          perRepo: {
+            ...get().perRepo,
+            [activeRepoId]: { ...get().perRepo[activeRepoId], source, baseRef },
+          },
+        })
+      }
       await startSession()
     },
 
@@ -305,6 +422,15 @@ export const useReview = create<ReviewState>((set, get) => {
       // ignore stale responses after a quick file switch
       if (get().selectedPath !== path) return
       set({ baseContent: base, sourceContent: source })
+      recordNav(path, 1)
+      const repoId = get().activeRepoId
+      if (repoId !== null) {
+        const perRepo = get().perRepo
+        const entry = perRepo[repoId]
+        if (entry !== undefined) {
+          set({ perRepo: { ...perRepo, [repoId]: { ...entry, selectedPath: path } } })
+        }
+      }
     },
 
     setShowAll: async (showAll) => {
@@ -316,11 +442,15 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     startDraft: (side, startLine, endLine) => {
-      const { selectedPath, drafts } = get()
-      if (selectedPath === null) return
+      const { selectedPath, drafts, activeRepoId, session } = get()
+      if (selectedPath === null || activeRepoId === null || session === null) {
+        return
+      }
       draft_seq += 1
       const draft: Draft = {
         id: draft_seq,
+        repoId: activeRepoId,
+        sessionId: session.id,
         path: selectedPath,
         side,
         startLine,
@@ -337,19 +467,38 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     insertDraftRef: (path, startLine, endLine) => {
-      const { drafts, activeDraftId, activeReplyId, replyDrafts } = get()
-      const ref =
-        startLine === endLine
-          ? `@${path}:L${startLine}`
-          : `@${path}:L${startLine}-L${endLine}`
-      const append = (body: string) =>
+      const {
+        drafts,
+        activeDraftId,
+        activeReplyId,
+        activeReplyRepoId,
+        replyDrafts,
+        activeRepoId,
+        repos,
+      } = get()
+      // captures from a different repo than the note's home get a repo
+      // prefix so the agent (and chips) can resolve them
+      const refFor = (homeRepoId: number | null) => {
+        const cross =
+          homeRepoId !== null &&
+          activeRepoId !== null &&
+          homeRepoId !== activeRepoId
+        const prefix = cross
+          ? `${repos.find((r) => r.id === activeRepoId)?.name ?? ''}:`
+          : ''
+        return startLine === endLine
+          ? `@${prefix}${path}:L${startLine}`
+          : `@${prefix}${path}:L${startLine}-L${endLine}`
+      }
+      const append = (body: string, ref: string) =>
         body === '' || /\s$/.test(body) ? `${body}${ref} ` : `${body} ${ref} `
       // a focused reply box takes precedence over draft blocks
       if (activeReplyId !== null) {
+        const ref = refFor(activeReplyRepoId)
         set({
           replyDrafts: {
             ...replyDrafts,
-            [activeReplyId]: append(replyDrafts[activeReplyId] ?? ''),
+            [activeReplyId]: append(replyDrafts[activeReplyId] ?? '', ref),
           },
         })
         return
@@ -357,9 +506,10 @@ export const useReview = create<ReviewState>((set, get) => {
       const target =
         drafts.find((d) => d.id === activeDraftId) ?? drafts.at(-1)
       if (target === undefined) return
+      const ref = refFor(target.repoId)
       set({
         drafts: get().drafts.map((d) =>
-          d.id === target.id ? { ...d, body: append(d.body) } : d,
+          d.id === target.id ? { ...d, body: append(d.body, ref) } : d,
         ),
       })
     },
@@ -371,7 +521,10 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     setActiveReply: (threadId) => {
-      set({ activeReplyId: threadId })
+      set({
+        activeReplyId: threadId,
+        activeReplyRepoId: threadId === null ? null : get().activeRepoId,
+      })
     },
 
     updateReplyDraft: (threadId, body) => {
@@ -390,14 +543,16 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     submitDraft: async (id) => {
-      const { session, drafts } = get()
+      const { session, drafts, activeRepoId, repos } = get()
       const draft = drafts.find((d) => d.id === id)
       if (session === null || draft === undefined) return
       const body = draft.body.trim()
       if (body === '') return
+      const same_repo = draft.repoId === activeRepoId
+      const target_session = same_repo ? session.id : draft.sessionId
       let thread: Thread
       try {
-        thread = await api.createThread(session.id, {
+        thread = await api.createThread(target_session, {
           path: draft.path,
           side: draft.side,
           startLine: draft.startLine,
@@ -408,9 +563,14 @@ export const useReview = create<ReviewState>((set, get) => {
         get().pushToast('error', `note: ${message(error)}`)
         return
       }
+      if (!same_repo) {
+        const repo_name =
+          repos.find((r) => r.id === draft.repoId)?.name ?? 'other repo'
+        get().pushToast('info', `note posted to ${repo_name}`)
+      }
       const remaining = get().drafts.filter((d) => d.id !== id)
       set({
-        threads: [...get().threads, thread],
+        threads: same_repo ? [...get().threads, thread] : get().threads,
         drafts: remaining,
         activeDraftId:
           get().activeDraftId === id

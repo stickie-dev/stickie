@@ -74,7 +74,11 @@ async function goToDefinition(
   const state = useReview.getState()
   if (state.session === null || state.selectedPath === null) return
   const language = languageFor(state.selectedPath)
-  const hits = await api.definitions(state.session.id, name, language)
+  let hits = await api.definitions(state.session.id, name, language)
+  // nothing local: sweep every registered repo before giving up
+  if (hits.length === 0) {
+    hits = await api.definitions(state.session.id, name, language, 'workspace')
+  }
   if (hits.length === 1 && hits[0] !== undefined) {
     await state.openHit(hits[0])
     return
@@ -360,6 +364,14 @@ export function FileView() {
           }
           break
         }
+        case '[': {
+          void state.navBack()
+          break
+        }
+        case ']': {
+          void state.navForward()
+          break
+        }
         case '?': {
           setHelpOpen((open) => !open)
           break
@@ -430,8 +442,14 @@ export function FileView() {
 
   const file_threads = (side: Side) =>
     threads.filter((t) => t.path === selectedPath && t.side === side)
+  const activeRepoId = useReview((s) => s.activeRepoId)
   const file_drafts = (side: Side) =>
-    drafts.filter((d) => d.path === selectedPath && d.side === side)
+    drafts.filter(
+      (d) =>
+        d.repoId === activeRepoId &&
+        d.path === selectedPath &&
+        d.side === side,
+    )
 
   const binary = baseContent?.binary === true || sourceContent?.binary === true
   const language = languageFor(selectedPath)
@@ -581,6 +599,8 @@ export function FileView() {
               <dd className="text-ink">next / previous change in file</dd>
               <dt className="font-mono text-soft">v</dt>
               <dd className="text-ink">toggle viewed for current file</dd>
+              <dt className="font-mono text-soft">[ / ]</dt>
+              <dd className="text-ink">navigate back / forward</dd>
               <dt className="font-mono text-soft">⌘click</dt>
               <dd className="text-ink">go to definition</dd>
               <dt className="font-mono text-soft">?</dt>

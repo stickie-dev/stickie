@@ -41,6 +41,11 @@ create table if not exists messages (
   created_at text not null default (datetime('now'))
 );
 
+create table if not exists settings (
+  key text primary key,
+  value text not null
+);
+
 create table if not exists viewed_files (
   session_id integer not null references sessions(id) on delete cascade,
   path text not null,

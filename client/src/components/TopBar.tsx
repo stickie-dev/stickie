@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import type { ReviewSource } from '@stickie/shared'
 import { useReview } from '../store'
+import { SettingsModal } from './SettingsModal'
 
 function shortPath(path: string): string {
   const parts = path.split('/')
@@ -22,8 +24,13 @@ export function TopBar() {
   const promptCopied = useReview((s) => s.promptCopied)
   const connected = useReview((s) => s.connected)
   const threads = useReview((s) => s.threads)
-  const theme = useReview((s) => s.theme)
-  const toggleTheme = useReview((s) => s.toggleTheme)
+  const navBack = useReview((s) => s.navBack)
+  const navForward = useReview((s) => s.navForward)
+  const canBack = useReview((s) => s.navIndex > 0)
+  const canForward = useReview(
+    (s) => s.navIndex < s.navHistory.length - 1,
+  )
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const submitReview = useReview((s) => s.submitReview)
   const open_threads = threads.filter((t) => t.status === 'open').length
@@ -59,6 +66,23 @@ export function TopBar() {
         className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-faint'}`}
         title={connected ? 'live updates on' : 'not connected'}
       />
+
+      <button
+        className="rounded border border-edge px-1.5 py-1 text-soft hover:text-ink disabled:opacity-40"
+        title="back ( [ )"
+        disabled={!canBack}
+        onClick={() => void navBack()}
+      >
+        ‹
+      </button>
+      <button
+        className="rounded border border-edge px-1.5 py-1 text-soft hover:text-ink disabled:opacity-40"
+        title="forward ( ] )"
+        disabled={!canForward}
+        onClick={() => void navForward()}
+      >
+        ›
+      </button>
 
       <label className="text-faint">repo</label>
       <select
@@ -165,10 +189,10 @@ export function TopBar() {
       </button>
       <button
         className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
-        title="toggle theme"
-        onClick={toggleTheme}
+        title="settings"
+        onClick={() => setSettingsOpen(true)}
       >
-        {theme === 'dark' ? 'light' : 'dark'}
+        ⚙
       </button>
       <button
         className="rounded bg-accent px-2.5 py-1 font-medium text-white hover:bg-accent-strong disabled:opacity-50"
@@ -177,6 +201,7 @@ export function TopBar() {
       >
         {promptCopied ? 'copied ✓' : 'Copy prompt'}
       </button>
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </header>
   )
 }

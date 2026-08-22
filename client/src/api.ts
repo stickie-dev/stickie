@@ -10,6 +10,14 @@ import type {
   Thread,
 } from '@stickie/shared'
 
+export interface SettingsState {
+  gitlabUrl: string | null
+  gitlabTokenEnv: string | null
+  hasStoredToken: boolean
+  effectiveUrl: string | null
+  tokenSource: string | null
+}
+
 export interface NavHit {
   repoPath: string
   path: string
@@ -108,14 +116,32 @@ export const api = {
   reopen: (threadId: number) =>
     post(`/api/threads/${threadId}/reopen`, {}).then(toJson<Thread>),
 
+  settings: () => fetch('/api/settings').then(toJson<SettingsState>),
+
+  saveSettings: (body: {
+    gitlabUrl?: string
+    gitlabToken?: string
+    gitlabTokenEnv?: string
+  }) =>
+    fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(toJson<{ ok: boolean }>),
+
   importMr: (sessionId: number, mr: string) =>
     post(`/api/sessions/${sessionId}/import-mr`, { mr }).then(
       toJson<{ imported: number; skipped: number }>,
     ),
 
-  definitions: (sessionId: number, name: string, language: string) =>
+  definitions: (
+    sessionId: number,
+    name: string,
+    language: string,
+    scope: 'repo' | 'workspace' = 'repo',
+  ) =>
     fetch(
-      `/api/sessions/${sessionId}/nav/definitions?name=${encodeURIComponent(name)}&language=${encodeURIComponent(language)}`,
+      `/api/sessions/${sessionId}/nav/definitions?name=${encodeURIComponent(name)}&language=${encodeURIComponent(language)}&scope=${scope}`,
     ).then(toJson<NavHit[]>),
 
   references: (sessionId: number, name: string, scope: 'repo' | 'workspace') =>

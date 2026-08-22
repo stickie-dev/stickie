@@ -1,15 +1,42 @@
 export interface GitLabConfig {
   url: string
   token: string
+  /** where the token came from, for display in settings */
+  tokenSource: 'settings' | `env:${string}`
 }
 
-export function gitlabConfig(): GitLabConfig | null {
-  const token = process.env.GITLAB_TOKEN
-  if (token === undefined || token === '') return null
-  return {
-    url: (process.env.GITLAB_URL ?? 'https://gitlab.com').replace(/\/$/, ''),
-    token,
+export interface GitLabSettings {
+  url?: string | null
+  token?: string | null
+  tokenEnv?: string | null
+}
+
+/**
+ * Token resolution order: raw token from settings, then the env var named
+ * in settings, then GITLAB_TOKEN. URL: settings, then GITLAB_URL, then
+ * gitlab.com.
+ */
+export function gitlabConfig(settings: GitLabSettings = {}): GitLabConfig | null {
+  const url = (
+    settings.url ??
+    process.env.GITLAB_URL ??
+    'https://gitlab.com'
+  ).replace(/\/$/, '')
+  if (settings.token != null && settings.token !== '') {
+    return { url, token: settings.token, tokenSource: 'settings' }
   }
+  const env_name = settings.tokenEnv
+  if (env_name != null && env_name !== '') {
+    const from_named = process.env[env_name]
+    if (from_named !== undefined && from_named !== '') {
+      return { url, token: from_named, tokenSource: `env:${env_name}` }
+    }
+  }
+  const fallback = process.env.GITLAB_TOKEN
+  if (fallback !== undefined && fallback !== '') {
+    return { url, token: fallback, tokenSource: 'env:GITLAB_TOKEN' }
+  }
+  return null
 }
 
 /** group/project from an ssh or https git remote URL. */

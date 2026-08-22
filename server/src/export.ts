@@ -1,24 +1,33 @@
 import type { Session, Thread } from '@stickie/shared'
 
 export interface CodeRef {
+  /** null = the session's own repo */
+  repo: string | null
   path: string
   startLine: number
   endLine: number
 }
 
-const ref_pattern = /@([\w./-]+):L(\d+)(?:-L?(\d+))?/g
+const ref_pattern = /@([\w./-]+(?::[\w./-]+)?):L(\d+)(?:-L?(\d+))?/g
 
 /**
- * Find @path:L10 / @path:L10-L20 references inside a note body. The @ sigil
- * is what makes a mention live; a bare path:L10 stays free text.
+ * Find @path:L10 / @repo:path:L10 references inside a note body. The @
+ * sigil is what makes a mention live; a bare path:L10 stays free text. A
+ * repo prefix (no slashes) targets another registered repository.
  */
 export function parseRefs(body: string): CodeRef[] {
   const refs: CodeRef[] = []
   for (const match of body.matchAll(ref_pattern)) {
+    const target = match[1] ?? ''
+    const colon = target.indexOf(':')
+    const prefix = colon === -1 ? null : target.slice(0, colon)
+    const has_repo = prefix !== null && !prefix.includes('/')
+    const repo = has_repo ? prefix : null
+    const path = has_repo ? target.slice(colon + 1) : target
     const start = Number(match[2])
     const end = match[3] === undefined ? start : Number(match[3])
-    if (end < start) continue
-    refs.push({ path: match[1] ?? '', startLine: start, endLine: end })
+    if (end < start || path === '') continue
+    refs.push({ repo, path, startLine: start, endLine: end })
   }
   return refs
 }
@@ -47,7 +56,7 @@ export async function buildPrompt(
   session: Session,
   threads: Thread[],
   apiBase: string,
-  readSource: (path: string) => Promise<string | null>,
+  readSource: (repo: string | null, path: string) => Promise<string | null>,
 ): Promise<string> {
   const lines: string[] = []
   lines.push('# Review notes (stickie)')
@@ -77,27 +86,28 @@ export async function buildPrompt(
     for (const message of thread.messages) {
       lines.push(`- ${message.author}: ${message.body}`)
       for (const ref of parseRefs(message.body)) {
-        const key =
+        const repo_prefix = ref.repo === null ? '' : `${ref.repo}:`
+        const label =
           ref.startLine === ref.endLine
-            ? `${ref.path}:L${ref.startLine}`
-            : `${ref.path}:L${ref.startLine}-L${ref.endLine}`
-        if (seen_refs.has(key)) continue
-        seen_refs.add(key)
+            ? `${repo_prefix}${ref.path}:L${ref.startLine}`
+            : `${repo_prefix}${ref.path}:L${ref.startLine}-L${ref.endLine}`
+        if (seen_refs.has(label)) continue
+        seen_refs.add(label)
         const span = ref.endLine - ref.startLine + 1
         if (span > inline_ref_max_lines) {
           lines.push(
-            `  Referenced ${key} spans ${span} lines — read it from the file.`,
+            `  Referenced ${label} spans ${span} lines — read it from the file.`,
           )
           continue
         }
-        const content = await readSource(ref.path)
+        const content = await readSource(ref.repo, ref.path)
         if (content === null) continue
         const slice = content
           .split('\n')
           .slice(ref.startLine - 1, ref.endLine)
           .join('\n')
         if (slice === '') continue
-        lines.push(`  Referenced ${key} (current content):`)
+        lines.push(`  Referenced ${label} (current content):`)
         lines.push(...fenced(slice).map((l) => `  ${l}`))
       }
     }

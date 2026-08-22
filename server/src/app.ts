@@ -8,6 +8,7 @@ import {
   defaultBranch,
   expandUserPath,
   fileAtSide,
+  fileInWorktree,
   gitOrigin,
   gitStatus,
   isGitRepo,
@@ -70,12 +71,22 @@ function sourceRoot(session: Session): string {
     : session.repoPath
 }
 
-/** A symbolic HEAD base goes stale as soon as the worktree commits. */
+/**
+ * HEAD bases go stale when the worktree commits; default-branch bases go
+ * stale when the merge-base drifts (branch rebased or default advanced).
+ */
 async function isBaseStale(session: Session): Promise<boolean> {
-  if (session.baseRef !== 'HEAD') return false
   try {
-    const current = await resolveRef(sourceRoot(session), 'HEAD')
-    return current !== session.baseSha
+    if (session.baseRef === 'HEAD') {
+      const current = await resolveRef(sourceRoot(session), 'HEAD')
+      return current !== session.baseSha
+    }
+    const merge_base = await mergeBase(
+      sourceRoot(session),
+      session.baseRef,
+      'HEAD',
+    )
+    return merge_base !== null && merge_base !== session.baseSha
   } catch {
     return false
   }
@@ -330,19 +341,26 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       }
 
       let base_ref = body.baseRef
-      if (base_ref === undefined) {
-        if (body.source.kind === 'worktree') {
-          base_ref = 'HEAD'
-        } else {
-          const default_branch = await defaultBranch(repo.path)
-          base_ref =
-            (await mergeBase(repo.path, default_branch, body.source.value)) ??
-            default_branch
-        }
-      }
+      let base_sha: string
       const resolve_in =
         body.source.kind === 'worktree' ? body.source.value : repo.path
-      const base_sha = await resolveRef(resolve_in, base_ref)
+      if (base_ref === undefined) {
+        // MR-style default: diff the whole branch against master/main,
+        // falling back to HEAD when the default branch is unrelated
+        const default_branch = await defaultBranch(repo.path)
+        const against =
+          body.source.kind === 'worktree' ? 'HEAD' : body.source.value
+        const merge_base = await mergeBase(resolve_in, default_branch, against)
+        if (merge_base !== null) {
+          base_ref = default_branch
+          base_sha = merge_base
+        } else {
+          base_ref = body.source.kind === 'worktree' ? 'HEAD' : default_branch
+          base_sha = await resolveRef(resolve_in, base_ref)
+        }
+      } else {
+        base_sha = await resolveRef(resolve_in, base_ref)
+      }
 
       const session = store.getOrCreateSession(
         repo.id,
@@ -385,9 +403,9 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       tags: ['sessions'],
       summary: 'Re-pin a stale HEAD base and carry open threads forward',
       description:
-        'Creates (or reuses) the session at the current HEAD and moves all ' +
-        'unresolved threads to it; resolved threads stay with the old ' +
-        'session as history. Only valid for sessions with baseRef=HEAD.',
+        'Creates (or reuses) the session at the freshly resolved base and ' +
+        'moves all unresolved threads to it; resolved threads stay with the ' +
+        'old session as history.',
       request: { params: id_param },
       responses: {
         200: json_response(session_schema, 'The re-pinned session'),
@@ -400,17 +418,18 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      if (session.baseRef !== 'HEAD') {
-        return c.json({ error: 'only HEAD-based sessions can re-pin' }, 400)
-      }
-      const current = await resolveRef(sourceRoot(session), 'HEAD')
+      const current =
+        session.baseRef === 'HEAD'
+          ? await resolveRef(sourceRoot(session), 'HEAD')
+          : ((await mergeBase(sourceRoot(session), session.baseRef, 'HEAD')) ??
+            session.baseSha)
       if (current === session.baseSha) {
         return c.json({ ...session, baseStale: false }, 200)
       }
       const next = store.getOrCreateSession(
         session.repoId,
         session.source,
-        'HEAD',
+        session.baseRef,
         current,
       )
       store.moveOpenThreads(session.id, next.id)
@@ -664,23 +683,38 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       ).filter((t) => t.status !== 'resolved' && !t.pending)
       const api_base = new URL(c.req.url).origin
       const source_cache = new Map<string, string | null>()
-      const readSource = async (path: string): Promise<string | null> => {
-        const cached = source_cache.get(path)
+      const repo_by_name = new Map(
+        store.listRepos().map((r) => [r.path.split('/').at(-1) ?? r.path, r]),
+      )
+      const readSource = async (
+        repoName: string | null,
+        path: string,
+      ): Promise<string | null> => {
+        const key = `${repoName ?? ''}:${path}`
+        const cached = source_cache.get(key)
         if (cached !== undefined) return cached
         let content: string | null = null
         try {
-          const blob = await fileAtSide(
-            session.repoPath,
-            session.source,
-            session.baseSha,
-            'source',
-            path,
-          )
-          content = blob.content
+          if (repoName === null) {
+            const blob = await fileAtSide(
+              session.repoPath,
+              session.source,
+              session.baseSha,
+              'source',
+              path,
+            )
+            content = blob.content
+          } else {
+            const other = repo_by_name.get(repoName)
+            if (other !== undefined) {
+              const blob = await fileInWorktree(other.path, path)
+              content = blob.content
+            }
+          }
         } catch {
           // unreadable or unsafe ref target: leave it to the agent
         }
-        source_cache.set(path, content)
+        source_cache.set(key, content)
         return content
       }
       return c.text(await buildPrompt(session, threads, api_base, readSource), 200)
@@ -782,6 +816,85 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
     },
   )
 
+  const gitlabSettings = () => ({
+    url: store.getSetting('gitlab_url'),
+    token: store.getSetting('gitlab_token'),
+    tokenEnv: store.getSetting('gitlab_token_env'),
+  })
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/settings',
+      tags: ['settings'],
+      summary: 'Current settings; the raw token is never echoed back',
+      responses: {
+        200: json_response(
+          z.object({
+            gitlabUrl: z.string().nullable(),
+            gitlabTokenEnv: z.string().nullable(),
+            hasStoredToken: z.boolean(),
+            effectiveUrl: z.string().nullable(),
+            tokenSource: z.string().nullable(),
+          }),
+          'Settings state',
+        ),
+      },
+    }),
+    (c) => {
+      const settings = gitlabSettings()
+      const config = gitlabConfig(settings)
+      return c.json(
+        {
+          gitlabUrl: settings.url,
+          gitlabTokenEnv: settings.tokenEnv,
+          hasStoredToken: settings.token !== null && settings.token !== '',
+          effectiveUrl: config?.url ?? null,
+          tokenSource: config?.tokenSource ?? null,
+        },
+        200,
+      )
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/settings',
+      tags: ['settings'],
+      summary: 'Update settings',
+      description:
+        'Omitted fields stay untouched; empty strings clear a value. The ' +
+        'stored token lives in plaintext in the local sqlite file — prefer ' +
+        'the env-var options on shared machines.',
+      request: {
+        body: json_body(
+          z.object({
+            gitlabUrl: z.string().optional(),
+            gitlabToken: z.string().optional(),
+            gitlabTokenEnv: z.string().optional(),
+          }),
+        ),
+      },
+      responses: {
+        200: json_response(z.object({ ok: z.boolean() }), 'Stored'),
+      },
+    }),
+    async (c) => {
+      const body = c.req.valid('json')
+      if (body.gitlabUrl !== undefined) {
+        store.setSetting('gitlab_url', body.gitlabUrl)
+      }
+      if (body.gitlabToken !== undefined) {
+        store.setSetting('gitlab_token', body.gitlabToken)
+      }
+      if (body.gitlabTokenEnv !== undefined) {
+        store.setSetting('gitlab_token_env', body.gitlabTokenEnv)
+      }
+      return c.json({ ok: true }, 200)
+    },
+  )
+
   app.openapi(
     createRoute({
       method: 'post',
@@ -811,10 +924,13 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      const config = gitlabConfig()
+      const config = gitlabConfig(gitlabSettings())
       if (config === null) {
         return c.json(
-          { error: 'GITLAB_TOKEN is not set in the server environment' },
+          {
+            error:
+              'no GitLab token configured — set one in Settings or export GITLAB_TOKEN',
+          },
           400,
         )
       }
@@ -898,7 +1014,11 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       summary: 'Grep-grade definition candidates for a symbol',
       request: {
         params: id_param,
-        query: z.object({ name: z.string().min(1), language: z.string() }),
+        query: z.object({
+          name: z.string().min(1),
+          language: z.string(),
+          scope: z.enum(['repo', 'workspace']).default('repo'),
+        }),
       },
       responses: {
         200: json_response(z.array(nav_hit_schema), 'Definition candidates'),
@@ -910,8 +1030,26 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      const { name, language } = c.req.valid('query')
-      return c.json(await findDefinitions(navRoot(session), name, language), 200)
+      const { name, language, scope } = c.req.valid('query')
+      if (scope === 'repo') {
+        return c.json(
+          await findDefinitions(navRoot(session), name, language),
+          200,
+        )
+      }
+      const roots = [
+        navRoot(session),
+        ...store
+          .listRepos()
+          .map((r) => r.path)
+          .filter((p) => p !== session.repoPath),
+      ]
+      const all = await Promise.all(
+        roots.map((root) =>
+          findDefinitions(root, name, language).catch(() => []),
+        ),
+      )
+      return c.json(all.flat(), 200)
     },
   )
 

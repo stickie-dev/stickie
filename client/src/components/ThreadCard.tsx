@@ -2,26 +2,31 @@ import { useState } from 'react'
 import type { Thread } from '@stickie/shared'
 import { useReview } from '../store'
 
-const ref_pattern = /(@[\w./-]+:L\d+(?:-L?\d+)?)/g
+const ref_pattern = /(@[\w./-]+(?::[\w./-]+)?:L\d+(?:-L?\d+)?)/g
 
-/** Render @path:L10 / @path:L10-L20 references as jump links. */
+/** Render @path:L10 and @repo:path:L10 references as jump links. */
 function MessageBody({ body }: { body: string }) {
-  const openRef = useReview((s) => s.openRef)
+  const openRefTarget = useReview((s) => s.openRefTarget)
   const parts = body.split(ref_pattern)
   return (
     <span className="whitespace-pre-wrap text-ink">
       {' '}
       {parts.map((part, i) => {
-        const match = /^@([\w./-]+):L(\d+)/.exec(part)
+        const match = /^@(.+):L(\d+)/.exec(part)
         if (i % 2 === 1 && match !== null) {
-          const path = match[1] ?? ''
+          const target = match[1] ?? ''
           const line = Number(match[2])
+          const colon = target.indexOf(':')
+          const has_repo =
+            colon !== -1 && !target.slice(0, colon).includes('/')
+          const repo = has_repo ? target.slice(0, colon) : null
+          const path = has_repo ? target.slice(colon + 1) : target
           return (
             <button
               key={i}
               className="rounded bg-accent/10 px-1 font-mono text-accent hover:bg-accent/20"
-              title={`open ${path}`}
-              onClick={() => void openRef(path, line)}
+              title={repo === null ? `open ${path}` : `open ${path} in ${repo}`}
+              onClick={() => void openRefTarget(repo, path, line)}
             >
               {part}
             </button>

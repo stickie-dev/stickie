@@ -183,6 +183,25 @@ export class Store {
       .run(status, threadId)
   }
 
+  getSetting(key: string): string | null {
+    const row = this.db
+      .prepare('select value from settings where key = ?')
+      .get(key) as unknown as { value: string } | undefined
+    return row?.value ?? null
+  }
+
+  setSetting(key: string, value: string | null): void {
+    if (value === null || value === '') {
+      this.db.prepare('delete from settings where key = ?').run(key)
+    } else {
+      this.db
+        .prepare(
+          'insert into settings (key, value) values (?, ?) on conflict (key) do update set value = excluded.value',
+        )
+        .run(key, value)
+    }
+  }
+
   /** Post every pending note of a session; returns how many were posted. */
   postPending(sessionId: number): number {
     const result = this.db
