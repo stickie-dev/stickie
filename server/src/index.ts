@@ -4,6 +4,7 @@ import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { createNodeWebSocket } from '@hono/node-ws'
 import type { WSContext } from 'hono/ws'
+import type { ClientEvent } from '@stickie/shared'
 import { createApp } from './app.js'
 import { openDb } from './db.js'
 import { isGitRepo, repoRoot } from './git.js'
@@ -20,11 +21,19 @@ const client_dist = path.relative(
 
 const store = new Store(openDb(process.env.STICKIE_DB))
 const hub = new WatchHub()
-const app = createApp(store, hub)
+const sockets = new Set<WSContext>()
+
+const broadcast = (event: ClientEvent) => {
+  const payload = JSON.stringify(event)
+  for (const ws of sockets) {
+    ws.send(payload)
+  }
+}
+
+const app = createApp(store, hub, broadcast)
 
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app })
 
-const sockets = new Set<WSContext>()
 app.get(
   '/ws',
   upgradeWebSocket(() => ({
@@ -32,12 +41,7 @@ app.get(
     onClose: (_event, ws) => sockets.delete(ws),
   })),
 )
-hub.onEvent((event) => {
-  const payload = JSON.stringify(event)
-  for (const ws of sockets) {
-    ws.send(payload)
-  }
-})
+hub.onEvent(broadcast)
 
 // index.html must never be heuristically cached or the browser keeps
 // serving a stale bundle after rebuilds; hashed assets can cache forever

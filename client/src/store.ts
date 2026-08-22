@@ -33,6 +33,42 @@ export interface Tab {
 
 let tab_seq = 0
 
+/** Tabs outlive a reload; repos are keyed by path so ids may be reassigned. */
+interface StoredTab {
+  kind: Tab['kind']
+  repo: string
+  path?: string
+}
+
+const tabs_key = 'stickie-tabs'
+
+function readStoredTabs(): { tabs: StoredTab[]; active: number } | null {
+  const raw = localStorage.getItem(tabs_key)
+  if (raw === null) return null
+  try {
+    const parsed = JSON.parse(raw) as { tabs?: unknown; active?: unknown }
+    if (!Array.isArray(parsed.tabs)) return null
+    const tabs = parsed.tabs.filter(
+      (entry): entry is StoredTab =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        ((entry as StoredTab).kind === 'flow' ||
+          (entry as StoredTab).kind === 'file') &&
+        typeof (entry as StoredTab).repo === 'string',
+    )
+    return {
+      tabs,
+      active: typeof parsed.active === 'number' ? parsed.active : -1,
+    }
+  } catch {
+    return null
+  }
+}
+
+// captured before the store can write over it, so a restore always sees the
+// previous session rather than this one's empty starting point
+const previous_tabs = readStoredTabs()
+
 export interface NavEntry {
   repoId: number
   path: string
@@ -178,6 +214,7 @@ interface ReviewState {
   reopenThread: (threadId: number) => Promise<void>
   copyPrompt: () => Promise<void>
   refresh: (repoPath: string) => Promise<void>
+  syncThreads: (sessionId: number) => Promise<void>
   setConnected: (connected: boolean) => void
 }
 
@@ -278,6 +315,31 @@ export const useReview = create<ReviewState>((set, get) => {
     } catch (error) {
       get().pushToast('error', `workspace: ${message(error)}`)
     }
+  }
+
+  /** Reopens the tabs of the previous session; false when there are none. */
+  async function restoreTabs(repos: RepoInfo[]): Promise<boolean> {
+    const stored = previous_tabs
+    if (stored === null || stored.tabs.length === 0) return false
+    const restored: Tab[] = []
+    for (const entry of stored.tabs) {
+      const repo = repos.find((r) => r.path === entry.repo)
+      if (repo === undefined) continue
+      if (entry.kind === 'file' && entry.path === undefined) continue
+      tab_seq += 1
+      restored.push({
+        id: tab_seq,
+        kind: entry.kind,
+        repoId: repo.id,
+        ...(entry.path === undefined ? {} : { path: entry.path }),
+      })
+    }
+    if (restored.length === 0) return false
+    set({ tabs: restored })
+    const wanted = restored[stored.active] ?? restored[0]
+    if (wanted === undefined) return false
+    await get().activateTab(wanted.id)
+    return true
   }
 
   function ensureFlowTab(repoId: number): Tab {
@@ -487,6 +549,7 @@ export const useReview = create<ReviewState>((set, get) => {
         const repos = await api.repos()
         set({ repos })
         await Promise.all(repos.map((r) => ensureRepoSession(r.id)))
+        if (await restoreTabs(repos)) return
         const first = repos[0]
         if (first !== undefined) {
           await get().selectRepo(first.id)
@@ -1055,6 +1118,61 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
 
+    // a note changed on the server (an agent replied, resolved, or added one)
+    syncThreads: async (sessionId) => {
+      const { session, repoSessions } = get()
+      const owner = Object.entries(repoSessions).find(
+        ([, entry]) => entry.sessionId === sessionId,
+      )
+      if (session?.id !== sessionId && owner === undefined) return
+      let threads: Thread[]
+      try {
+        threads = await api.threads(sessionId, true)
+      } catch {
+        return
+      }
+      if (get().session?.id === sessionId) set({ threads })
+      const current = get().repoSessions
+      const entry = Object.entries(current).find(
+        ([, value]) => value.sessionId === sessionId,
+      )
+      if (entry !== undefined) {
+        const [repoId, value] = entry
+        set({
+          repoSessions: {
+            ...current,
+            [repoId]: {
+              ...value,
+              openCount: threads.filter((t) => t.status === 'open').length,
+            },
+          },
+        })
+      }
+    },
+
     setConnected: (connected) => set({ connected }),
   }
+})
+
+// tabs are written back on every change rather than from each action that
+// touches them, so no path can forget to persist
+let written = ''
+useReview.subscribe((state) => {
+  const payload = JSON.stringify({
+    tabs: state.tabs.flatMap((tab) => {
+      const repo = state.repos.find((r) => r.id === tab.repoId)
+      if (repo === undefined) return []
+      return [
+        {
+          kind: tab.kind,
+          repo: repo.path,
+          ...(tab.path === undefined ? {} : { path: tab.path }),
+        },
+      ]
+    }),
+    active: state.tabs.findIndex((tab) => tab.id === state.activeTabId),
+  })
+  if (payload === written) return
+  written = payload
+  localStorage.setItem(tabs_key, payload)
 })

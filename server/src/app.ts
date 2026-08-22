@@ -1,6 +1,13 @@
 import { swaggerUI } from '@hono/swagger-ui'
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi'
-import type { RepoInfo, Session, TargetOptions, Thread } from '@stickie/shared'
+import type {
+  ClientEvent,
+  RepoInfo,
+  Session,
+  TargetOptions,
+  Thread,
+  ThreadEvent,
+} from '@stickie/shared'
 import { extractSnippet, reanchor } from './anchors.js'
 import { buildPrompt } from './export.js'
 import {
@@ -202,8 +209,23 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
+/** Pushes an event to connected clients; a no-op outside the real server. */
+export type Emit = (event: ClientEvent) => void
+
+export function createApp(
+  store: Store,
+  hub: WatchHub,
+  emit: Emit = () => undefined,
+): OpenAPIHono {
   const app = new OpenAPIHono()
+
+  const threadChanged = (
+    action: ThreadEvent['action'],
+    sessionId: number,
+    threadId?: number,
+  ) => {
+    emit({ type: 'thread', action, sessionId, threadId })
+  }
 
   app.onError((error, c) => c.json({ error: errorMessage(error) }, 500))
 
@@ -644,6 +666,7 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
         body.body,
         { pending: body.pending ?? body.author === 'user' },
       )
+      threadChanged('created', thread.sessionId, thread.id)
       return c.json(thread, 201)
     },
   )
@@ -667,6 +690,7 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       store.addMessage(thread.id, body.author, body.body)
       const updated = store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
+      threadChanged('updated', updated.sessionId, updated.id)
       return c.json(updated, 200)
     },
   )
@@ -695,6 +719,7 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       store.updateMessage(message.id, c.req.valid('json').body)
       const thread = store.getThread(message.threadId)
       if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
+      threadChanged('updated', thread.sessionId, thread.id)
       return c.json(thread, 200)
     },
   )
@@ -715,6 +740,7 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       const thread = store.getThread(c.req.valid('param').id)
       if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
       store.deleteThread(thread.id)
+      threadChanged('deleted', thread.sessionId, thread.id)
       return c.json({ ok: true }, 200)
     },
   )
@@ -747,12 +773,19 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       if (message.author !== 'user') {
         return c.json({ error: 'agent messages cannot be deleted' }, 400)
       }
+      const owner = store.getThread(message.threadId)
       store.deleteMessage(message.id)
       if (store.countMessages(message.threadId) === 0) {
         store.deleteThread(message.threadId)
+        if (owner !== undefined) {
+          threadChanged('deleted', owner.sessionId, owner.id)
+        }
         return c.json({ deletedThread: true, thread: null }, 200)
       }
       const thread = store.getThread(message.threadId)
+      if (thread !== undefined) {
+        threadChanged('updated', thread.sessionId, thread.id)
+      }
       return c.json({ deletedThread: false, thread: thread ?? null }, 200)
     },
   )
@@ -777,6 +810,7 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       store.setThreadStatus(thread.id, action === 'resolve' ? 'resolved' : 'open')
       const updated = store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
+      threadChanged('updated', updated.sessionId, updated.id)
       return c.json(updated, 200)
     })
   }
@@ -864,7 +898,9 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      return c.json({ posted: store.postPending(session.id) }, 200)
+      const posted = store.postPending(session.id)
+      if (posted > 0) threadChanged('updated', session.id)
+      return c.json({ posted }, 200)
     },
   )
 
@@ -886,6 +922,7 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       store.setThreadPending(thread.id, false)
       const updated = store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
+      threadChanged('updated', updated.sessionId, updated.id)
       return c.json(updated, 200)
     },
   )
@@ -1113,6 +1150,7 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
         }
         imported += 1
       }
+      if (imported > 0) threadChanged('created', session.id)
       return c.json({ imported, skipped }, 200)
     },
   )

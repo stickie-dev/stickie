@@ -2,17 +2,41 @@ import { useEffect, useRef } from 'react'
 import type { Draft } from '../store'
 import { useReview } from '../store'
 
+/** Where a form for the same note is rendered; each surface focuses alone. */
+type Surface = 'zone' | 'panel'
+
+// a form can remount without the user asking — the editor around it reloads,
+// or its zone moves — so it must know whether a mount is its first (claim the
+// caret) or a rebuild of the one that had it (put the caret back where it was)
+const claimed = new Set<string>()
+const carets = new Map<string, { start: number; end: number }>()
+let holder: string | null = null
+let watching = false
+
 /**
- * `autoFocus` grabs the caret on mount, which is right for the form the
- * gutter click just opened and wrong for the copy the comments panel keeps
- * alive while other files are browsed.
+ * Focus ownership survives a rebuild because a yanked node moves focus to the
+ * body silently, while a deliberate move fires focusin on the new element —
+ * the one signal that separates "interrupted" from "went elsewhere".
  */
+function watchFocus(): void {
+  if (watching) return
+  watching = true
+  document.addEventListener(
+    'focusin',
+    (event) => {
+      const node = event.target as HTMLElement | null
+      if (node?.dataset.stickieDraft !== holder) holder = null
+    },
+    true,
+  )
+}
+
 export function DraftForm({
   draft,
-  autoFocus = true,
+  surface = 'zone',
 }: {
   draft: Draft | undefined
-  autoFocus?: boolean
+  surface?: Surface
 }) {
   const updateDraftBody = useReview((s) => s.updateDraftBody)
   const submitDraft = useReview((s) => s.submitDraft)
@@ -21,19 +45,71 @@ export function DraftForm({
   const activeDraftId = useReview((s) => s.activeDraftId)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // plain autoFocus loses the race against Monaco reclaiming focus after
-  // the gutter click; grab it once the zone has settled
+  const key = draft === undefined ? null : `${surface}:${draft.id}`
   useEffect(() => {
-    if (!autoFocus) return
-    const timer = setTimeout(() => {
-      textareaRef.current?.focus({ preventScroll: true })
-    }, 50)
-    return () => clearTimeout(timer)
-  }, [autoFocus])
+    if (key === null) return
+    watchFocus()
+    const first = !claimed.has(key)
+    // the panel's copy must not steal the caret from the code it sits beside
+    if (first && surface !== 'zone') {
+      claimed.add(key)
+      return
+    }
+    if (!first && holder !== key) return
+    claimed.add(key)
+    // monaco keeps a view zone's node display:none while it settles the
+    // collapsed regions around the click that opened this form, and focus()
+    // on a non-rendered node is dropped — so keep asking until the caret
+    // lands, and give up the moment the user does anything themselves
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let attempts = 0
+    let abandoned = false
+    const abandon = () => {
+      abandoned = true
+      clearTimeout(timer)
+    }
+    const take = () => {
+      const node = textareaRef.current
+      if (node === null || abandoned) return
+      const active = document.activeElement
+      if (active === node) return
+      if (
+        active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLInputElement
+      ) {
+        return
+      }
+      node.focus({ preventScroll: true })
+      if (document.activeElement === node) {
+        const caret = carets.get(key)
+        if (caret !== undefined) node.setSelectionRange(caret.start, caret.end)
+        holder = key
+        return
+      }
+      attempts += 1
+      if (attempts < 50) timer = setTimeout(take, 60)
+    }
+    // a click elsewhere is the user choosing where to be; keystrokes are not,
+    // since a read-only editor would swallow them
+    window.addEventListener('mousedown', abandon, { capture: true, once: true })
+    take()
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('mousedown', abandon, { capture: true })
+    }
+  }, [key, surface])
 
-  if (draft === undefined) return null
+  if (draft === undefined || key === null) return null
 
   const active = draft.id === activeDraftId
+
+  const remember = (node: HTMLTextAreaElement) => {
+    holder = key
+    carets.set(key, {
+      start: node.selectionStart,
+      end: node.selectionEnd,
+    })
+  }
 
   return (
     <div
@@ -51,11 +127,17 @@ export function DraftForm({
       </div>
       <textarea
         ref={textareaRef}
+        data-stickie-draft={key}
         rows={2}
         className="w-full resize-y rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
         placeholder="What should change here? (⌘↵ to submit, Esc to discard)"
         value={draft.body}
-        onChange={(e) => updateDraftBody(draft.id, e.target.value)}
+        onChange={(e) => {
+          updateDraftBody(draft.id, e.target.value)
+          remember(e.currentTarget)
+        }}
+        onSelect={(e) => remember(e.currentTarget)}
+        onFocus={(e) => remember(e.currentTarget)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
             void submitDraft(draft.id)

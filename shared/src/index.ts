@@ -114,3 +114,14 @@ export interface FsEvent {
   repoPath: string
   paths: string[]
 }
+
+/** A note changed server-side, e.g. an agent replied or resolved. */
+export interface ThreadEvent {
+  type: 'thread'
+  action: 'created' | 'updated' | 'deleted'
+  sessionId: number
+  /** absent when a whole batch changed at once (review submit, import) */
+  threadId?: number
+}
+
+export type ClientEvent = FsEvent | ThreadEvent

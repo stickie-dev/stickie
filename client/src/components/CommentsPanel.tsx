@@ -81,7 +81,7 @@ export function CommentsPanel() {
                       : ''}
                     {draft.path}:L{draft.startLine}
                   </button>
-                  <DraftForm draft={draft} autoFocus={false} />
+                  <DraftForm draft={draft} surface="panel" />
                 </div>
               )
             })}

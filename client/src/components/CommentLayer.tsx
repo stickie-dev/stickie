@@ -28,44 +28,68 @@ export function CommentLayer({ editorInstance, threads, drafts }: Props) {
   const [entries, setEntries] = useState<ZoneEntry[]>([])
   const entriesRef = useRef<ZoneEntry[]>([])
 
-  const signature = [
-    ...threads.map((t) => `${t.id}:${t.endLine}:${t.status}:${t.messages.length}`),
-    ...drafts.map((d) => `d${d.id}:${d.endLine}`),
-  ].join('|')
+  const items: { key: string; line: number }[] = [
+    ...threads.map((t) => ({ key: `t${t.id}`, line: t.endLine })),
+    ...drafts.map((d) => ({ key: `d${d.id}`, line: d.endLine })),
+  ]
+  // only which zones exist and where they sit; message text reaches the cards
+  // through props, and rebuilding a zone would unmount a note being typed in
+  const signature = items.map((item) => `${item.key}:${item.line}`).join('|')
 
   useEffect(() => {
-    if (editorInstance === null) return
-    const items: { key: string; line: number }[] = [
-      ...threads.map((t) => ({ key: `t${t.id}`, line: t.endLine })),
-      ...drafts.map((d) => ({ key: `d${d.id}`, line: d.endLine })),
-    ]
-    const created: ZoneEntry[] = []
-    editorInstance.changeViewZones((accessor) => {
-      for (const item of items) {
+    const instance = editorInstance
+    if (instance === null) return
+    const wanted = new Map(items.map((item) => [item.key, item.line]))
+    const previous = entriesRef.current
+    const kept = previous.filter((entry) => wanted.has(entry.key))
+    const gone = previous.filter((entry) => !wanted.has(entry.key))
+    const added: ZoneEntry[] = []
+    instance.changeViewZones((accessor) => {
+      for (const entry of gone) accessor.removeZone(entry.zoneId)
+      for (const entry of kept) {
+        const line = wanted.get(entry.key)
+        if (line !== undefined && entry.zone.afterLineNumber !== line) {
+          entry.zone.afterLineNumber = line
+          accessor.layoutZone(entry.zoneId)
+        }
+      }
+      for (const [key, line] of wanted) {
+        if (previous.some((entry) => entry.key === key)) continue
         const node = document.createElement('div')
         node.className = 'stickie-zone'
         const zone: editor.IViewZone = {
-          afterLineNumber: item.line,
+          afterLineNumber: line,
           heightInPx: 100,
           domNode: node,
         }
         const zoneId = accessor.addZone(zone)
-        created.push({ key: item.key, node, zone, zoneId })
+        added.push({ key, node, zone, zoneId })
       }
     })
-    entriesRef.current = created
-    setEntries(created)
+    if (gone.length > 0 || added.length > 0) {
+      const next = [...kept, ...added]
+      entriesRef.current = next
+      setEntries(next)
+    }
+  }, [editorInstance, signature])
+
+  // zones belong to one editor; a new editor (or none) starts over
+  useEffect(() => {
+    const instance = editorInstance
     return () => {
+      const owned = entriesRef.current
       entriesRef.current = []
+      setEntries([])
+      if (instance === null) return
       try {
-        editorInstance.changeViewZones((accessor) => {
-          for (const entry of created) accessor.removeZone(entry.zoneId)
+        instance.changeViewZones((accessor) => {
+          for (const entry of owned) accessor.removeZone(entry.zoneId)
         })
       } catch {
         // editor already disposed on unmount
       }
     }
-  }, [editorInstance, signature])
+  }, [editorInstance])
 
   const relayout = (key: string, height: number) => {
     if (editorInstance === null) return

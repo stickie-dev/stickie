@@ -19,7 +19,8 @@ the only output.
   base defaults to HEAD (worktrees) or the merge-base with the default
   branch (branches), pinned at session creation
 - **Live refresh** — file watching pushes updates over a websocket while the
-  agent edits; the diff, note positions, and counters follow along
+  agent edits; the diff, note positions, and counters follow along, and notes
+  the agent posts, answers, or resolves appear without a reload
 - **Re-anchoring** — notes store the code snippet they were written against
   and re-locate themselves after edits; a note whose code vanished turns
   `detached` instead of pointing at the wrong line
@@ -38,8 +39,9 @@ the only output.
   you want immediacy
 - **Session continuity** — when HEAD moves past the pinned base (the agent
   committed), one click re-pins and carries open notes forward
-- **Keyboard flow** — j/k files, n/p changes, v viewed, ? for help; viewed
-  files persist per session
+- **Keyboard flow** — j/k files, n/p changes (across the whole flow, not just
+  the open file), v viewed, ? for help; viewed files persist per session, and
+  open tabs come back after a reload
 - **GitLab MR import** — pull unresolved MR diff discussions into a local
   session (`GITLAB_TOKEN` + `GITLAB_URL` env), so agent fixes happen
   locally against real review threads

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import type { FsEvent } from '@stickie/shared'
+import type { ClientEvent } from '@stickie/shared'
 import './monacoSetup'
 import { AddRepo } from './components/AddRepo'
 import { CommentsPanel } from './components/CommentsPanel'
@@ -78,6 +78,7 @@ export function App() {
   const repos = useReview((s) => s.repos)
   const error = useReview((s) => s.error)
   const refresh = useReview((s) => s.refresh)
+  const syncThreads = useReview((s) => s.syncThreads)
   const setConnected = useReview((s) => s.setConnected)
   const theme = useReview((s) => s.theme)
   const commentsOpen = useReview((s) => s.commentsOpen)
@@ -126,8 +127,9 @@ export function App() {
       socket.onopen = () => setConnected(true)
       socket.onmessage = (message) => {
         try {
-          const event = JSON.parse(message.data as string) as FsEvent
+          const event = JSON.parse(message.data as string) as ClientEvent
           if (event.type === 'fs') void refresh(event.repoPath)
+          else if (event.type === 'thread') void syncThreads(event.sessionId)
         } catch {
           // ignore malformed frames
         }
@@ -142,7 +144,7 @@ export function App() {
       closed = true
       socket?.close()
     }
-  }, [refresh, setConnected])
+  }, [refresh, syncThreads, setConnected])
 
   return (
     <div className="flex h-screen flex-col bg-surface text-ink">
