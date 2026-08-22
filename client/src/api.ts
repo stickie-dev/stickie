@@ -110,6 +110,13 @@ export const api = {
       toJson<Thread>,
     ),
 
+  editMessage: (messageId: number, body: string) =>
+    fetch(`/api/messages/${messageId}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ body }),
+    }).then(toJson<Thread>),
+
   resolve: (threadId: number) =>
     post(`/api/threads/${threadId}/resolve`, {}).then(toJson<Thread>),
 

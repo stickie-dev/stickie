@@ -177,6 +177,22 @@ export class Store {
     return messageFromRow(row)
   }
 
+  getMessage(
+    id: number,
+  ): { id: number; threadId: number; author: Author } | undefined {
+    const row = this.db
+      .prepare('select id, thread_id, author from messages where id = ?')
+      .get(id) as unknown as
+      | { id: number; thread_id: number; author: string }
+      | undefined
+    if (row === undefined) return undefined
+    return { id: row.id, threadId: row.thread_id, author: row.author as Author }
+  }
+
+  updateMessage(id: number, body: string): void {
+    this.db.prepare('update messages set body = ? where id = ?').run(body, id)
+  }
+
   setThreadStatus(threadId: number, status: ThreadStatus): void {
     this.db
       .prepare('update threads set status = ? where id = ?')

@@ -634,6 +634,34 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
     },
   )
 
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/messages/{id}',
+      tags: ['threads'],
+      summary: 'Edit a message body (user-authored messages only)',
+      request: { params: id_param, body: json_body(z.object({ body: z.string().min(1) })) },
+      responses: {
+        200: json_response(thread_schema, 'The thread containing the message'),
+        400: bad_request,
+        404: not_found,
+      },
+    }),
+    (c) => {
+      const message = store.getMessage(c.req.valid('param').id)
+      if (message === undefined) {
+        return c.json({ error: 'unknown message' }, 404)
+      }
+      if (message.author !== 'user') {
+        return c.json({ error: 'agent messages cannot be edited' }, 400)
+      }
+      store.updateMessage(message.id, c.req.valid('json').body)
+      const thread = store.getThread(message.threadId)
+      if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
+      return c.json(thread, 200)
+    },
+  )
+
   const status_route = (action: 'resolve' | 'reopen') =>
     createRoute({
       method: 'post',

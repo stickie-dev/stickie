@@ -296,6 +296,7 @@ export function FileView() {
     useState<editor.IStandaloneDiffEditor | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
   const attachCapture = makeCaptureAttacher(setCaptureTarget, setDefinitionPick)
+  const activeRepoId = useReview((s) => s.activeRepoId)
   const viewed = useReview((s) => s.viewed)
   const toggleViewed = useReview((s) => s.toggleViewed)
   const files = useReview((s) => s.files)
@@ -442,7 +443,6 @@ export function FileView() {
 
   const file_threads = (side: Side) =>
     threads.filter((t) => t.path === selectedPath && t.side === side)
-  const activeRepoId = useReview((s) => s.activeRepoId)
   const file_drafts = (side: Side) =>
     drafts.filter(
       (d) =>

@@ -120,6 +120,9 @@ interface ReviewState {
   postThread: (threadId: number) => Promise<void>
   toggleViewed: (path: string) => Promise<void>
   reply: (threadId: number, body: string) => Promise<void>
+  editMessage: (threadId: number, messageId: number, body: string) => Promise<void>
+  commentsOpen: boolean
+  toggleComments: () => void
   resolveThread: (threadId: number) => Promise<void>
   reopenThread: (threadId: number) => Promise<void>
   copyPrompt: () => Promise<void>
@@ -577,6 +580,21 @@ export const useReview = create<ReviewState>((set, get) => {
             ? (remaining.at(-1)?.id ?? null)
             : get().activeDraftId,
       })
+    },
+
+    commentsOpen: false,
+
+    toggleComments: () => set({ commentsOpen: !get().commentsOpen }),
+
+    editMessage: async (threadId, messageId, body) => {
+      try {
+        const updated = await api.editMessage(messageId, body)
+        set({
+          threads: get().threads.map((t) => (t.id === threadId ? updated : t)),
+        })
+      } catch (error) {
+        get().pushToast('error', `edit: ${message(error)}`)
+      }
     },
 
     reply: async (threadId, body) => {

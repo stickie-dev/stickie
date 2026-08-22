@@ -33,6 +33,8 @@ export function TopBar() {
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const submitReview = useReview((s) => s.submitReview)
+  const toggleComments = useReview((s) => s.toggleComments)
+  const commentsOpen = useReview((s) => s.commentsOpen)
   const open_threads = threads.filter((t) => t.status === 'open').length
   const pending_count = threads.filter(
     (t) => t.pending && t.status === 'open',
@@ -164,9 +166,13 @@ export function TopBar() {
       )}
 
       <span className="grow" />
-      <span className="text-soft">
-        {open_threads} open note{open_threads === 1 ? '' : 's'}
-      </span>
+      <button
+        className={`rounded border px-2 py-1 ${commentsOpen ? 'border-accent text-accent' : 'border-edge text-soft hover:text-ink'}`}
+        title="toggle the all-comments panel"
+        onClick={toggleComments}
+      >
+        Comments ({open_threads})
+      </button>
       {pending_count > 0 && (
         <button
           className="rounded bg-emerald-600 px-2.5 py-1 font-medium text-white hover:bg-emerald-500"

@@ -53,6 +53,9 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
   const reopenThread = useReview((s) => s.reopenThread)
   const setActiveReply = useReview((s) => s.setActiveReply)
   const updateReplyDraft = useReview((s) => s.updateReplyDraft)
+  const editMessage = useReview((s) => s.editMessage)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editText, setEditText] = useState('')
   const replyText = useReview((s) =>
     thread === undefined ? '' : (s.replyDrafts[thread.id] ?? ''),
   )
@@ -123,20 +126,70 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
         )}
       </div>
       <div className="space-y-2 px-3 py-2">
-        {thread.messages.map((message) => (
-          <div key={message.id}>
-            <span
-              className={
-                message.author === 'agent'
-                  ? 'font-semibold text-sky-600 dark:text-sky-400'
-                  : 'font-semibold text-ink'
-              }
-            >
-              {message.author}
-            </span>
-            <MessageBody body={message.body} />
-          </div>
-        ))}
+        {thread.messages.map((message) =>
+          editingId === message.id ? (
+            <div key={message.id} className="flex gap-2">
+              <textarea
+                autoFocus
+                rows={2}
+                className="grow resize-y rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    void editMessage(thread.id, message.id, editText.trim())
+                    setEditingId(null)
+                  }
+                  if (e.key === 'Escape') setEditingId(null)
+                }}
+              />
+              <div className="flex flex-col gap-1">
+                <button
+                  className="rounded bg-accent px-2 py-0.5 text-xs text-white hover:bg-accent-strong"
+                  onClick={() => {
+                    if (editText.trim() !== '') {
+                      void editMessage(thread.id, message.id, editText.trim())
+                    }
+                    setEditingId(null)
+                  }}
+                >
+                  save
+                </button>
+                <button
+                  className="text-xs text-soft hover:text-ink"
+                  onClick={() => setEditingId(null)}
+                >
+                  cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div key={message.id} className="group">
+              <span
+                className={
+                  message.author === 'agent'
+                    ? 'font-semibold text-sky-600 dark:text-sky-400'
+                    : 'font-semibold text-ink'
+                }
+              >
+                {message.author}
+              </span>
+              <MessageBody body={message.body} />
+              {message.author === 'user' && (
+                <button
+                  className="ml-1.5 hidden text-xs text-faint group-hover:inline hover:text-ink"
+                  title="edit this message"
+                  onClick={() => {
+                    setEditingId(message.id)
+                    setEditText(message.body)
+                  }}
+                >
+                  edit
+                </button>
+              )}
+            </div>
+          ),
+        )}
         {showReply ? (
           <div className="flex gap-2 border-t border-edge pt-2">
             <input

@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import type { FsEvent } from '@stickie/shared'
 import './monacoSetup'
 import { AddRepo } from './components/AddRepo'
+import { CommentsPanel } from './components/CommentsPanel'
 import { FileTree } from './components/FileTree'
 import { FileView } from './components/FileView'
 import { Toasts } from './components/Toasts'
@@ -69,6 +70,7 @@ export function App() {
   const refresh = useReview((s) => s.refresh)
   const setConnected = useReview((s) => s.setConnected)
   const theme = useReview((s) => s.theme)
+  const commentsOpen = useReview((s) => s.commentsOpen)
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
@@ -124,6 +126,7 @@ export function App() {
             <main className="min-w-0 grow">
               <FileView />
             </main>
+            {commentsOpen && <CommentsPanel />}
           </div>
           <UsagesPanel />
         </div>
