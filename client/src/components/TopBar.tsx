@@ -11,7 +11,6 @@ function shortPath(path: string): string {
 export function TopBar() {
   const repos = useReview((s) => s.repos)
   const activeRepoId = useReview((s) => s.activeRepoId)
-  const selectRepo = useReview((s) => s.selectRepo)
   const targets = useReview((s) => s.targets)
   const source = useReview((s) => s.source)
   const setSource = useReview((s) => s.setSource)
@@ -87,18 +86,12 @@ export function TopBar() {
         ›
       </button>
 
-      <label className="text-faint">repo</label>
-      <select
-        className={select_classes}
-        value={activeRepoId ?? ''}
-        onChange={(e) => void selectRepo(Number(e.target.value))}
+      <span
+        className="max-w-40 truncate font-semibold text-ink"
+        title="active repository — click any file in the tree to switch"
       >
-        {repos.map((repo) => (
-          <option key={repo.id} value={repo.id}>
-            {repo.name}
-          </option>
-        ))}
-      </select>
+        {repos.find((r) => r.id === activeRepoId)?.name ?? ''}
+      </span>
 
       <label className="text-faint">source</label>
       <select

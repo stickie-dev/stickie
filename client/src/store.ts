@@ -84,6 +84,17 @@ interface ReviewState {
   navIndex: number
   sidePane: { repoId: number; repoName: string; path: string; line: number } | null
   searchOpen: boolean
+  repoSessions: Record<
+    number,
+    {
+      sessionId: number
+      files: ChangedFile[]
+      openCount: number
+      allFiles: string[] | null
+      showAll: boolean
+      expanded: boolean
+    }
+  >
   perRepo: Record<number, { source: ReviewSource; baseRef?: string; selectedPath?: string }>
 
   pushToast: (kind: Toast['kind'], text: string) => void
@@ -99,6 +110,13 @@ interface ReviewState {
   ) => Promise<void>
   navBack: () => Promise<void>
   navForward: () => Promise<void>
+  openFileInRepo: (
+    repoId: number,
+    path: string,
+    status?: ChangedFile['status'] | 'unchanged',
+  ) => Promise<void>
+  toggleRepoExpanded: (repoId: number) => void
+  toggleRepoShowAll: (repoId: number) => Promise<void>
   openSide: (repoId: number, path: string, line: number) => void
   openHitSide: (hit: NavHit) => void
   closeSide: () => void
@@ -174,12 +192,61 @@ export const useReview = create<ReviewState>((set, get) => {
         sourceContent: null,
         error: null,
       })
+      const entry = get().repoSessions[activeRepoId]
+      set({
+        repoSessions: {
+          ...get().repoSessions,
+          [activeRepoId]: {
+            sessionId: session.id,
+            files,
+            openCount: threads.filter((t) => t.status === 'open').length,
+            allFiles: entry?.allFiles ?? null,
+            showAll: entry?.showAll ?? false,
+            expanded: entry?.expanded ?? true,
+          },
+        },
+      })
       const first = files[0]
       if (first !== undefined) {
         await get().openFile(first.path, first.status)
       }
     } catch (error) {
       set({ error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  async function ensureRepoSession(repoId: number): Promise<void> {
+    try {
+      const targets = await api.targets(repoId)
+      const cached = get().perRepo[repoId]
+      const main = targets.worktrees.find((wt) => wt.isMain)
+      const source: ReviewSource =
+        cached?.source ??
+        (main !== undefined
+          ? { kind: 'worktree', value: main.path }
+          : { kind: 'ref', value: targets.defaultBranch })
+      const session = await api.createSession(repoId, source, cached?.baseRef)
+      const [files, threads] = await Promise.all([
+        api.diff(session.id),
+        api.threads(session.id, true),
+      ])
+      const existing = get().repoSessions[repoId]
+      set({
+        perRepo: { ...get().perRepo, [repoId]: { ...cached, source } },
+        repoSessions: {
+          ...get().repoSessions,
+          [repoId]: {
+            sessionId: session.id,
+            files,
+            openCount: threads.filter((t) => t.status === 'open').length,
+            allFiles: existing?.allFiles ?? null,
+            showAll: existing?.showAll ?? false,
+            expanded: existing?.expanded ?? true,
+          },
+        },
+      })
+    } catch (error) {
+      get().pushToast('error', `workspace: ${message(error)}`)
     }
   }
 
@@ -252,6 +319,7 @@ export const useReview = create<ReviewState>((set, get) => {
     navIndex: -1,
     sidePane: null,
     searchOpen: false,
+    repoSessions: {},
     perRepo: {},
 
     pushToast: (kind, text) => {
@@ -362,6 +430,7 @@ export const useReview = create<ReviewState>((set, get) => {
       try {
         const repos = await api.repos()
         set({ repos })
+        await Promise.all(repos.map((r) => ensureRepoSession(r.id)))
         const first = repos[0]
         if (first !== undefined) {
           await get().selectRepo(first.id)
@@ -371,12 +440,46 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
 
+    openFileInRepo: async (repoId, path, status) => {
+      if (repoId !== get().activeRepoId) {
+        await get().selectRepo(repoId)
+      }
+      await get().openFile(path, status)
+    },
+
+    toggleRepoExpanded: (repoId) => {
+      const entry = get().repoSessions[repoId]
+      if (entry === undefined) return
+      set({
+        repoSessions: {
+          ...get().repoSessions,
+          [repoId]: { ...entry, expanded: !entry.expanded },
+        },
+      })
+    },
+
+    toggleRepoShowAll: async (repoId) => {
+      const entry = get().repoSessions[repoId]
+      if (entry === undefined) return
+      const showAll = !entry.showAll
+      let allFiles = entry.allFiles
+      if (showAll && allFiles === null) {
+        allFiles = await api.tree(entry.sessionId).catch(() => [])
+      }
+      set({
+        repoSessions: {
+          ...get().repoSessions,
+          [repoId]: { ...entry, showAll, allFiles },
+        },
+      })
+    },
+
     addRepo: async (path) => {
-      await api.addRepo(path)
+      const created = await api.addRepo(path)
       const repos = await api.repos()
       set({ repos })
-      const added = repos.find((r) => path.startsWith(r.path))
-      if (added !== undefined) await get().selectRepo(added.id)
+      await ensureRepoSession(created.id)
+      await get().selectRepo(created.id)
     },
 
     selectRepo: async (repoId) => {
@@ -754,13 +857,22 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     refresh: async (repoPath) => {
-      const { session, selectedPath, selectedStatus } = get()
+      const { session, selectedPath, selectedStatus, repos } = get()
       if (session === null) return
       const watched =
         session.source.kind === 'worktree'
           ? session.source.value
           : session.repoPath
-      if (watched !== repoPath) return
+      if (watched !== repoPath) {
+        // a background repo changed: refresh its tree entry only
+        const other = repos.find(
+          (r) => r.path === repoPath || repoPath.startsWith(r.path + '/'),
+        )
+        if (other !== undefined && get().repoSessions[other.id] !== undefined) {
+          await ensureRepoSession(other.id)
+        }
+        return
+      }
       const [files, threads, fresh] = await Promise.all([
         api.diff(session.id),
         api.threads(session.id, true),

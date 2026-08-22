@@ -25,7 +25,10 @@ the only output.
   `detached` instead of pointing at the wrong line
 - **Agent loop** — open notes via REST, agent replies and resolves; or the
   zero-integration *Copy prompt* export for pasting into anything
-- **Multi-repo** — one server, any number of registered repositories
+- **Multi-repo workspace** — every registered repository lives in one
+  project tree (PyCharm attach-style); click into any repo's files, and
+  cross-repo references (`@repo:path:L10`) capture naturally while a note
+  is being written
 - **Grep-grade navigation** — cmd/ctrl+click jumps to definitions
   (per-language regex heuristics over bundled ripgrep, no indexer daemon);
   right-click *Find usages* opens a hit panel, optionally sweeping every

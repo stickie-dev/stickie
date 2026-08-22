@@ -75,30 +75,31 @@ function compress(dir: TreeDir): TreeDir {
   }
 }
 
-export function FileTree() {
-  const files = useReview((s) => s.files)
-  const allFiles = useReview((s) => s.allFiles)
-  const showAll = useReview((s) => s.showAll)
-  const setShowAll = useReview((s) => s.setShowAll)
+/** One registered repository as a top-level node of the workspace tree. */
+function RepoNode({ repoId }: { repoId: number }) {
+  const repo = useReview((s) => s.repos.find((r) => r.id === repoId))
+  const entry = useReview((s) => s.repoSessions[repoId])
+  const activeRepoId = useReview((s) => s.activeRepoId)
   const selectedPath = useReview((s) => s.selectedPath)
-  const openFile = useReview((s) => s.openFile)
+  const openFileInRepo = useReview((s) => s.openFileInRepo)
+  const toggleRepoExpanded = useReview((s) => s.toggleRepoExpanded)
+  const toggleRepoShowAll = useReview((s) => s.toggleRepoShowAll)
   const threads = useReview((s) => s.threads)
   const viewed = useReview((s) => s.viewed)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
-  const status_by_path = useMemo(
-    () => new Map(files.map((f) => [f.path, f])),
-    [files],
-  )
+  const is_active = repoId === activeRepoId
 
   const tree = useMemo(() => {
-    const items: TreeFile[] = showAll
-      ? (allFiles ?? []).map((path) => ({
+    if (entry === undefined) return null
+    const status_by_path = new Map(entry.files.map((f) => [f.path, f]))
+    const items: TreeFile[] = entry.showAll
+      ? (entry.allFiles ?? []).map((path) => ({
           path,
           name: path.split('/').at(-1) ?? path,
           status: status_by_path.get(path)?.status ?? null,
         }))
-      : files.map((f) => ({
+      : entry.files.map((f) => ({
           path: f.path,
           name: f.path.split('/').at(-1) ?? f.path,
           status: f.status,
@@ -106,10 +107,14 @@ export function FileTree() {
         }))
     const root = buildTree(items)
     return { ...root, dirs: root.dirs.map(compress) }
-  }, [showAll, allFiles, files, status_by_path])
+  }, [entry])
+
+  if (repo === undefined) return null
 
   const open_count = (path: string) =>
-    threads.filter((t) => t.path === path && t.status === 'open').length
+    is_active
+      ? threads.filter((t) => t.path === path && t.status === 'open').length
+      : 0
 
   const toggleDir = (path: string) => {
     setCollapsed((prev) => {
@@ -122,11 +127,13 @@ export function FileTree() {
 
   const renderFile = (file: TreeFile) => {
     const icon = fileIconUrl(file.name)
+    const is_selected = is_active && selectedPath === file.path
+    const is_viewed = is_active && viewed.has(file.path)
     return (
       <button
         key={file.path}
-        className={`flex w-full items-center gap-1.5 py-1 pr-2 pl-2 text-left font-mono hover:bg-overlay ${selectedPath === file.path ? 'bg-overlay' : ''}`}
-        onClick={() => void openFile(file.path, file.status ?? undefined)}
+        className={`flex w-full items-center gap-1.5 py-1 pr-2 pl-2 text-left font-mono hover:bg-overlay ${is_selected ? 'bg-overlay' : ''}`}
+        onClick={() => void openFileInRepo(repoId, file.path, file.status ?? undefined)}
         title={
           file.oldPath !== undefined
             ? `${file.oldPath} → ${file.path}`
@@ -135,12 +142,12 @@ export function FileTree() {
       >
         {icon !== null && <img src={icon} alt="" className="h-4 w-4 shrink-0" />}
         <span
-          className={`truncate ${viewed.has(file.path) ? 'text-faint line-through decoration-edge' : file.status !== null ? 'text-ink' : 'text-soft'}`}
+          className={`truncate ${is_viewed ? 'text-faint line-through decoration-edge' : file.status !== null ? 'text-ink' : 'text-soft'}`}
         >
           {file.name}
         </span>
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
-          {viewed.has(file.path) && (
+          {is_viewed && (
             <span className="text-emerald-600 dark:text-emerald-400">✓</span>
           )}
           {open_count(file.path) > 0 && (
@@ -158,8 +165,6 @@ export function FileTree() {
     )
   }
 
-  // each nesting level is a bordered container, so indentation and the
-  // vertical guide line come from the same structure
   const renderDir = (dir: TreeDir): React.ReactNode => (
     <div key={dir.path}>
       {dir.name !== '' && (
@@ -181,9 +186,7 @@ export function FileTree() {
       )}
       {(dir.name === '' || !collapsed.has(dir.path)) && (
         <div
-          className={
-            dir.name === '' ? '' : 'ml-[13px] border-l border-edge/70'
-          }
+          className={dir.name === '' ? '' : 'ml-[13px] border-l border-edge/70'}
         >
           {dir.dirs.map((child) => renderDir(child))}
           {dir.files.map(renderFile)}
@@ -192,29 +195,110 @@ export function FileTree() {
     </div>
   )
 
+  const expanded = entry?.expanded ?? true
+
+  return (
+    <div className="mb-1">
+      <div
+        className={`group flex w-full items-center gap-1.5 px-2 py-1 ${is_active ? 'bg-overlay' : 'hover:bg-overlay'}`}
+      >
+        <button
+          className="flex min-w-0 grow items-center gap-1.5 text-left"
+          onClick={() => toggleRepoExpanded(repoId)}
+        >
+          <span className="w-2 shrink-0 text-faint">
+            {expanded ? '▾' : '▸'}
+          </span>
+          <span
+            className={`truncate font-semibold ${is_active ? 'text-ink' : 'text-soft'}`}
+          >
+            {repo.name}
+          </span>
+          <span className="truncate text-[10px] text-faint">
+            {repo.branch}
+          </span>
+        </button>
+        <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[10px]">
+          {(entry?.openCount ?? 0) > 0 && (
+            <span className="rounded-full bg-amber-500/20 px-1.5 text-amber-700 dark:text-amber-300">
+              {entry?.openCount}
+            </span>
+          )}
+          <button
+            className={`rounded border px-1 ${entry?.showAll === true ? 'border-accent text-accent' : 'border-edge text-faint hover:text-ink'}`}
+            title={
+              entry?.showAll === true
+                ? 'showing all files — click for changed only'
+                : 'show all files of this repo'
+            }
+            onClick={() => void toggleRepoShowAll(repoId)}
+          >
+            all
+          </button>
+          <span className="text-faint">{entry?.files.length ?? 0}</span>
+        </span>
+      </div>
+      {expanded && tree !== null && (
+        <div className="ml-[13px] border-l border-edge/70">
+          {renderDir(tree)}
+          {!entry?.showAll && entry?.files.length === 0 && (
+            <p className="px-3 py-1 text-faint">no changes</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function FileTree() {
+  const repos = useReview((s) => s.repos)
+  const addRepo = useReview((s) => s.addRepo)
+  const pushToast = useReview((s) => s.pushToast)
+  const [adding, setAdding] = useState(false)
+  const [newPath, setNewPath] = useState('')
+
+  const submitAdd = async () => {
+    const trimmed = newPath.trim()
+    if (trimmed === '') return
+    try {
+      await addRepo(trimmed)
+      setNewPath('')
+      setAdding(false)
+    } catch (error) {
+      pushToast(
+        'error',
+        `add repo: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
-      <div className="flex border-b border-edge text-xs">
-        <button
-          className={`px-3 py-1.5 ${showAll ? 'text-faint hover:text-soft' : 'border-b-2 border-accent text-ink'}`}
-          onClick={() => void setShowAll(false)}
-        >
-          Changed ({files.length})
-        </button>
-        <button
-          className={`px-3 py-1.5 ${showAll ? 'border-b-2 border-accent text-ink' : 'text-faint hover:text-soft'}`}
-          onClick={() => void setShowAll(true)}
-        >
-          All files
-        </button>
-      </div>
       <div className="min-h-0 grow overflow-y-auto py-1 text-xs">
-        {renderDir(tree)}
-        {!showAll && files.length === 0 && (
-          <p className="px-3 py-2 text-faint">No changes to review.</p>
-        )}
-        {showAll && allFiles === null && (
-          <p className="px-3 py-2 text-faint">loading…</p>
+        {repos.map((repo) => (
+          <RepoNode key={repo.id} repoId={repo.id} />
+        ))}
+      </div>
+      <div className="border-t border-edge p-1.5 text-xs">
+        {adding ? (
+          <input
+            autoFocus
+            className="w-full rounded border border-edge bg-surface px-2 py-1 font-mono text-ink outline-none focus:border-accent"
+            placeholder="~/path/to/repo"
+            value={newPath}
+            onChange={(e) => setNewPath(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void submitAdd()
+              if (e.key === 'Escape') setAdding(false)
+            }}
+          />
+        ) : (
+          <button
+            className="w-full rounded px-2 py-1 text-left text-faint hover:bg-overlay hover:text-ink"
+            onClick={() => setAdding(true)}
+          >
+            + add repository
+          </button>
         )}
       </div>
     </div>
