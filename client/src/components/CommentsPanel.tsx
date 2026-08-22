@@ -1,13 +1,20 @@
 import { useMemo, useState } from 'react'
+import { DraftForm } from './DraftForm'
 import { useReview } from '../store'
 import { ThreadCard } from './ThreadCard'
 
 /**
  * Right-hand overview of every thread in the session: jump to any anchor,
- * reply, edit, or resolve without hunting through files.
+ * reply, edit, or resolve without hunting through files. Notes still being
+ * written stay here too, so a note survives — and stays editable — while
+ * other files are visited to collect references.
  */
 export function CommentsPanel() {
   const threads = useReview((s) => s.threads)
+  const drafts = useReview((s) => s.drafts)
+  const activeRepoId = useReview((s) => s.activeRepoId)
+  const repos = useReview((s) => s.repos)
+  const selectRepo = useReview((s) => s.selectRepo)
   const openRef = useReview((s) => s.openRef)
   const toggleComments = useReview((s) => s.toggleComments)
   const [openOnly, setOpenOnly] = useState(true)
@@ -49,6 +56,37 @@ export function CommentsPanel() {
         </button>
       </div>
       <div className="min-h-0 grow space-y-3 overflow-y-auto p-3">
+        {drafts.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+              in progress
+            </p>
+            {drafts.map((draft) => {
+              const repo_name = repos.find((r) => r.id === draft.repoId)?.name
+              const cross_repo = draft.repoId !== activeRepoId
+              return (
+                <div key={draft.id}>
+                  <button
+                    className="mb-0.5 max-w-full truncate font-mono text-xs text-accent hover:underline"
+                    title={`back to ${draft.path}:L${draft.startLine}`}
+                    onClick={() => {
+                      void (async () => {
+                        if (cross_repo) await selectRepo(draft.repoId)
+                        await openRef(draft.path, draft.startLine)
+                      })()
+                    }}
+                  >
+                    {cross_repo && repo_name !== undefined
+                      ? `${repo_name}:`
+                      : ''}
+                    {draft.path}:L{draft.startLine}
+                  </button>
+                  <DraftForm draft={draft} autoFocus={false} />
+                </div>
+              )
+            })}
+          </div>
+        )}
         {groups.map((group) => (
           <div key={group.path} className="space-y-2">
             {group.list.map((thread) => (
@@ -67,7 +105,7 @@ export function CommentsPanel() {
             ))}
           </div>
         ))}
-        {total === 0 && (
+        {total === 0 && drafts.length === 0 && (
           <p className="text-xs text-faint">
             {openOnly ? 'No unresolved comments.' : 'No comments yet.'}
           </p>

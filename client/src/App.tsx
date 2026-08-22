@@ -14,10 +14,15 @@ import { TopBar } from './components/TopBar'
 import { UsagesPanel } from './components/UsagesPanel'
 import { useReview } from './store'
 
-/** Shown while the active draft belongs to a file other than the open one. */
+/**
+ * Shown while the active draft belongs to a file other than the open one —
+ * only with the comments panel closed, since the panel keeps every note in
+ * progress editable in place.
+ */
 function DraftPill() {
   const drafts = useReview((s) => s.drafts)
   const activeDraftId = useReview((s) => s.activeDraftId)
+  const commentsOpen = useReview((s) => s.commentsOpen)
   const selectedPath = useReview((s) => s.selectedPath)
   const activeRepoId = useReview((s) => s.activeRepoId)
   const repos = useReview((s) => s.repos)
@@ -28,6 +33,7 @@ function DraftPill() {
   const active =
     drafts.find((d) => d.id === activeDraftId) ?? drafts.at(-1)
   if (
+    commentsOpen ||
     active === undefined ||
     (active.path === selectedPath && active.repoId === activeRepoId)
   ) {

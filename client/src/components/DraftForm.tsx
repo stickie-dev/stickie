@@ -2,7 +2,18 @@ import { useEffect, useRef } from 'react'
 import type { Draft } from '../store'
 import { useReview } from '../store'
 
-export function DraftForm({ draft }: { draft: Draft | undefined }) {
+/**
+ * `autoFocus` grabs the caret on mount, which is right for the form the
+ * gutter click just opened and wrong for the copy the comments panel keeps
+ * alive while other files are browsed.
+ */
+export function DraftForm({
+  draft,
+  autoFocus = true,
+}: {
+  draft: Draft | undefined
+  autoFocus?: boolean
+}) {
   const updateDraftBody = useReview((s) => s.updateDraftBody)
   const submitDraft = useReview((s) => s.submitDraft)
   const cancelDraft = useReview((s) => s.cancelDraft)
@@ -13,11 +24,12 @@ export function DraftForm({ draft }: { draft: Draft | undefined }) {
   // plain autoFocus loses the race against Monaco reclaiming focus after
   // the gutter click; grab it once the zone has settled
   useEffect(() => {
+    if (!autoFocus) return
     const timer = setTimeout(() => {
       textareaRef.current?.focus({ preventScroll: true })
     }, 50)
     return () => clearTimeout(timer)
-  }, [])
+  }, [autoFocus])
 
   if (draft === undefined) return null
 
@@ -25,7 +37,7 @@ export function DraftForm({ draft }: { draft: Draft | undefined }) {
 
   return (
     <div
-      className={`rounded-md border bg-panel p-2 text-sm shadow-lg ${active ? 'border-accent' : 'border-edge'}`}
+      className={`min-w-0 rounded-md border bg-panel p-2 text-sm shadow-lg ${active ? 'border-accent' : 'border-edge'}`}
       onFocusCapture={() => setActiveDraft(draft.id)}
       onMouseDownCapture={() => setActiveDraft(draft.id)}
     >

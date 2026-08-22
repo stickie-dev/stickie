@@ -9,7 +9,7 @@ function MessageBody({ body }: { body: string }) {
   const openRefTarget = useReview((s) => s.openRefTarget)
   const parts = body.split(ref_pattern)
   return (
-    <span className="whitespace-pre-wrap text-ink">
+    <span className="whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
       {' '}
       {parts.map((part, i) => {
         const match = /^@(.+):L(\d+)/.exec(part)
@@ -24,7 +24,7 @@ function MessageBody({ body }: { body: string }) {
           return (
             <button
               key={i}
-              className="rounded bg-accent/10 px-1 font-mono text-accent hover:bg-accent/20"
+              className="rounded bg-accent/10 px-1 text-left font-mono text-accent [overflow-wrap:anywhere] hover:bg-accent/20"
               title={repo === null ? `open ${path}` : `open ${path} in ${repo}`}
               onClick={() => void openRefTarget(repo, path, line)}
             >
@@ -78,8 +78,8 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
   }
 
   return (
-    <div className="rounded-md border border-edge bg-panel text-sm shadow-lg">
-      <div className="flex items-center gap-2 border-b border-edge px-3 py-1.5">
+    <div className="min-w-0 rounded-md border border-edge bg-panel text-sm shadow-lg">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-edge px-3 py-1.5">
         <span
           className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${status_styles[thread.status]}`}
         >

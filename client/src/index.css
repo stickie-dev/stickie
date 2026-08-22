@@ -14,7 +14,10 @@
   --color-accent-strong: var(--accent-strong);
 }
 
+/* native scrollbars, form controls and caret follow the app theme rather
+   than the OS one, which the .dark class alone does not reach */
 :root {
+  color-scheme: light;
   --surface: #f6f6f7;
   --panel: #ffffff;
   --overlay: #ececee;
@@ -27,6 +30,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --surface: #18181b;
   --panel: #101012;
   --overlay: #27272a;
