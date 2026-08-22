@@ -3,6 +3,12 @@ import { DiffEditor, Editor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import type { ChangedFile, FileContent, Side } from '@stickie/shared'
 import { api } from '../api'
+import {
+  flowJumpInFlight,
+  registerFlowEditors,
+  registerFlowSection,
+  setFlowScroller,
+} from '../flowNav'
 import { languageFor } from '../languages'
 import { useReview } from '../store'
 import { CommentLayer } from './CommentLayer'
@@ -52,6 +58,12 @@ function DiffSection({
   const toggleViewed = useReview((s) => s.toggleViewed)
   const selectedPath = useReview((s) => s.selectedPath)
 
+  useEffect(() => {
+    const el = containerRef.current
+    if (el === null) return
+    return registerFlowSection(file.path, el)
+  }, [file.path])
+
   // mount editors lazily as sections approach the viewport
   useEffect(() => {
     const el = containerRef.current
@@ -88,6 +100,8 @@ function DiffSection({
   useEffect(() => {
     const el = containerRef.current
     if (el === null || selectedPath !== file.path) return
+    // a change-to-change jump already aimed at an exact line in here
+    if (flowJumpInFlight()) return
     const rect = el.getBoundingClientRect()
     const in_view = rect.top >= 0 && rect.top < window.innerHeight * 0.7
     if (!in_view) el.scrollIntoView({ block: 'start' })
@@ -191,6 +205,7 @@ function DiffSection({
               attach(original, 'base', file.path)
               attach(modified, 'source', file.path)
               sizeToContent([original, modified])
+              registerFlowEditors(file.path, diff, modified)
             }}
           />
           <CommentLayer
@@ -216,6 +231,7 @@ function DiffSection({
               setSingleEditor(instance)
               attach(instance, single_side, file.path)
               sizeToContent([instance])
+              registerFlowEditors(file.path, null, instance)
             }}
           />
           <CommentLayer
@@ -254,6 +270,10 @@ export function ContinuousDiff({
 }: Props) {
   const scrollerRef = useRef<HTMLDivElement>(null)
   const restoringRef = useRef(false)
+  useEffect(() => {
+    setFlowScroller(scrollerRef.current)
+    return () => setFlowScroller(null)
+  }, [])
   useEffect(() => {
     const el = scrollerRef.current
     if (el === null) return

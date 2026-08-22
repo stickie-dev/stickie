@@ -5,6 +5,7 @@ import { editor_font, monaco } from '../monacoSetup'
 import type { Side } from '@stickie/shared'
 import { api } from '../api'
 import type { NavHit } from '../api'
+import { flowJump } from '../flowNav'
 import { languageFor } from '../languages'
 import { useReview } from '../store'
 import { CommentLayer } from './CommentLayer'
@@ -338,8 +339,12 @@ export function FileView() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
+      // monaco's hidden input carries key events from a clicked-in editor;
+      // it must not mute the review keys the way a real note field does
+      const monaco_input = target?.classList.contains('inputarea') === true
       if (
         target !== null &&
+        !monaco_input &&
         (target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
           target.tagName === 'SELECT' ||
@@ -376,6 +381,15 @@ export function FileView() {
         }
         case 'n':
         case 'p': {
+          if (state.viewMode === 'flow') {
+            flowJump(
+              event.key === 'n' ? 'next' : 'prev',
+              paths,
+              state.selectedPath,
+              (path) => state.flowSelect(path),
+            )
+            break
+          }
           const diff = diffEditor
           if (diff === null) return
           const changes = diff.getLineChanges() ?? []
@@ -680,7 +694,7 @@ export function FileView() {
               <dt className="font-mono text-soft">j / k</dt>
               <dd className="text-ink">next / previous changed file</dd>
               <dt className="font-mono text-soft">n / p</dt>
-              <dd className="text-ink">next / previous change in file</dd>
+              <dd className="text-ink">next / previous change</dd>
               <dt className="font-mono text-soft">v</dt>
               <dd className="text-ink">toggle viewed for current file</dd>
               <dt className="font-mono text-soft">[ / ]</dt>
