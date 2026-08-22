@@ -34,6 +34,7 @@ export function TopBar() {
 
   const submitReview = useReview((s) => s.submitReview)
   const toggleComments = useReview((s) => s.toggleComments)
+  const setSearchOpen = useReview((s) => s.setSearchOpen)
   const commentsOpen = useReview((s) => s.commentsOpen)
   const open_threads = threads.filter((t) => t.status === 'open').length
   const pending_count = threads.filter(
@@ -166,6 +167,13 @@ export function TopBar() {
       )}
 
       <span className="grow" />
+      <button
+        className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
+        title="search all repos (⌘F / ⌘⇧F)"
+        onClick={() => setSearchOpen(true)}
+      >
+        Search
+      </button>
       <button
         className={`rounded border px-2 py-1 ${commentsOpen ? 'border-accent text-accent' : 'border-edge text-soft hover:text-ink'}`}
         title="toggle the all-comments panel"

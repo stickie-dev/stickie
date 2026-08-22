@@ -624,6 +624,7 @@ function DefinitionPicker({
   onDone: () => void
 }) {
   const openHit = useReview((s) => s.openHit)
+  const openHitSide = useReview((s) => s.openHitSide)
   return (
     <div
       className="fixed z-50 max-h-64 w-[28rem] -translate-x-1/2 overflow-y-auto rounded-md border border-edge bg-panel text-xs shadow-xl"
@@ -645,19 +646,33 @@ function DefinitionPicker({
         </button>
       </div>
       {pick.hits.map((hit) => (
-        <button
+        <div
           key={`${hit.path}:${hit.line}`}
-          className="flex w-full gap-2 px-3 py-1 text-left font-mono hover:bg-overlay"
-          onClick={() => {
-            void openHit(hit)
-            onDone()
-          }}
+          className="group flex w-full items-center gap-2 px-3 py-1 hover:bg-overlay"
         >
-          <span className="shrink-0 text-soft">
-            {hit.path}:{hit.line}
-          </span>
-          <span className="truncate text-faint">{hit.preview.trim()}</span>
-        </button>
+          <button
+            className="flex min-w-0 grow gap-2 text-left font-mono"
+            onClick={() => {
+              void openHit(hit)
+              onDone()
+            }}
+          >
+            <span className="shrink-0 text-soft">
+              {hit.path}:{hit.line}
+            </span>
+            <span className="truncate text-faint">{hit.preview.trim()}</span>
+          </button>
+          <button
+            className="hidden shrink-0 text-xs text-soft group-hover:inline hover:text-ink"
+            title="open beside the diff"
+            onClick={() => {
+              openHitSide(hit)
+              onDone()
+            }}
+          >
+            side ▸
+          </button>
+        </div>
       ))}
     </div>
   )

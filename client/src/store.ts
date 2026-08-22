@@ -82,6 +82,8 @@ interface ReviewState {
   toasts: Toast[]
   navHistory: NavEntry[]
   navIndex: number
+  sidePane: { repoId: number; repoName: string; path: string; line: number } | null
+  searchOpen: boolean
   perRepo: Record<number, { source: ReviewSource; baseRef?: string; selectedPath?: string }>
 
   pushToast: (kind: Toast['kind'], text: string) => void
@@ -97,6 +99,10 @@ interface ReviewState {
   ) => Promise<void>
   navBack: () => Promise<void>
   navForward: () => Promise<void>
+  openSide: (repoId: number, path: string, line: number) => void
+  openHitSide: (hit: NavHit) => void
+  closeSide: () => void
+  setSearchOpen: (open: boolean) => void
   clearReveal: () => void
   toggleTheme: () => void
   init: () => Promise<void>
@@ -108,7 +114,12 @@ interface ReviewState {
   setShowAll: (showAll: boolean) => Promise<void>
   startDraft: (side: Side, startLine: number, endLine: number) => void
   updateDraftBody: (id: number, body: string) => void
-  insertDraftRef: (path: string, startLine: number, endLine: number) => void
+  insertDraftRef: (
+    path: string,
+    startLine: number,
+    endLine: number,
+    captureRepoId?: number,
+  ) => void
   setActiveDraft: (id: number) => void
   setActiveReply: (threadId: number | null) => void
   updateReplyDraft: (threadId: number, body: string) => void
@@ -239,6 +250,8 @@ export const useReview = create<ReviewState>((set, get) => {
     toasts: [],
     navHistory: [],
     navIndex: -1,
+    sidePane: null,
+    searchOpen: false,
     perRepo: {},
 
     pushToast: (kind, text) => {
@@ -305,6 +318,25 @@ export const useReview = create<ReviewState>((set, get) => {
       }
       await get().openRef(path, line)
     },
+
+    openSide: (repoId, path, line) => {
+      const name = get().repos.find((r) => r.id === repoId)?.name ?? ''
+      set({ sidePane: { repoId, repoName: name, path, line } })
+    },
+
+    closeSide: () => set({ sidePane: null }),
+
+    openHitSide: (hit) => {
+      const { repos, activeRepoId } = get()
+      const repo =
+        repos.find((r) => r.path === hit.repoPath) ??
+        repos.find((r) => hit.repoPath.startsWith(r.path + '/')) ??
+        repos.find((r) => r.id === activeRepoId)
+      if (repo === undefined) return
+      get().openSide(repo.id, hit.path, hit.line)
+    },
+
+    setSearchOpen: (open) => set({ searchOpen: open }),
 
     navBack: async () => {
       const { navHistory, navIndex } = get()
@@ -469,7 +501,7 @@ export const useReview = create<ReviewState>((set, get) => {
       })
     },
 
-    insertDraftRef: (path, startLine, endLine) => {
+    insertDraftRef: (path, startLine, endLine, captureRepoId) => {
       const {
         drafts,
         activeDraftId,
@@ -479,15 +511,16 @@ export const useReview = create<ReviewState>((set, get) => {
         activeRepoId,
         repos,
       } = get()
+      const capture_repo = captureRepoId ?? activeRepoId
       // captures from a different repo than the note's home get a repo
       // prefix so the agent (and chips) can resolve them
       const refFor = (homeRepoId: number | null) => {
         const cross =
           homeRepoId !== null &&
-          activeRepoId !== null &&
-          homeRepoId !== activeRepoId
+          capture_repo !== null &&
+          homeRepoId !== capture_repo
         const prefix = cross
-          ? `${repos.find((r) => r.id === activeRepoId)?.name ?? ''}:`
+          ? `${repos.find((r) => r.id === capture_repo)?.name ?? ''}:`
           : ''
         return startLine === endLine
           ? `@${prefix}${path}:L${startLine}`

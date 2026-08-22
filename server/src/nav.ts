@@ -127,6 +127,16 @@ export async function findDefinitions(
   return parseRgJson(await rg(root, args), root)
 }
 
+export async function searchText(
+  root: string,
+  query: string,
+): Promise<NavHit[]> {
+  return parseRgJson(
+    await rg(root, ['--smart-case', '--fixed-strings', '-e', query]),
+    root,
+  )
+}
+
 export async function findReferences(
   root: string,
   name: string,

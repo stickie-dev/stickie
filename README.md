@@ -40,6 +40,9 @@ the only output.
 - **GitLab MR import** — pull unresolved MR diff discussions into a local
   session (`GITLAB_TOKEN` + `GITLAB_URL` env), so agent fixes happen
   locally against real review threads
+- **Reference pane + workspace search** — ⌘F searches every registered
+  repo; results (and definition/usage hits) open in a read-only pane beside
+  the diff, where selections feed refs into the note being written
 
 ## Run
 

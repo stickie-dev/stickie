@@ -151,6 +151,18 @@ export const api = {
       `/api/sessions/${sessionId}/nav/definitions?name=${encodeURIComponent(name)}&language=${encodeURIComponent(language)}&scope=${scope}`,
     ).then(toJson<NavHit[]>),
 
+  search: (sessionId: number, q: string, scope: 'repo' | 'workspace' = 'workspace') =>
+    fetch(
+      `/api/sessions/${sessionId}/nav/search?q=${encodeURIComponent(q)}&scope=${scope}`,
+    ).then(toJson<NavHit[]>),
+
+  repoFile: (repoId: number, path: string) =>
+    fetch(
+      `/api/repos/${repoId}/file?path=${encodeURIComponent(path)}`,
+    ).then(
+      toJson<{ path: string; content: string | null; binary: boolean }>,
+    ),
+
   references: (sessionId: number, name: string, scope: 'repo' | 'workspace') =>
     fetch(
       `/api/sessions/${sessionId}/nav/references?name=${encodeURIComponent(name)}&scope=${scope}`,

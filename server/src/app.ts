@@ -26,7 +26,7 @@ import {
   parseMrRef,
   projectFromRemote,
 } from './gitlab.js'
-import { findDefinitions, findReferences } from './nav.js'
+import { findDefinitions, findReferences, searchText } from './nav.js'
 import type { Store } from './store.js'
 import type { WatchHub } from './watcher.js'
 
@@ -1122,6 +1122,84 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
         roots.map((root) => findReferences(root, name).catch(() => [])),
       )
       return c.json(all.flat(), 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/sessions/{id}/nav/search',
+      tags: ['navigation'],
+      summary: 'Smart-case text search across repo or workspace',
+      request: {
+        params: id_param,
+        query: z.object({
+          q: z.string().min(2),
+          scope: z.enum(['repo', 'workspace']).default('workspace'),
+        }),
+      },
+      responses: {
+        200: json_response(z.array(nav_hit_schema), 'Matches'),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const session = store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      const { q, scope } = c.req.valid('query')
+      if (scope === 'repo') {
+        return c.json(await searchText(navRoot(session), q), 200)
+      }
+      const roots = [
+        navRoot(session),
+        ...store
+          .listRepos()
+          .map((r) => r.path)
+          .filter((p) => p !== session.repoPath),
+      ]
+      const all = await Promise.all(
+        roots.map((root) => searchText(root, q).catch(() => [])),
+      )
+      return c.json(all.flat().slice(0, 300), 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/repos/{id}/file',
+      tags: ['repos'],
+      summary: "A file from the repo's main worktree, session-free",
+      description:
+        'Serves the reference side pane: reading any file of any registered ' +
+        'repo without needing a review session for it.',
+      request: {
+        params: id_param,
+        query: z.object({ path: z.string().min(1) }),
+      },
+      responses: {
+        200: json_response(
+          z.object({
+            path: z.string(),
+            content: z.string().nullable(),
+            binary: z.boolean(),
+          }),
+          'File content',
+        ),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const repo = store.getRepo(c.req.valid('param').id)
+      if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
+      const { path: file_path } = c.req.valid('query')
+      const blob = await fileInWorktree(repo.path, file_path)
+      return c.json(
+        { path: file_path, content: blob.content, binary: blob.binary },
+        200,
+      )
     },
   )
 

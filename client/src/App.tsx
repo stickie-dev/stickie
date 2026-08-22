@@ -5,6 +5,8 @@ import { AddRepo } from './components/AddRepo'
 import { CommentsPanel } from './components/CommentsPanel'
 import { FileTree } from './components/FileTree'
 import { FileView } from './components/FileView'
+import { SearchOverlay } from './components/SearchOverlay'
+import { SidePane } from './components/SidePane'
 import { Toasts } from './components/Toasts'
 import { TopBar } from './components/TopBar'
 import { UsagesPanel } from './components/UsagesPanel'
@@ -71,10 +73,37 @@ export function App() {
   const setConnected = useReview((s) => s.setConnected)
   const theme = useReview((s) => s.theme)
   const commentsOpen = useReview((s) => s.commentsOpen)
+  const setSearchOpen = useReview((s) => s.setSearchOpen)
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
+
+  // cmd+shift+F always opens workspace search; plain cmd+F only outside
+  // editors and inputs so Monaco's in-file find keeps working
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return
+      if (event.key !== 'f' && event.key !== 'F') return
+      if (event.shiftKey) {
+        event.preventDefault()
+        setSearchOpen(true)
+        return
+      }
+      const target = event.target as HTMLElement | null
+      const in_editor =
+        target !== null &&
+        (target.closest('.monaco-editor') !== null ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA')
+      if (!in_editor) {
+        event.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [setSearchOpen])
 
   useEffect(() => {
     void init()
@@ -126,12 +155,14 @@ export function App() {
             <main className="min-w-0 grow">
               <FileView />
             </main>
+            <SidePane />
             {commentsOpen && <CommentsPanel />}
           </div>
           <UsagesPanel />
         </div>
       )}
       <DraftPill />
+      <SearchOverlay />
       <Toasts />
     </div>
   )
