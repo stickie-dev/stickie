@@ -182,9 +182,16 @@ export const api = {
       `/api/sessions/${sessionId}/nav/search?q=${encodeURIComponent(q)}&scope=${scope}`,
     ).then(toJson<NavHit[]>),
 
-  repoFile: (repoId: number, path: string) =>
+  commitFiles: (repoId: number, shas: string[]) =>
     fetch(
-      `/api/repos/${repoId}/file?path=${encodeURIComponent(path)}`,
+      `/api/repos/${repoId}/commit-files?shas=${shas.join(',')}`,
+    ).then(toJson<{ path: string; shas: string[] }[]>),
+
+  repoFile: (repoId: number, path: string, rev?: string) =>
+    fetch(
+      `/api/repos/${repoId}/file?path=${encodeURIComponent(path)}${
+        rev === undefined ? '' : `&rev=${encodeURIComponent(rev)}`
+      }`,
     ).then(
       toJson<{ path: string; content: string | null; binary: boolean }>,
     ),

@@ -10,7 +10,7 @@ import type {
   Thread,
 } from '@stickie/shared'
 import { api } from './api'
-import type { NavHit } from './api'
+import type { CommitBetween, NavHit } from './api'
 import { cachedFile, prefetchFile } from './fileCache'
 
 export interface Draft {
@@ -26,7 +26,7 @@ export interface Draft {
 
 export interface Tab {
   id: number
-  kind: 'flow' | 'file'
+  kind: 'flow' | 'file' | 'commits'
   repoId: number
   /** file tabs only */
   path?: string
@@ -54,7 +54,8 @@ function readStoredTabs(): { tabs: StoredTab[]; active: number } | null {
         typeof entry === 'object' &&
         entry !== null &&
         ((entry as StoredTab).kind === 'flow' ||
-          (entry as StoredTab).kind === 'file') &&
+          (entry as StoredTab).kind === 'file' ||
+          (entry as StoredTab).kind === 'commits') &&
         typeof (entry as StoredTab).repo === 'string',
     )
     return {
@@ -69,6 +70,14 @@ function readStoredTabs(): { tabs: StoredTab[]; active: number } | null {
 // captured before the store can write over it, so a restore always sees the
 // previous session rather than this one's empty starting point
 const previous_tabs = readStoredTabs()
+
+export interface CommitView {
+  repoId: number
+  /** oldest first, so columns read left to right in time */
+  shas: string[]
+  path: string | null
+  files: { path: string; shas: string[] }[]
+}
 
 export interface NavEntry {
   repoId: number
@@ -134,7 +143,19 @@ interface ReviewState {
   sidePane: { repoId: number; repoName: string; path: string; line: number } | null
   searchOpen: boolean
   /** flow = continuous GitLab-style scroll of every changed file */
-  viewMode: 'flow' | 'file'
+  viewMode: 'flow' | 'file' | 'commits'
+  /**
+   * The commit timeline: one tab per repo showing the selected commits as
+   * columns of the same file. Selecting commits never moves the review
+   * target — that stays the source/base pickers' job.
+   */
+  /** commits between base and source, newest first; shared by the sidebar
+   * list and the timeline that reads their subjects */
+  commits: CommitBetween[]
+  loadCommits: () => Promise<void>
+  commitView: CommitView | null
+  selectCommits: (shas: string[]) => Promise<void>
+  setCommitPath: (path: string) => void
   tabs: Tab[]
   activeTabId: number | null
   /** bumped when watched files change so flow sections refetch content */
@@ -426,6 +447,17 @@ export const useReview = create<ReviewState>((set, get) => {
     return tab
   }
 
+  function ensureCommitsTab(repoId: number): Tab {
+    const existing = get().tabs.find(
+      (t) => t.kind === 'commits' && t.repoId === repoId,
+    )
+    if (existing !== undefined) return existing
+    tab_seq += 1
+    const tab: Tab = { id: tab_seq, kind: 'commits', repoId }
+    set({ tabs: [...get().tabs, tab] })
+    return tab
+  }
+
   function ensureFileTab(repoId: number, path: string): Tab {
     const existing = get().tabs.find(
       (t) => t.kind === 'file' && t.repoId === repoId && t.path === path,
@@ -508,6 +540,8 @@ export const useReview = create<ReviewState>((set, get) => {
     sidePane: null,
     searchOpen: false,
     viewMode: 'flow',
+    commits: [],
+    commitView: null,
     tabs: [],
     activeTabId: null,
     contentEpoch: 0,
@@ -678,6 +712,61 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
 
+    loadCommits: async () => {
+      const { session } = get()
+      if (session === null) {
+        set({ commits: [] })
+        return
+      }
+      try {
+        const commits = await api.commits(session.id)
+        if (get().session?.id === session.id) set({ commits })
+      } catch {
+        set({ commits: [] })
+      }
+    },
+
+    selectCommits: async (shas) => {
+      const repoId = get().activeRepoId
+      if (repoId === null) return
+      if (shas.length === 0) {
+        set({ commitView: null })
+        return
+      }
+      const previous = get().commitView
+      set({
+        commitView: {
+          repoId,
+          shas,
+          path: previous?.repoId === repoId ? previous.path : null,
+          files: [],
+        },
+        viewMode: 'commits',
+        activeTabId: ensureCommitsTab(repoId).id,
+      })
+      let files: { path: string; shas: string[] }[]
+      try {
+        files = await api.commitFiles(repoId, shas)
+      } catch (error) {
+        get().pushToast('error', `commits: ${message(error)}`)
+        return
+      }
+      const view = get().commitView
+      if (view === null || view.shas !== shas) return
+      // keep the open file when it is still part of the selection
+      const keep =
+        view.path !== null && files.some((f) => f.path === view.path)
+          ? view.path
+          : (files[0]?.path ?? null)
+      set({ commitView: { ...view, files, path: keep } })
+    },
+
+    setCommitPath: (path) => {
+      const view = get().commitView
+      if (view === null) return
+      set({ commitView: { ...view, path } })
+    },
+
     activateTab: async (id) => {
       const tab = get().tabs.find((t) => t.id === id)
       if (tab === undefined) return
@@ -686,6 +775,8 @@ export const useReview = create<ReviewState>((set, get) => {
       }
       if (tab.kind === 'flow') {
         set({ viewMode: 'flow', activeTabId: tab.id })
+      } else if (tab.kind === 'commits') {
+        set({ viewMode: 'commits', activeTabId: tab.id })
       } else if (tab.path !== undefined) {
         await get().openFile(tab.path)
       }
@@ -696,7 +787,10 @@ export const useReview = create<ReviewState>((set, get) => {
       const closing = tabs.find((t) => t.id === id)
       if (closing === undefined) return
       const remaining = tabs.filter((t) => t.id !== id)
-      set({ tabs: remaining })
+      set({
+        tabs: remaining,
+        ...(closing.kind === 'commits' ? { commitView: null } : {}),
+      })
       if (activeTabId === id) {
         const fallback =
           remaining.find(

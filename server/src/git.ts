@@ -276,6 +276,25 @@ export async function changedFiles(
   return parseNameStatus(out).sort((a, b) => a.path.localeCompare(b.path))
 }
 
+/** What one commit changed against its first parent. */
+export async function commitFiles(
+  repo: string,
+  sha: string,
+): Promise<ChangedFile[]> {
+  const out = await git(repo, [
+    'diff',
+    '--name-status',
+    '-M',
+    `${sha}^`,
+    sha,
+    '--',
+  ]).catch(() =>
+    // a root commit has no parent to diff against
+    git(repo, ['show', '--name-status', '--format=', '-M', sha, '--']),
+  )
+  return parseNameStatus(out).sort((a, b) => a.path.localeCompare(b.path))
+}
+
 export async function listAllFiles(
   repo: string,
   source: ReviewSource,

@@ -3,7 +3,8 @@ import { useReview } from '../store'
 
 /**
  * Open views as tabs: one persistent diff (flow) tab per repo that resumes
- * where it was left, plus closable single-file tabs.
+ * where it was left, one commit-timeline tab per repo, plus closable
+ * single-file tabs.
  */
 export function TabBar() {
   const tabs = useReview((s) => s.tabs)
@@ -24,7 +25,9 @@ export function TabBar() {
         const label =
           tab.kind === 'flow'
             ? `${repoName(tab.repoId)} · diff`
-            : (tab.path?.split('/').at(-1) ?? tab.path ?? '')
+            : tab.kind === 'commits'
+              ? `${repoName(tab.repoId)} · commits`
+              : (tab.path?.split('/').at(-1) ?? tab.path ?? '')
         const icon =
           tab.kind === 'file' && tab.path !== undefined
             ? fileIconUrl(tab.path.split('/').at(-1) ?? '')
@@ -43,12 +46,16 @@ export function TabBar() {
               title={
                 tab.kind === 'flow'
                   ? `${repoName(tab.repoId)} — continuous diff review`
-                  : `${repoName(tab.repoId)}:${tab.path ?? ''}`
+                  : tab.kind === 'commits'
+                    ? `${repoName(tab.repoId)} — selected commits as a timeline`
+                    : `${repoName(tab.repoId)}:${tab.path ?? ''}`
               }
               onClick={() => void activateTab(tab.id)}
             >
               {tab.kind === 'flow' ? (
                 <span className="shrink-0 text-[10px] text-faint">⇄</span>
+              ) : tab.kind === 'commits' ? (
+                <span className="shrink-0 text-[10px] text-faint">◷</span>
               ) : (
                 icon !== null && (
                   <img src={icon} alt="" className="h-3.5 w-3.5 shrink-0" />
@@ -56,7 +63,7 @@ export function TabBar() {
               )}
               <span className="truncate">{label}</span>
             </button>
-            {tab.kind === 'file' && (
+            {tab.kind !== 'flow' && (
               <button
                 className="shrink-0 rounded px-0.5 text-faint opacity-0 group-hover:opacity-100 hover:bg-edge hover:text-ink"
                 title="close tab"

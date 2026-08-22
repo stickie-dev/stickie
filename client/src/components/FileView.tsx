@@ -9,6 +9,7 @@ import { flowJump } from '../flowNav'
 import { languageFor } from '../languages'
 import { useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
+import { CommitTimeline } from './CommitTimeline'
 import { ContinuousDiff } from './ContinuousDiff'
 
 const side_by_side_min_width = 1440
@@ -351,6 +352,7 @@ export function FileView() {
   const files = useReview((s) => s.files)
   const openFile = useReview((s) => s.openFile)
   const fileLoading = useReview((s) => s.fileLoading)
+  const commits = useReview((s) => s.commits)
   const wrapExtensions = useReview((s) => s.wrapExtensions)
   const wrapOverrides = useReview((s) => s.wrapOverrides)
   const wrap =
@@ -512,6 +514,16 @@ export function FileView() {
       instance?.setScrollTop(0)
     }
   }, [selectedPath, reveal, originalEditor, modifiedEditor, singleEditor])
+
+  if (viewMode === 'commits') {
+    return (
+      <CommitTimeline
+        commits={commits}
+        options={editorOptions(width, false)}
+        theme={monaco_theme}
+      />
+    )
+  }
 
   if (viewMode === 'flow') {
     if (session === null || files.length === 0) {

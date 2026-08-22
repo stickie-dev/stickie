@@ -12,9 +12,11 @@ import { extractSnippet, reanchor } from './anchors.js'
 import { buildPrompt, default_prompt_instructions } from './export.js'
 import {
   changedFiles,
+  commitFiles,
   defaultBranch,
   expandUserPath,
   listCommitsBetween,
+  fileAtRef,
   fileAtSide,
   fileInWorktree,
   gitOrigin,
@@ -590,6 +592,52 @@ export function createApp(
         file_path,
       )
       return c.json({ path: file_path, side, ...blob }, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/repos/{id}/commit-files',
+      tags: ['repos'],
+      summary: 'Files touched by a set of commits',
+      description:
+        'Backs the commit timeline: the union of paths the given commits ' +
+        'touch, each with the commits that touched it (newest first).',
+      request: {
+        params: id_param,
+        query: z.object({
+          shas: z.string().min(1).describe('comma separated'),
+        }),
+      },
+      responses: {
+        200: json_response(
+          z.array(z.object({ path: z.string(), shas: z.array(z.string()) })),
+          'Touched files',
+        ),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const repo = store.getRepo(c.req.valid('param').id)
+      if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
+      const shas = c.req
+        .valid('query')
+        .shas.split(',')
+        .map((sha) => sha.trim())
+        .filter((sha) => /^[0-9a-f]{4,40}$/.test(sha))
+      const touched = new Map<string, string[]>()
+      for (const sha of shas) {
+        for (const file of await commitFiles(repo.path, sha)) {
+          touched.set(file.path, [...(touched.get(file.path) ?? []), sha])
+        }
+      }
+      return c.json(
+        [...touched.entries()]
+          .map(([path, list]) => ({ path, shas: list }))
+          .sort((a, b) => a.path.localeCompare(b.path)),
+        200,
+      )
     },
   )
 
@@ -1413,13 +1461,17 @@ export function createApp(
       method: 'get',
       path: '/api/repos/{id}/file',
       tags: ['repos'],
-      summary: "A file from the repo's main worktree, session-free",
+      summary: "A file from the repo's main worktree, or at any revision",
       description:
-        'Serves the reference side pane: reading any file of any registered ' +
-        'repo without needing a review session for it.',
+        'Serves the reference side pane and the commit timeline: reading any ' +
+        'file of any registered repo without needing a review session, at ' +
+        'the working tree by default or at `rev` when given.',
       request: {
         params: id_param,
-        query: z.object({ path: z.string().min(1) }),
+        query: z.object({
+          path: z.string().min(1),
+          rev: z.string().min(1).optional(),
+        }),
       },
       responses: {
         200: json_response(
@@ -1436,8 +1488,11 @@ export function createApp(
     async (c) => {
       const repo = store.getRepo(c.req.valid('param').id)
       if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
-      const { path: file_path } = c.req.valid('query')
-      const blob = await fileInWorktree(repo.path, file_path)
+      const { path: file_path, rev } = c.req.valid('query')
+      const blob =
+        rev === undefined
+          ? await fileInWorktree(repo.path, file_path)
+          : await fileAtRef(repo.path, rev, file_path)
       return c.json(
         { path: file_path, content: blob.content, binary: blob.binary },
         200,

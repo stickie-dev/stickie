@@ -1,77 +1,59 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api'
-import type { CommitBetween } from '../api'
 import { useReview } from '../store'
 
 /**
- * Commits between base and source for the active repo. Click reviews one
- * commit against its parent; shift+click reviews a contiguous range; the
- * top row returns to the full working-tree review.
+ * Commits between base and source for the active repo. A click opens that
+ * commit against its parent in the commit tab; ⌘/ctrl+click adds one commit
+ * as another column, shift+click adds the whole span between — so a
+ * selection reads left to right as the file's timeline. The review target
+ * itself only ever moves from the source/base pickers above.
  */
 export function CommitsPanel() {
   const session = useReview((s) => s.session)
-  const targets = useReview((s) => s.targets)
-  const setSource = useReview((s) => s.setSource)
-  const [commits, setCommits] = useState<CommitBetween[]>([])
+  const commits = useReview((s) => s.commits)
+  const loadCommits = useReview((s) => s.loadCommits)
+  const commitView = useReview((s) => s.commitView)
+  const selectCommits = useReview((s) => s.selectCommits)
   const [expanded, setExpanded] = useState(true)
   const [anchor, setAnchor] = useState<number | null>(null)
 
   const sessionId = session?.id
   useEffect(() => {
-    if (sessionId === undefined) {
-      setCommits([])
-      return
-    }
-    void api
-      .commits(sessionId)
-      .then(setCommits)
-      .catch(() => setCommits([]))
-  }, [sessionId])
+    void loadCommits()
+  }, [sessionId, loadCommits])
 
   if (session === null) return null
 
-  // highlight the range the current session reviews
-  const top_index =
-    session.source.kind === 'ref'
-      ? commits.findIndex((c) => c.sha === session.source.value)
-      : -1
-  const bottom_index =
-    top_index === -1
-      ? -1
-      : commits.findIndex(
-          (c, i) => i >= top_index && c.parentSha === session.baseSha,
-        )
-  const isSelected = (index: number) =>
-    top_index !== -1 &&
-    bottom_index !== -1 &&
-    index >= top_index &&
-    index <= bottom_index
-  const reviewing_worktree = session.source.kind === 'worktree'
+  const selected = new Set(commitView?.shas ?? [])
 
-  const pick = (index: number, shift: boolean) => {
-    if (shift && anchor !== null) {
+  // the list is newest first; a selection is kept oldest first so the
+  // timeline's columns run forwards in time
+  const chronological = (shas: Set<string>) =>
+    commits
+      .map((c) => c.sha)
+      .filter((sha) => shas.has(sha))
+      .reverse()
+
+  const pick = (index: number, event: React.MouseEvent) => {
+    const commit = commits[index]
+    if (commit === undefined) return
+    if (event.shiftKey && anchor !== null) {
       const lo = Math.min(anchor, index)
       const hi = Math.max(anchor, index)
-      const newest = commits[lo]
-      const oldest = commits[hi]
-      if (newest === undefined || oldest === undefined) return
-      void setSource(
-        { kind: 'ref', value: newest.sha },
-        `${oldest.sha}^`,
-      )
+      const span = new Set(selected)
+      for (const between of commits.slice(lo, hi + 1)) span.add(between.sha)
+      void selectCommits(chronological(span))
       return
     }
     setAnchor(index)
-    const commit = commits[index]
-    if (commit === undefined) return
-    void setSource({ kind: 'ref', value: commit.sha }, `${commit.sha}^`)
-  }
-
-  const resetToWorktree = () => {
-    const main = targets?.worktrees.find((wt) => wt.isMain)
-    if (main === undefined) return
-    setAnchor(null)
-    void setSource({ kind: 'worktree', value: main.path })
+    if (event.metaKey || event.ctrlKey) {
+      const next = new Set(selected)
+      if (next.has(commit.sha)) next.delete(commit.sha)
+      else next.add(commit.sha)
+      void selectCommits(chronological(next))
+      return
+    }
+    void selectCommits([commit.sha])
   }
 
   return (
@@ -84,26 +66,16 @@ export function CommitsPanel() {
         <span className="font-semibold text-soft">Commits</span>
         <span className="text-faint">{commits.length}</span>
         <span className="grow" />
-        <span className="text-[10px] text-faint">
-          click: one · shift: range
-        </span>
+        <span className="text-[10px] text-faint">click · ⌘ · shift</span>
       </button>
       {expanded && (
         <div className="max-h-56 overflow-y-auto pb-1">
-          <button
-            className={`flex w-full items-center gap-2 px-3 py-1 text-left font-mono hover:bg-overlay ${reviewing_worktree ? 'bg-overlay text-ink' : 'text-soft'}`}
-            title="review the full range incl. uncommitted changes"
-            onClick={resetToWorktree}
-          >
-            <span className="shrink-0 text-faint">◉</span>
-            working tree
-          </button>
           {commits.map((commit, index) => (
             <button
               key={commit.sha}
-              className={`flex w-full items-center gap-2 px-3 py-1 text-left font-mono hover:bg-overlay ${isSelected(index) ? 'bg-accent/10 text-ink' : 'text-soft'}`}
-              title={`${commit.subject}\nclick: diff vs parent · shift+click: range`}
-              onClick={(e) => pick(index, e.shiftKey)}
+              className={`flex w-full items-center gap-2 px-3 py-1 text-left font-mono hover:bg-overlay ${selected.has(commit.sha) ? 'bg-accent/10 text-ink' : 'text-soft'}`}
+              title={`${commit.subject}\nclick: this commit · ⌘+click: add it · shift+click: add the span`}
+              onClick={(e) => pick(index, e)}
             >
               <span className="shrink-0 text-faint">{commit.shortSha}</span>
               <span className="truncate">{commit.subject}</span>

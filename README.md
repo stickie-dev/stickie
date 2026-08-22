@@ -40,6 +40,10 @@ the only output.
 - **Review batches** — notes are *pending* until you hit Submit review, so
   agents receive a finished review, not a stream; per-note *post now* when
   you want immediacy
+- **Commit timeline** — the commits list never moves the review target
+  (the pickers do that): a click opens that commit against its parent in its
+  own tab, and ⌘/shift+click adds commits as further columns, so one file
+  reads left to right through the commits that touched it
 - **Session continuity** — when HEAD moves past the pinned base (the agent
   committed), one click re-pins and carries open notes forward
 - **Keyboard flow** — j/k files, n/p changes (across the whole flow, not just
