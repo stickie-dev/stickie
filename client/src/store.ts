@@ -75,7 +75,6 @@ export interface CommitView {
   repoId: number
   /** oldest first, so columns read left to right in time */
   shas: string[]
-  path: string | null
   files: { path: string; shas: string[] }[]
 }
 
@@ -155,7 +154,6 @@ interface ReviewState {
   loadCommits: () => Promise<void>
   commitView: CommitView | null
   selectCommits: (shas: string[]) => Promise<void>
-  setCommitPath: (path: string) => void
   tabs: Tab[]
   activeTabId: number | null
   /** bumped when watched files change so flow sections refetch content */
@@ -247,6 +245,10 @@ interface ReviewState {
   /** per-file wrap decisions taken from the editor's context menu */
   wrapOverrides: Record<string, boolean>
   toggleWrap: (path: string) => void
+  /** ask the tree to expand and show a folder (the status bar's path) */
+  revealDir: { repoId: number; dir: string } | null
+  openDir: (repoId: number, dir: string) => Promise<void>
+  clearRevealDir: () => void
   refresh: (repoPath: string) => Promise<void>
   syncThreads: (sessionId: number) => Promise<void>
   setConnected: (connected: boolean) => void
@@ -545,6 +547,7 @@ export const useReview = create<ReviewState>((set, get) => {
     tabs: [],
     activeTabId: null,
     contentEpoch: 0,
+    revealDir: null,
     wrapExtensions: default_wrap_extensions,
     wrapOverrides: {},
     repoSessions: {},
@@ -733,14 +736,8 @@ export const useReview = create<ReviewState>((set, get) => {
         set({ commitView: null })
         return
       }
-      const previous = get().commitView
       set({
-        commitView: {
-          repoId,
-          shas,
-          path: previous?.repoId === repoId ? previous.path : null,
-          files: [],
-        },
+        commitView: { repoId, shas, files: [] },
         viewMode: 'commits',
         activeTabId: ensureCommitsTab(repoId).id,
       })
@@ -753,18 +750,7 @@ export const useReview = create<ReviewState>((set, get) => {
       }
       const view = get().commitView
       if (view === null || view.shas !== shas) return
-      // keep the open file when it is still part of the selection
-      const keep =
-        view.path !== null && files.some((f) => f.path === view.path)
-          ? view.path
-          : (files[0]?.path ?? null)
-      set({ commitView: { ...view, files, path: keep } })
-    },
-
-    setCommitPath: (path) => {
-      const view = get().commitView
-      if (view === null) return
-      set({ commitView: { ...view, path } })
+      set({ commitView: { ...view, files } })
     },
 
     activateTab: async (id) => {
@@ -1369,6 +1355,19 @@ export const useReview = create<ReviewState>((set, get) => {
         })
       }
     },
+
+    openDir: async (repoId, dir) => {
+      if (repoId !== get().activeRepoId) await get().selectRepo(repoId)
+      const entry = get().repoSessions[repoId]
+      // a folder with nothing changed in it only exists in the all-files tree
+      const changed = entry?.files.some((f) => f.path.startsWith(`${dir}/`))
+      if (entry !== undefined && changed !== true && !entry.showAll) {
+        await get().toggleRepoShowAll(repoId)
+      }
+      set({ revealDir: { repoId, dir } })
+    },
+
+    clearRevealDir: () => set({ revealDir: null }),
 
     toggleWrap: (path) => {
       const { wrapExtensions, wrapOverrides } = get()

@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { DiffEditor, Editor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import type { ChangedFile, FileContent, Side } from '@stickie/shared'
 import { cachedFile } from '../fileCache'
 import {
+  flowClickInFlight,
   flowJumpInFlight,
+  flowScroller,
   registerFlowEditors,
   registerFlowSection,
   setFlowScroller,
@@ -100,12 +102,28 @@ function DiffSection({
     })
   }, [visible, sessionId, file.path, file.oldPath, file.status, epoch])
 
+  // a section that grows or shrinks above the reader would drag the page
+  // under them — and, when the flow gets shorter, the browser clamps the
+  // scroll upwards; keep the visible content where it was instead
+  const measured = useRef(height)
+  useLayoutEffect(() => {
+    const el = containerRef.current
+    const scroller = flowScroller()
+    const previous = measured.current
+    measured.current = height
+    if (el === null || scroller === null || previous === height) return
+    const rect = el.getBoundingClientRect()
+    if (rect.bottom > scroller.getBoundingClientRect().top) return
+    scroller.scrollTop += height - previous
+  }, [height])
+
   // scroll the section into view when picked from the tree or keyboard
   useEffect(() => {
     const el = containerRef.current
     if (el === null || selectedPath !== file.path) return
-    // a change-to-change jump already aimed at an exact line in here
-    if (flowJumpInFlight()) return
+    // a change-to-change jump already aimed at an exact line in here, and a
+    // click or selection inside this section is the reader already being here
+    if (flowJumpInFlight() || flowClickInFlight()) return
     const rect = el.getBoundingClientRect()
     const in_view = rect.top >= 0 && rect.top < window.innerHeight * 0.7
     if (!in_view) el.scrollIntoView({ block: 'start' })

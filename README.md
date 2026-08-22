@@ -11,8 +11,19 @@ the only output.
 
 ## Features
 
+- **Continuous review flow** — every changed file stacked in one scroll
+  (GitLab-style), sections mounting as they approach the viewport; or open
+  any file on its own
 - **Monaco diff review** — side-by-side or inline, full syntax highlighting,
   built from full file contents so every line is commentable, not just hunks
+- **Tabs** — a persistent diff tab per repo that resumes its scroll position,
+  a commit tab, and closable file tabs; file names carry only as much path as
+  it takes to tell two of them apart, whatever does not fit moves into a
+  dropdown rather than off the side, and the whole set comes back after a
+  reload
+- **Status bar** — the current path as clickable segments (a folder shows
+  itself in the tree, the file name copies its path) beside the review's
+  tally: files changed, viewed, unresolved, pending
 - **Comment anywhere** — changed lines, unchanged lines, untouched files
   (the *All files* tab), base or source side, single lines or ranges, or no
   code at all: notes on a whole file or on the review itself
@@ -29,6 +40,10 @@ the only output.
   the same routes), agent replies and resolves; or the zero-integration
   *Copy prompt* export — markdown, language-tagged code fences, in an order
   you can arrange — for pasting into anything
+- **Comments panel** — every note in the session in one list, in posting
+  order, scrolling to new arrivals; notes still being written stay editable
+  here while you browse elsewhere for references, and *prompt order* lets you
+  arrange what *Copy prompt* emits
 - **Multi-repo workspace** — every registered repository lives in one
   project tree (PyCharm attach-style); click into any repo's files, and
   cross-repo references (`@repo:path:L10`) capture naturally while a note
@@ -55,6 +70,11 @@ the only output.
 - **Reference pane + workspace search** — ⌘F searches every registered
   repo; results (and definition/usage hits) open in a read-only pane beside
   the diff, where selections feed refs into the note being written
+- **Reading comfort** — light and dark themes built for diffs, soft wrap by
+  file type (settings) or per file (header button, right-click menu), and
+  width rulers at 80/100/120 on anything unwrapped
+- **Settings** — GitLab instance and token resolution, the instruction block
+  *Copy prompt* appends, which file types wrap, and the theme
 
 ## Run
 
@@ -68,7 +88,8 @@ pnpm start          # serves UI + API on http://localhost:4870
 registers a repo (default: cwd) and opens the browser. During development:
 `pnpm dev` (client on :5173 proxying to the server on :4870).
 
-`pnpm package` assembles the publishable npm package under `dist-pkg/`.
+`pnpm package` assembles the publishable npm package under `dist-pkg/`, which
+carries two binaries: `stickie` (the server) and `stickie-mcp` (the MCP bridge).
 
 The server binds 127.0.0.1 only (`STICKIE_HOST` overrides). The GitLab import
 is the only outbound network call and only runs when you trigger it.
@@ -93,6 +114,33 @@ spec is generated from the code and cannot drift.
 | POST | `/api/threads/:id/resolve` · `/reopen` | close / reopen |
 | GET | `/api/sessions/:id/prompt` | self-contained markdown export |
 | GET | `/api/sessions` | every review, newest first |
+| POST | `/api/sessions/:id/submit-review` | post the pending batch |
+| GET | `/api/repos/:id/file?path=&rev=` | any file, at any revision |
+
+The table is the agent-facing subset; Swagger lists the whole surface,
+including the UI's own routes (navigation, settings, commit files, viewed
+state, GitLab import).
+
+## MCP
+
+`stickie-mcp` bridges stdio JSON-RPC to a running stickie server, exposing the
+agent routes as five tools:
+
+| Tool | Route | |
+| --- | --- | --- |
+| `list_reviews` | `GET /api/sessions` | read-only |
+| `get_review_notes` | `GET /api/sessions/:id/prompt` | read-only |
+| `list_notes` | `GET /api/sessions/:id/threads` | read-only |
+| `reply_to_note` | `POST /api/threads/:id/reply` | writes |
+| `resolve_note` | `POST /api/threads/:id/resolve` | writes |
+
+```sh
+claude mcp add stickie -- node /path/to/stickie/bin/stickie-mcp.js
+claude mcp add stickie -- npx -y stickie stickie-mcp          # once published
+```
+
+Point it elsewhere with `--url http://host:port` or `STICKIE_URL`; it defaults
+to `http://localhost:4870`. The bridge starts nothing — run stickie first.
 
 See [agents/README.md](agents/README.md) for the integration guide and
 [agents/claude-code/](agents/claude-code/) for a ready-made Claude Code

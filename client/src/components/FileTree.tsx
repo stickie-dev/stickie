@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ChangedFile } from '@stickie/shared'
 import { fileIconUrl, folderIconUrl } from '../fileIcons'
 import { useReview } from '../store'
@@ -99,6 +99,49 @@ function RepoNode({ repoId }: { repoId: number }) {
   const threads = useReview((s) => s.threads)
   const viewed = useReview((s) => s.viewed)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const revealDir = useReview((s) => s.revealDir)
+  const clearRevealDir = useReview((s) => s.clearRevealDir)
+
+  // the status bar's path asks for a folder: open its ancestors and show it
+  useEffect(() => {
+    if (revealDir === null || revealDir.repoId !== repoId) return
+    const target = revealDir.dir
+    setCollapsed((prev) => {
+      const next = new Set(
+        [...prev].filter(
+          (path) => target !== path && !target.startsWith(`${path}/`),
+        ),
+      )
+      return next
+    })
+    // the folder may only appear once the all-files tree has loaded
+    let attempts = 0
+    let timer: ReturnType<typeof setTimeout>
+    const show = () => {
+      const node = document.querySelector<HTMLElement>(
+        `[data-dir="${CSS.escape(`${repoId}:${target}`)}"]`,
+      )
+      if (node === null) {
+        attempts += 1
+        if (attempts < 20) timer = setTimeout(show, 80)
+        else clearRevealDir()
+        return
+      }
+      const settle = () => {
+        node.scrollIntoView({ block: 'nearest' })
+        // deep paths would otherwise drag the tree sideways, hiding the names
+        for (let el = node.parentElement; el !== null; el = el.parentElement) {
+          if (el.scrollLeft > 0) el.scrollLeft = 0
+        }
+      }
+      settle()
+      // the rest of the tree can still be arriving and push the row away
+      for (const delay of [120, 360]) setTimeout(settle, delay)
+      clearRevealDir()
+    }
+    timer = setTimeout(show, 30)
+    return () => clearTimeout(timer)
+  }, [revealDir, repoId, clearRevealDir])
 
   const is_active = repoId === activeRepoId
 
@@ -181,6 +224,7 @@ function RepoNode({ repoId }: { repoId: number }) {
     <div key={dir.path}>
       {dir.name !== '' && (
         <button
+          data-dir={`${repoId}:${dir.path}`}
           className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-overlay"
           onClick={() => toggleDir(dir.path)}
         >

@@ -19,14 +19,31 @@ const entries = new Map<string, Entry>()
 let scroller: HTMLElement | null = null
 let pending: { path: string; edge: Edge; expires: number } | null = null
 let jumping_until = 0
+let clicked_until = 0
 
 /** Sections must not self-scroll on selection while a jump is landing. */
 export function flowJumpInFlight(): boolean {
   return performance.now() < jumping_until
 }
 
+/**
+ * Clicking (or selecting) inside a section makes that file the current one,
+ * which must not then scroll the file's own top into view under the reader.
+ */
+export function markFlowClick(): void {
+  clicked_until = performance.now() + 400
+}
+
+export function flowClickInFlight(): boolean {
+  return performance.now() < clicked_until
+}
+
 export function setFlowScroller(el: HTMLElement | null): void {
   scroller = el
+}
+
+export function flowScroller(): HTMLElement | null {
+  return scroller
 }
 
 export function registerFlowSection(

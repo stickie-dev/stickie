@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DiffEditor, Editor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { editor_font, monaco } from '../monacoSetup'
 import type { Side } from '@stickie/shared'
 import { api } from '../api'
 import type { NavHit } from '../api'
-import { flowJump } from '../flowNav'
+import { flowJump, markFlowClick } from '../flowNav'
 import { languageFor } from '../languages'
 import { useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
@@ -148,6 +148,7 @@ function makeCaptureAttacher(
         filePath !== undefined &&
         useReview.getState().selectedPath !== filePath
       ) {
+        markFlowClick()
         useReview.getState().flowSelect(filePath)
       }
       const target_type = event.target.type
@@ -509,7 +510,12 @@ export function FileView() {
     setDefinitionPick(null)
   }, [selectedPath])
 
+  // the editor instance outlives a file switch, so its scroll offset has to
+  // be reset by hand — once per file, and never because a reveal just ended
+  const scrolled_path = useRef<string | null>(null)
   useEffect(() => {
+    if (selectedPath === null || scrolled_path.current === selectedPath) return
+    scrolled_path.current = selectedPath
     if (reveal !== null) return
     for (const instance of [originalEditor, modifiedEditor, singleEditor]) {
       instance?.setScrollTop(0)

@@ -8,6 +8,7 @@ import { FileTree } from './components/FileTree'
 import { FileView } from './components/FileView'
 import { SearchOverlay } from './components/SearchOverlay'
 import { SidePane } from './components/SidePane'
+import { StatusBar } from './components/StatusBar'
 import { TabBar } from './components/TabBar'
 import { Toasts } from './components/Toasts'
 import { TopBar } from './components/TopBar'
@@ -175,6 +176,7 @@ export function App() {
             {commentsOpen && <CommentsPanel />}
           </div>
           <UsagesPanel />
+          <StatusBar />
         </div>
       )}
       <DraftPill />
