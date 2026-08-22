@@ -91,6 +91,7 @@ function RepoNode({ repoId }: { repoId: number }) {
   const repo = useReview((s) => s.repos.find((r) => r.id === repoId))
   const entry = useReview((s) => s.repoSessions[repoId])
   const activeRepoId = useReview((s) => s.activeRepoId)
+  const selectRepo = useReview((s) => s.selectRepo)
   const selectedPath = useReview((s) => s.selectedPath)
   const openFileInRepo = useReview((s) => s.openFileInRepo)
   const toggleRepoExpanded = useReview((s) => s.toggleRepoExpanded)
@@ -214,12 +215,20 @@ function RepoNode({ repoId }: { repoId: number }) {
         className={`group flex w-full items-center gap-1.5 px-2 py-1 ${is_active ? 'bg-overlay' : 'hover:bg-overlay'}`}
       >
         <button
-          className="flex min-w-0 grow items-center gap-1.5 text-left"
+          className="w-2 shrink-0 text-faint hover:text-ink"
+          title={expanded ? 'collapse' : 'expand'}
           onClick={() => toggleRepoExpanded(repoId)}
         >
-          <span className="w-2 shrink-0 text-faint">
-            {expanded ? '▾' : '▸'}
-          </span>
+          {expanded ? '▾' : '▸'}
+        </button>
+        <button
+          className="flex min-w-0 grow items-center gap-1.5 text-left"
+          title="make this repo active (source/base pickers apply to it)"
+          onClick={() => {
+            if (is_active) toggleRepoExpanded(repoId)
+            else void selectRepo(repoId)
+          }}
+        >
           <span
             className={`truncate font-semibold ${is_active ? 'text-ink' : 'text-soft'}`}
           >
