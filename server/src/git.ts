@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { execa } from 'execa'
 import type {
@@ -22,6 +23,16 @@ async function gitOrNull(repo: string, args: string[]): Promise<string | null> {
   } catch {
     return null
   }
+}
+
+/** Resolve ~ and relative segments the way a shell would. */
+export function expandUserPath(p: string): string {
+  const trimmed = p.trim()
+  if (trimmed === '~') return os.homedir()
+  if (trimmed.startsWith('~/')) {
+    return path.join(os.homedir(), trimmed.slice(2))
+  }
+  return path.resolve(trimmed)
 }
 
 export function assertSafeRelativePath(p: string): void {

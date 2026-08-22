@@ -22,12 +22,12 @@ export function AddRepo() {
     <div className="mx-auto mt-24 w-[28rem] rounded-lg border border-edge bg-panel p-6">
       <h2 className="text-sm font-semibold text-ink">Add a repository</h2>
       <p className="mt-1 text-xs text-faint">
-        Absolute path to a git repository to review.
+        Path to a git repository to review (~ works).
       </p>
       <div className="mt-3 flex gap-2">
         <input
           className="grow rounded border border-edge bg-surface px-2 py-1.5 font-mono text-xs text-ink outline-none focus:border-accent"
-          placeholder="/path/to/repo"
+          placeholder="~/path/to/repo"
           value={path}
           onChange={(e) => setPath(e.target.value)}
           onKeyDown={(e) => {

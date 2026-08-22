@@ -6,6 +6,7 @@ import { buildPrompt } from './export.js'
 import {
   changedFiles,
   defaultBranch,
+  expandUserPath,
   fileAtSide,
   gitOrigin,
   gitStatus,
@@ -236,10 +237,11 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
     }),
     async (c) => {
       const body = c.req.valid('json')
-      if (!(await isGitRepo(body.path))) {
-        return c.json({ error: `not a git repository: ${body.path}` }, 400)
+      const expanded = expandUserPath(body.path)
+      if (!(await isGitRepo(expanded))) {
+        return c.json({ error: `not a git repository: ${expanded}` }, 400)
       }
-      const root = await repoRoot(body.path)
+      const root = await repoRoot(expanded)
       return c.json(store.addRepo(root), 200)
     },
   )
