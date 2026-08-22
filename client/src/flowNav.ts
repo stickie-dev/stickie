@@ -128,11 +128,22 @@ export function flowJump(
   onFile: (path: string) => void,
 ): void {
   if (paths.length === 0) return
+  // a jump into a file whose editor is still loading owns the keys until it
+  // lands; otherwise a second press races past the file it was fetching
+  if (pending !== null && performance.now() < pending.expires) return
   const forward = direction === 'next'
   const start_index = selectedPath === null ? -1 : paths.indexOf(selectedPath)
   const index = start_index === -1 ? (forward ? 0 : paths.length - 1) : start_index
   const current_path = paths[index]
   const current = current_path === undefined ? undefined : entries.get(current_path)
+
+  if (current_path !== undefined && current?.modified == null) {
+    // nothing is known about where the reader is inside a file that has not
+    // rendered yet, so start at its own edge rather than skipping over it
+    onFile(current_path)
+    jumpToFile(current_path, forward ? 'first' : 'last')
+    return
+  }
 
   if (current?.modified != null && current_path !== undefined) {
     const starts = changeStarts(current)

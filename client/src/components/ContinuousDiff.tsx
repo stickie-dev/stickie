@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { DiffEditor, Editor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import type { ChangedFile, FileContent, Side } from '@stickie/shared'
-import { api } from '../api'
+import { cachedFile } from '../fileCache'
 import {
   flowJumpInFlight,
   registerFlowEditors,
@@ -84,10 +84,10 @@ function DiffSection({
     const want_source = file.status !== 'deleted'
     void Promise.all([
       want_base
-        ? api.file(sessionId, file.oldPath ?? file.path, 'base')
+        ? cachedFile(sessionId, epoch, file.oldPath ?? file.path, 'base')
         : Promise.resolve(null),
       want_source
-        ? api.file(sessionId, file.path, 'source')
+        ? cachedFile(sessionId, epoch, file.path, 'source')
         : Promise.resolve(null),
     ]).then(([b, s]) => {
       setBase(b)

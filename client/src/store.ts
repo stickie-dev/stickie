@@ -11,6 +11,7 @@ import type {
 } from '@stickie/shared'
 import { api } from './api'
 import type { NavHit } from './api'
+import { cachedFile, prefetchFile } from './fileCache'
 
 export interface Draft {
   id: number
@@ -112,6 +113,8 @@ interface ReviewState {
   selectedStatus: ChangedFile['status'] | 'unchanged' | null
   baseContent: FileContent | null
   sourceContent: FileContent | null
+  /** a newer file is on its way; the previous one stays on screen until then */
+  fileLoading: boolean
   threads: Thread[]
   viewed: Set<string>
   drafts: Draft[]
@@ -342,6 +345,29 @@ export const useReview = create<ReviewState>((set, get) => {
     return true
   }
 
+  /** Keeps the files either side of the open one warm, so j/k lands instantly. */
+  function prefetchNeighbours(path: string): void {
+    const { session, files, contentEpoch } = get()
+    if (session === null) return
+    const index = files.findIndex((f) => f.path === path)
+    if (index === -1) return
+    for (const step of [1, -1]) {
+      const neighbour = files[index + step]
+      if (neighbour === undefined) continue
+      if (neighbour.status !== 'added' && neighbour.status !== 'untracked') {
+        prefetchFile(
+          session.id,
+          contentEpoch,
+          neighbour.oldPath ?? neighbour.path,
+          'base',
+        )
+      }
+      if (neighbour.status !== 'deleted') {
+        prefetchFile(session.id, contentEpoch, neighbour.path, 'source')
+      }
+    }
+  }
+
   function ensureFlowTab(repoId: number): Tab {
     const existing = get().tabs.find(
       (t) => t.kind === 'flow' && t.repoId === repoId,
@@ -415,6 +441,7 @@ export const useReview = create<ReviewState>((set, get) => {
     selectedStatus: null,
     baseContent: null,
     sourceContent: null,
+    fileLoading: false,
     threads: [],
     viewed: new Set<string>(),
     drafts: [],
@@ -729,7 +756,7 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     openFile: async (path, status) => {
-      const { session, files } = get()
+      const { session, files, contentEpoch } = get()
       if (session === null) return
       const resolved = status ?? statusOf(files, path)
       // the draft survives navigation so other files can be browsed and
@@ -738,8 +765,7 @@ export const useReview = create<ReviewState>((set, get) => {
       set({
         selectedPath: path,
         selectedStatus: resolved,
-        baseContent: null,
-        sourceContent: null,
+        fileLoading: true,
         viewMode: 'file',
         activeTabId:
           repo_for_tab === null
@@ -751,12 +777,17 @@ export const useReview = create<ReviewState>((set, get) => {
       const wantBase = resolved !== 'added' && resolved !== 'untracked'
       const wantSource = resolved !== 'deleted'
       const [base, source] = await Promise.all([
-        wantBase ? api.file(session.id, oldPath, 'base') : Promise.resolve(null),
-        wantSource ? api.file(session.id, path, 'source') : Promise.resolve(null),
+        wantBase
+          ? cachedFile(session.id, contentEpoch, oldPath, 'base')
+          : Promise.resolve(null),
+        wantSource
+          ? cachedFile(session.id, contentEpoch, path, 'source')
+          : Promise.resolve(null),
       ])
       // ignore stale responses after a quick file switch
       if (get().selectedPath !== path) return
-      set({ baseContent: base, sourceContent: source })
+      set({ baseContent: base, sourceContent: source, fileLoading: false })
+      prefetchNeighbours(path)
       recordNav(path, 1)
       const repoId = get().activeRepoId
       if (repoId !== null) {
@@ -1109,7 +1140,12 @@ export const useReview = create<ReviewState>((set, get) => {
         if (status !== selectedStatus || status !== 'unchanged') {
           const wantSource = status !== 'deleted'
           const source = wantSource
-            ? await api.file(session.id, selectedPath, 'source')
+            ? await cachedFile(
+                session.id,
+                get().contentEpoch,
+                selectedPath,
+                'source',
+              )
             : null
           if (get().selectedPath === selectedPath) {
             set({ sourceContent: source, selectedStatus: status })

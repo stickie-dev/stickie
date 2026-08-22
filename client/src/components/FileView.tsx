@@ -334,6 +334,7 @@ export function FileView() {
   const toggleViewed = useReview((s) => s.toggleViewed)
   const files = useReview((s) => s.files)
   const openFile = useReview((s) => s.openFile)
+  const fileLoading = useReview((s) => s.fileLoading)
 
   // review keyboard flow; inert while any input has focus
   useEffect(() => {
@@ -483,6 +484,13 @@ export function FileView() {
     setDefinitionPick(null)
   }, [selectedPath])
 
+  useEffect(() => {
+    if (reveal !== null) return
+    for (const instance of [originalEditor, modifiedEditor, singleEditor]) {
+      instance?.setScrollTop(0)
+    }
+  }, [selectedPath, reveal, originalEditor, modifiedEditor, singleEditor])
+
   if (viewMode === 'flow') {
     if (session === null || files.length === 0) {
       return (
@@ -566,6 +574,7 @@ export function FileView() {
         <span className="rounded bg-overlay px-1.5 py-0.5 text-soft">
           {selectedStatus}
         </span>
+        {fileLoading && <span className="shrink-0 text-faint">loading…</span>}
         <label className="flex shrink-0 cursor-pointer items-center gap-1 text-soft hover:text-ink">
           <input
             type="checkbox"
@@ -613,7 +622,6 @@ export function FileView() {
         {!binary && !loading && has_both && (
           <>
             <DiffEditor
-              key={selectedPath}
               original={baseContent?.content ?? ''}
               modified={sourceContent?.content ?? ''}
               language={language}
@@ -653,7 +661,6 @@ export function FileView() {
         {!binary && !loading && !has_both && single_content != null && (
           <>
             <Editor
-              key={selectedPath}
               value={single_content}
               language={language}
               theme={monaco_theme}
