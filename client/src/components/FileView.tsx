@@ -644,13 +644,20 @@ function DefinitionPicker({
 }) {
   const openHit = useReview((s) => s.openHit)
   const openHitSide = useReview((s) => s.openHitSide)
+  const repos = useReview((s) => s.repos)
+  const repoLabel = (hit: NavHit) =>
+    repos.find(
+      (r) => r.path === hit.repoPath || hit.repoPath.startsWith(r.path + '/'),
+    )?.name ?? hit.repoPath.split('/').at(-1)
   return (
+    <div className="fixed inset-0 z-50" onMouseDown={onDone}>
     <div
-      className="fixed z-50 max-h-64 w-[28rem] -translate-x-1/2 overflow-y-auto rounded-md border border-edge bg-panel text-xs shadow-xl"
+      className="fixed z-50 max-h-64 w-[30rem] -translate-x-1/2 overflow-y-auto rounded-md border border-edge bg-panel text-xs shadow-xl"
       style={{
-        left: Math.min(Math.max(pick.x, 240), window.innerWidth - 240),
+        left: Math.min(Math.max(pick.x, 250), window.innerWidth - 250),
         top: pick.y + 12,
       }}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       <div className="flex items-center border-b border-edge px-3 py-1.5">
         <span className="text-soft">
@@ -670,12 +677,15 @@ function DefinitionPicker({
           className="group flex w-full items-center gap-2 px-3 py-1 hover:bg-overlay"
         >
           <button
-            className="flex min-w-0 grow gap-2 text-left font-mono"
+            className="flex min-w-0 grow items-center gap-2 text-left font-mono"
             onClick={() => {
               void openHit(hit)
               onDone()
             }}
           >
+            <span className="shrink-0 rounded bg-overlay px-1 text-[10px] text-faint">
+              {repoLabel(hit)}
+            </span>
             <span className="shrink-0 text-soft">
               {hit.path}:{hit.line}
             </span>
@@ -693,6 +703,7 @@ function DefinitionPicker({
           </button>
         </div>
       ))}
+    </div>
     </div>
   )
 }

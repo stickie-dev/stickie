@@ -33,6 +33,13 @@ interface TreeDir {
   files: TreeFile[]
 }
 
+const test_file_pattern =
+  /^(test_|tests?\.)|\.(test|spec)\.|_test\.|^conftest\./
+
+function isTestFile(name: string): boolean {
+  return test_file_pattern.test(name)
+}
+
 function buildTree(files: TreeFile[]): TreeDir {
   const root: TreeDir = { name: '', path: '', dirs: [], files: [] }
   const dir_map = new Map<string, TreeDir>([['', root]])
@@ -52,7 +59,11 @@ function buildTree(files: TreeFile[]): TreeDir {
   }
   for (const dir of dir_map.values()) {
     dir.dirs.sort((a, b) => a.name.localeCompare(b.name))
-    dir.files.sort((a, b) => a.name.localeCompare(b.name))
+    // tests read best after the code they exercise
+    dir.files.sort((a, b) => {
+      const rank = Number(isTestFile(a.name)) - Number(isTestFile(b.name))
+      return rank !== 0 ? rank : a.name.localeCompare(b.name)
+    })
   }
   return root
 }
