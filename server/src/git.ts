@@ -143,6 +143,41 @@ export async function listRecentCommits(
     })
 }
 
+export interface CommitBetween {
+  sha: string
+  shortSha: string
+  parentSha: string
+  subject: string
+}
+
+export async function listCommitsBetween(
+  root: string,
+  baseSha: string,
+  head: string,
+  limit = 200,
+): Promise<CommitBetween[]> {
+  const out = await gitOrNull(root, [
+    'log',
+    `--max-count=${limit}`,
+    '--first-parent',
+    '--format=%H%x09%h%x09%P%x09%s',
+    `${baseSha}..${head}`,
+  ])
+  if (out === null) return []
+  return out
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => {
+      const [sha = '', shortSha = '', parents = '', ...rest] = line.split('\t')
+      return {
+        sha,
+        shortSha,
+        parentSha: parents.split(' ')[0] ?? '',
+        subject: rest.join('\t'),
+      }
+    })
+}
+
 export async function defaultBranch(repo: string): Promise<string> {
   const origin_head = await gitOrNull(repo, [
     'symbolic-ref',

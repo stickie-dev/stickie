@@ -18,6 +18,13 @@ export interface SettingsState {
   tokenSource: string | null
 }
 
+export interface CommitBetween {
+  sha: string
+  shortSha: string
+  parentSha: string
+  subject: string
+}
+
 export interface NavHit {
   repoPath: string
   path: string
@@ -60,6 +67,9 @@ export const api = {
 
   repin: (sessionId: number) =>
     post(`/api/sessions/${sessionId}/repin`, {}).then(toJson<Session>),
+
+  commits: (sessionId: number) =>
+    fetch(`/api/sessions/${sessionId}/commits`).then(toJson<CommitBetween[]>),
 
   diff: (sessionId: number) =>
     fetch(`/api/sessions/${sessionId}/diff`).then(toJson<ChangedFile[]>),

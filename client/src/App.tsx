@@ -3,10 +3,12 @@ import type { FsEvent } from '@stickie/shared'
 import './monacoSetup'
 import { AddRepo } from './components/AddRepo'
 import { CommentsPanel } from './components/CommentsPanel'
+import { CommitsPanel } from './components/CommitsPanel'
 import { FileTree } from './components/FileTree'
 import { FileView } from './components/FileView'
 import { SearchOverlay } from './components/SearchOverlay'
 import { SidePane } from './components/SidePane'
+import { TabBar } from './components/TabBar'
 import { Toasts } from './components/Toasts'
 import { TopBar } from './components/TopBar'
 import { UsagesPanel } from './components/UsagesPanel'
@@ -149,11 +151,17 @@ export function App() {
       ) : (
         <div className="flex min-h-0 grow flex-col">
           <div className="flex min-h-0 grow">
-            <aside className="w-64 shrink-0 border-r border-edge">
-              <FileTree />
+            <aside className="flex w-64 shrink-0 flex-col border-r border-edge">
+              <div className="min-h-0 grow">
+                <FileTree />
+              </div>
+              <CommitsPanel />
             </aside>
-            <main className="min-w-0 grow">
-              <FileView />
+            <main className="flex min-w-0 grow flex-col">
+              <TabBar />
+              <div className="min-h-0 grow">
+                <FileView />
+              </div>
             </main>
             <SidePane />
             {commentsOpen && <CommentsPanel />}

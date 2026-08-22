@@ -7,6 +7,7 @@ import {
   changedFiles,
   defaultBranch,
   expandUserPath,
+  listCommitsBetween,
   fileAtSide,
   fileInWorktree,
   gitOrigin,
@@ -434,6 +435,42 @@ export function createApp(store: Store, hub: WatchHub): OpenAPIHono {
       )
       store.moveOpenThreads(session.id, next.id)
       return c.json({ ...next, baseStale: false }, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/sessions/{id}/commits',
+      tags: ['sessions'],
+      summary: 'Commits between the pinned base and the source head',
+      request: { params: id_param },
+      responses: {
+        200: json_response(
+          z.array(
+            z.object({
+              sha: z.string(),
+              shortSha: z.string(),
+              parentSha: z.string(),
+              subject: z.string(),
+            }),
+          ),
+          'Newest first',
+        ),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const session = store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      const head =
+        session.source.kind === 'worktree' ? 'HEAD' : session.source.value
+      return c.json(
+        await listCommitsBetween(sourceRoot(session), session.baseSha, head),
+        200,
+      )
     },
   )
 

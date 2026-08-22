@@ -23,6 +23,16 @@ export interface Draft {
   body: string
 }
 
+export interface Tab {
+  id: number
+  kind: 'flow' | 'file'
+  repoId: number
+  /** file tabs only */
+  path?: string
+}
+
+let tab_seq = 0
+
 export interface NavEntry {
   repoId: number
   path: string
@@ -84,6 +94,12 @@ interface ReviewState {
   navIndex: number
   sidePane: { repoId: number; repoName: string; path: string; line: number } | null
   searchOpen: boolean
+  /** flow = continuous GitLab-style scroll of every changed file */
+  viewMode: 'flow' | 'file'
+  tabs: Tab[]
+  activeTabId: number | null
+  /** bumped when watched files change so flow sections refetch content */
+  contentEpoch: number
   repoSessions: Record<
     number,
     {
@@ -115,6 +131,10 @@ interface ReviewState {
     path: string,
     status?: ChangedFile['status'] | 'unchanged',
   ) => Promise<void>
+  flowSelect: (path: string) => void
+  setViewMode: (mode: 'flow' | 'file') => Promise<void>
+  activateTab: (id: number) => Promise<void>
+  closeTab: (id: number) => void
   toggleRepoExpanded: (repoId: number) => void
   toggleRepoShowAll: (repoId: number) => Promise<void>
   openSide: (repoId: number, path: string, line: number) => void
@@ -206,9 +226,17 @@ export const useReview = create<ReviewState>((set, get) => {
           },
         },
       })
+      const flow_tab = ensureFlowTab(activeRepoId)
+      if (get().viewMode === 'flow') {
+        set({ activeTabId: flow_tab.id })
+      }
       const first = files[0]
       if (first !== undefined) {
-        await get().openFile(first.path, first.status)
+        if (get().viewMode === 'flow') {
+          get().flowSelect(first.path)
+        } else {
+          await get().openFile(first.path, first.status)
+        }
       }
     } catch (error) {
       set({ error: error instanceof Error ? error.message : String(error) })
@@ -248,6 +276,28 @@ export const useReview = create<ReviewState>((set, get) => {
     } catch (error) {
       get().pushToast('error', `workspace: ${message(error)}`)
     }
+  }
+
+  function ensureFlowTab(repoId: number): Tab {
+    const existing = get().tabs.find(
+      (t) => t.kind === 'flow' && t.repoId === repoId,
+    )
+    if (existing !== undefined) return existing
+    tab_seq += 1
+    const tab: Tab = { id: tab_seq, kind: 'flow', repoId }
+    set({ tabs: [...get().tabs, tab] })
+    return tab
+  }
+
+  function ensureFileTab(repoId: number, path: string): Tab {
+    const existing = get().tabs.find(
+      (t) => t.kind === 'file' && t.repoId === repoId && t.path === path,
+    )
+    if (existing !== undefined) return existing
+    tab_seq += 1
+    const tab: Tab = { id: tab_seq, kind: 'file', repoId, path }
+    set({ tabs: [...get().tabs, tab] })
+    return tab
   }
 
   function recordNav(path: string, line: number): void {
@@ -319,6 +369,10 @@ export const useReview = create<ReviewState>((set, get) => {
     navIndex: -1,
     sidePane: null,
     searchOpen: false,
+    viewMode: 'flow',
+    tabs: [],
+    activeTabId: null,
+    contentEpoch: 0,
     repoSessions: {},
     perRepo: {},
 
@@ -444,7 +498,79 @@ export const useReview = create<ReviewState>((set, get) => {
       if (repoId !== get().activeRepoId) {
         await get().selectRepo(repoId)
       }
-      await get().openFile(path, status)
+      // changed files review in the continuous flow; anything else (all-files
+      // browsing, unchanged refs) opens the single-file view
+      const changed = get().files.some((f) => f.path === path)
+      if (get().viewMode === 'flow' && changed) {
+        get().flowSelect(path)
+      } else {
+        await get().openFile(path, status)
+      }
+    },
+
+    flowSelect: (path) => {
+      const { files, activeRepoId } = get()
+      const flow_tab =
+        activeRepoId === null ? null : ensureFlowTab(activeRepoId)
+      set({
+        viewMode: 'flow',
+        selectedPath: path,
+        selectedStatus: statusOf(files, path),
+        activeTabId: flow_tab?.id ?? get().activeTabId,
+      })
+      recordNav(path, 1)
+      if (activeRepoId !== null) {
+        const perRepo = get().perRepo
+        const entry = perRepo[activeRepoId]
+        if (entry !== undefined) {
+          set({
+            perRepo: {
+              ...perRepo,
+              [activeRepoId]: { ...entry, selectedPath: path },
+            },
+          })
+        }
+      }
+    },
+
+    activateTab: async (id) => {
+      const tab = get().tabs.find((t) => t.id === id)
+      if (tab === undefined) return
+      if (tab.repoId !== get().activeRepoId) {
+        await get().selectRepo(tab.repoId)
+      }
+      if (tab.kind === 'flow') {
+        set({ viewMode: 'flow', activeTabId: tab.id })
+      } else if (tab.path !== undefined) {
+        await get().openFile(tab.path)
+      }
+    },
+
+    closeTab: (id) => {
+      const { tabs, activeTabId } = get()
+      const closing = tabs.find((t) => t.id === id)
+      if (closing === undefined) return
+      const remaining = tabs.filter((t) => t.id !== id)
+      set({ tabs: remaining })
+      if (activeTabId === id) {
+        const fallback =
+          remaining.find(
+            (t) => t.kind === 'flow' && t.repoId === closing.repoId,
+          ) ?? remaining.at(-1)
+        if (fallback !== undefined) {
+          void get().activateTab(fallback.id)
+        } else {
+          set({ activeTabId: null })
+        }
+      }
+    },
+
+    setViewMode: async (mode) => {
+      set({ viewMode: mode })
+      const { selectedPath } = get()
+      if (mode === 'file' && selectedPath !== null) {
+        await get().openFile(selectedPath)
+      }
     },
 
     toggleRepoExpanded: (repoId) => {
@@ -543,11 +669,17 @@ export const useReview = create<ReviewState>((set, get) => {
       const resolved = status ?? statusOf(files, path)
       // the draft survives navigation so other files can be browsed and
       // referenced while composing
+      const repo_for_tab = get().activeRepoId
       set({
         selectedPath: path,
         selectedStatus: resolved,
         baseContent: null,
         sourceContent: null,
+        viewMode: 'file',
+        activeTabId:
+          repo_for_tab === null
+            ? get().activeTabId
+            : ensureFileTab(repo_for_tab, path).id,
       })
       const oldPath =
         files.find((f) => f.path === path)?.oldPath ?? path
@@ -878,7 +1010,7 @@ export const useReview = create<ReviewState>((set, get) => {
         api.threads(session.id, true),
         api.session(session.id).catch(() => null),
       ])
-      set({ files, threads })
+      set({ files, threads, contentEpoch: get().contentEpoch + 1 })
       if (fresh !== null && get().session?.id === session.id) {
         set({ session: fresh })
       }

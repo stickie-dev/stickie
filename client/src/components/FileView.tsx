@@ -8,6 +8,7 @@ import type { NavHit } from '../api'
 import { languageFor } from '../languages'
 import { useReview } from '../store'
 import { CommentLayer } from './CommentLayer'
+import { ContinuousDiff } from './ContinuousDiff'
 
 const side_by_side_min_width = 1440
 
@@ -126,9 +127,21 @@ function makeCaptureAttacher(
   setTarget: (target: CaptureTarget | null) => void,
   setPick: (pick: DefinitionPick | null) => void,
 ) {
-  return (instance: editor.IStandaloneCodeEditor, side: Side) => {
+  return (
+    instance: editor.IStandaloneCodeEditor,
+    side: Side,
+    filePath?: string,
+  ) => {
     let gutter_armed = false
     instance.onMouseDown((event) => {
+      // clicking into a flow section makes its file the selected one so
+      // note anchoring and navigation stay coherent
+      if (
+        filePath !== undefined &&
+        useReview.getState().selectedPath !== filePath
+      ) {
+        useReview.getState().flowSelect(filePath)
+      }
       const target_type = event.target.type
       if (
         (event.event.metaKey || event.event.ctrlKey) &&
@@ -350,7 +363,8 @@ export function FileView() {
               : Math.max(index - 1, 0)
           const path = paths[next]
           if (path !== undefined && path !== state.selectedPath) {
-            void state.openFile(path)
+            if (state.viewMode === 'flow') state.flowSelect(path)
+            else void state.openFile(path)
           }
           break
         }
@@ -412,6 +426,9 @@ export function FileView() {
   const sideBySide = sideBySideOverride ?? width >= side_by_side_min_width
   const monaco_theme = theme === 'dark' ? 'stickie-dark' : 'stickie-light'
 
+  const viewMode = useReview((s) => s.viewMode)
+  const setViewMode = useReview((s) => s.setViewMode)
+  const session = useReview((s) => s.session)
   const reveal = useReview((s) => s.reveal)
   const clearReveal = useReview((s) => s.clearReveal)
   const reveal_editor = modifiedEditor ?? singleEditor
@@ -451,6 +468,49 @@ export function FileView() {
     setCaptureTarget(null)
     setDefinitionPick(null)
   }, [selectedPath])
+
+  if (viewMode === 'flow') {
+    if (session === null || files.length === 0) {
+      return (
+        <div className="flex h-full items-center justify-center text-sm text-faint">
+          No changes to review
+        </div>
+      )
+    }
+    return (
+      <div className="flex h-full flex-col">
+        <div className="flex items-center gap-3 border-b border-edge px-3 py-1.5 text-xs">
+          <span className="text-soft">
+            {files.length} changed file{files.length === 1 ? '' : 's'}
+          </span>
+          <span className="grow" />
+        </div>
+        <div className="min-h-0 grow">
+          <ContinuousDiff
+            files={files}
+            sessionId={session.id}
+            repoId={activeRepoId ?? -1}
+            options={editorOptions(width)}
+            sideBySide={sideBySide}
+            theme={monaco_theme}
+            attach={attachCapture}
+          />
+        </div>
+        {captureTarget !== null && (
+          <CaptureActions
+            target={captureTarget}
+            onDone={() => setCaptureTarget(null)}
+          />
+        )}
+        {definitionPick !== null && (
+          <DefinitionPicker
+            pick={definitionPick}
+            onDone={() => setDefinitionPick(null)}
+          />
+        )}
+      </div>
+    )
+  }
 
   if (selectedPath === null) {
     return (
