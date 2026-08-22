@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Editor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { api } from '../api'
+import { editor_font } from '../monacoSetup'
 import { languageFor } from '../languages'
 import { useReview } from '../store'
 
@@ -103,15 +104,26 @@ export function SidePane() {
             key={`${pane.repoId}:${pane.path}`}
             value={content}
             language={languageFor(pane.path)}
-            theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+            theme={theme === 'dark' ? 'stickie-dark' : 'stickie-light'}
             options={{
               readOnly: true,
               minimap: { enabled: false },
               scrollBeyondLastLine: false,
               automaticLayout: true,
               renderLineHighlight: 'none',
-              fontSize: 11,
+              fontSize: 11.5,
+              fontFamily: editor_font,
+              fontLigatures: true,
+              lineHeight: 20,
               wordWrap: 'on',
+              padding: { top: 8, bottom: 8 },
+              lineNumbersMinChars: 3,
+              overviewRulerBorder: false,
+              scrollbar: {
+                verticalScrollbarSize: 10,
+                horizontalScrollbarSize: 10,
+                useShadows: false,
+              },
             }}
             onMount={(ed) => {
               setInstance(ed)

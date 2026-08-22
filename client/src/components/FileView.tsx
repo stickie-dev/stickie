@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DiffEditor, Editor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
-import { monaco } from '../monacoSetup'
+import { editor_font, monaco } from '../monacoSetup'
 import type { Side } from '@stickie/shared'
 import { api } from '../api'
 import type { NavHit } from '../api'
@@ -24,6 +24,7 @@ function useWindowWidth(): number {
 function editorOptions(
   width: number,
 ): editor.IStandaloneEditorConstructionOptions {
+  const fontSize = width < 1440 ? 11.5 : width < 1800 ? 12.5 : 13
   return {
     readOnly: true,
     minimap: { enabled: false },
@@ -31,8 +32,26 @@ function editorOptions(
     automaticLayout: true,
     glyphMargin: false,
     renderLineHighlight: 'none',
-    fontSize: width < 1440 ? 11 : width < 1800 ? 12 : 13,
+    fontSize,
+    fontFamily: editor_font,
+    fontLigatures: true,
+    lineHeight: Math.round(fontSize * 1.7),
+    letterSpacing: 0.2,
     wordWrap: 'on',
+    padding: { top: 10, bottom: 10 },
+    lineNumbersMinChars: 3,
+    lineDecorationsWidth: 12,
+    overviewRulerBorder: false,
+    hideCursorInOverviewRuler: true,
+    scrollbar: {
+      verticalScrollbarSize: 10,
+      horizontalScrollbarSize: 10,
+      useShadows: false,
+    },
+    guides: { indentation: true },
+    renderWhitespace: 'none',
+    smoothScrolling: true,
+    cursorBlinking: 'smooth',
   }
 }
 
@@ -391,7 +410,7 @@ export function FileView() {
   }, [diffEditor])
 
   const sideBySide = sideBySideOverride ?? width >= side_by_side_min_width
-  const monaco_theme = theme === 'dark' ? 'vs-dark' : 'vs'
+  const monaco_theme = theme === 'dark' ? 'stickie-dark' : 'stickie-light'
 
   const reveal = useReview((s) => s.reveal)
   const clearReveal = useReview((s) => s.clearReveal)
