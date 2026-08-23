@@ -1,6 +1,10 @@
+import { existsSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { swaggerUI } from '@hono/swagger-ui'
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi'
 import type {
+  Author,
   ClientEvent,
   RepoInfo,
   Session,
@@ -15,6 +19,7 @@ import {
   setDatabaseUrl,
 } from './config.js'
 import { buildPrompt, default_prompt_instructions } from './export.js'
+import { Identity } from './identity.js'
 import {
   changedFiles,
   commitFiles,
@@ -155,6 +160,8 @@ const message_schema = z
     author: z.enum(['user', 'agent']),
     body: z.string(),
     createdAt: z.string(),
+    /** the name behind the role; null on imported and pre-actor rows */
+    actorName: z.string().nullable(),
   })
   .openapi('ThreadMessage')
 
@@ -171,6 +178,7 @@ const thread_schema = z
     pending: z.boolean(),
     origin: z.string().nullable(),
     createdAt: z.string(),
+    actorName: z.string().nullable(),
     messages: z.array(message_schema),
   })
   .openapi('Thread')
@@ -192,11 +200,19 @@ const thread_body = z.object({
   author: z.enum(['user', 'agent']).default('user'),
   // user notes default into the pending review batch; agent notes post
   pending: z.boolean().optional(),
+  /**
+   * What an agent calls itself. Optional on purpose: every adapter written
+   * before this field existed keeps working, and its notes land under one
+   * shared "agent" actor rather than failing.
+   */
+  actor: z.string().max(64).optional(),
 })
 
 const message_body = z.object({
   author: z.enum(['user', 'agent']),
   body: z.string().min(1),
+  /** what an agent calls itself; see `thread_body.actor` */
+  actor: z.string().max(64).optional(),
 })
 
 const repo_body = z.object({ path: z.string().min(1) })
@@ -235,6 +251,20 @@ function redactUrl(url: string | null): string | null {
   }
 }
 
+/**
+ * The MCP bridge as a command someone can paste. Both this module and the
+ * bundled `bin/` sit two levels under the install root whether it is run from
+ * source or from a build, and an install that has no bin/ (an odd layout, or
+ * the published package under another name) gets the npx form instead.
+ */
+function mcpCommand(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const bridge = path.resolve(here, '../../bin/stickie-mcp.js')
+  return existsSync(bridge)
+    ? `claude mcp add stickie -- node ${bridge}`
+    : 'claude mcp add stickie -- npx -y stickie stickie-mcp'
+}
+
 // extensions whose files open soft-wrapped; prose and data, not code
 const default_wrap_extensions = 'md,markdown,txt,rst,csv,log,json'
 
@@ -251,6 +281,19 @@ export function createApp(
   emit: Emit = () => undefined,
 ): OpenAPIHono {
   const app = new OpenAPIHono()
+
+  const identity = new Identity(store, async () =>
+    (await store.listRepos()).map((repo) => repo.path),
+  )
+
+  /** The actor a write is attributed to: the person here, or the agent asking. */
+  const actorFor = async (
+    author: Author,
+    claimed: string | undefined,
+  ): Promise<number> =>
+    author === 'agent'
+      ? (await identity.agent(claimed)).id
+      : (await identity.current()).actor.id
 
   const threadChanged = (
     action: ThreadEvent['action'],
@@ -761,7 +804,10 @@ export function createApp(
           '',
           body.author,
           body.body,
-          { pending: body.pending ?? body.author === 'user' },
+          {
+            pending: body.pending ?? body.author === 'user',
+            actorId: await actorFor(body.author, body.actor),
+          },
         )
         threadChanged('created', note.sessionId, note.id)
         return c.json(note, 201)
@@ -790,7 +836,10 @@ export function createApp(
         snippet,
         body.author,
         body.body,
-        { pending: body.pending ?? body.author === 'user' },
+        {
+          pending: body.pending ?? body.author === 'user',
+          actorId: await actorFor(body.author, body.actor),
+        },
       )
       threadChanged('created', thread.sessionId, thread.id)
       return c.json(thread, 201)
@@ -813,7 +862,12 @@ export function createApp(
       const thread = await store.getThread(c.req.valid('param').id)
       if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
       const body = c.req.valid('json')
-      await store.addMessage(thread.id, body.author, body.body)
+      await store.addMessage(
+        thread.id,
+        body.author,
+        body.body,
+        await actorFor(body.author, body.actor),
+      )
       const updated = await store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
       threadChanged('updated', updated.sessionId, updated.id)
@@ -1160,6 +1214,16 @@ export function createApp(
             promptInstructions: z.string(),
             defaultPromptInstructions: z.string(),
             wrapExtensions: z.string(),
+            /** the command that points an MCP client at this server */
+            mcpCommand: z.string(),
+            identity: z.object({
+              /** the name notes are recorded under */
+              name: z.string(),
+              /** '' when nothing was set by hand and git config decides */
+              chosenName: z.string(),
+              /** settings | git-global | git-repo | environment | fallback */
+              source: z.string(),
+            }),
             storage: z.object({
               /** what the running server is using */
               active: z.string(),
@@ -1190,6 +1254,12 @@ export function createApp(
           wrapExtensions:
             (await store.getSetting('wrap_extensions')) ??
             default_wrap_extensions,
+          mcpCommand: mcpCommand(),
+          identity: {
+            name: (await identity.current()).resolved.name,
+            chosenName: (await store.getSetting('actor_name')) ?? '',
+            source: (await identity.current()).resolved.source,
+          },
           storage: {
             active: store.describe,
             databaseUrl: redactUrl(configuredDatabaseUrl()),
@@ -1221,6 +1291,8 @@ export function createApp(
             wrapExtensions: z.string().optional(),
             /** a postgres url, or '' to go back to the local sqlite file */
             databaseUrl: z.string().optional(),
+            /** '' falls back to git config */
+            actorName: z.string().max(64).optional(),
           }),
         ),
       },
@@ -1248,6 +1320,10 @@ export function createApp(
       }
       if (body.wrapExtensions !== undefined) {
         await store.setSetting('wrap_extensions', body.wrapExtensions.trim())
+      }
+      if (body.actorName !== undefined) {
+        await store.setSetting('actor_name', body.actorName.trim())
+        identity.forget()
       }
       let restart = false
       if (body.databaseUrl !== undefined && !databaseFromEnv()) {

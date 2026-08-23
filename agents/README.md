@@ -21,6 +21,15 @@ model is specific to one provider.
    `POST /api/threads/<id>/resolve`
 5. The UI updates live; the user re-reviews or closes out.
 
+## Naming yourself
+
+`author` is a role — `"user"` or `"agent"` — and it decides how a message is
+treated, so keep sending it. Alongside it, an optional `actor` says *which*
+agent: `{"author": "agent", "actor": "claude-code", "body": "..."}` on a reply
+or a note. Omitting it is fine and always will be — unnamed agent messages are
+recorded under one shared `agent` actor. Nothing is verified; it is a label on
+the record, which is exactly as much as a local tool can honestly claim.
+
 Line numbers are re-anchored server-side on every fetch, so the positions in
 a fresh `GET` are current. A note whose code block no longer exists comes
 back with `"status": "detached"` — ask the user rather than guessing.

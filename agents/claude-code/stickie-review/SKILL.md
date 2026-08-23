@@ -52,9 +52,13 @@ fine: the tools and the routes read the same database.
      ```sh
      curl -s -X POST http://localhost:4870/api/threads/<tid>/reply \
        -H 'content-type: application/json' \
-       -d '{"author": "agent", "body": "<one sentence: what changed>"}'
+       -d '{"author": "agent", "actor": "claude-code", "body": "<one sentence: what changed>"}'
      curl -s -X POST http://localhost:4870/api/threads/<tid>/resolve
      ```
+
+     Pass `actor: "claude-code"` (or `actor` on `reply_to_note`) so the record
+     says which agent answered. `author` stays `"agent"` — that is the role,
+     not the name.
 
 4. Notes may reference other locations as `@path:L10` or `@path:L10-L20`
    (the @ marks a live reference; a bare path is just prose). Short

@@ -55,6 +55,15 @@ create table if not exists viewed_files (
   viewed_at text not null default (datetime('now')),
   primary key (session_id, path)
 );
+
+create table if not exists actors (
+  id integer primary key autoincrement,
+  kind text not null,
+  name text not null,
+  external_key text unique,
+  created_at text not null default (datetime('now')),
+  unique (kind, name)
+);
 `
 
 const postgres_schema = `
@@ -106,20 +115,41 @@ create table if not exists viewed_files (
   viewed_at timestamptz not null default now(),
   primary key (session_id, path)
 );
+
+create table if not exists actors (
+  id serial primary key,
+  kind text not null,
+  name text not null,
+  external_key text unique,
+  created_at timestamptz not null default now(),
+  unique (kind, name)
+);
 `
 
-/** Columns added after the first release, per dialect. */
-const thread_columns: Record<Dialect, [string, string][]> = {
-  sqlite: [
-    ['pending', 'pending integer not null default 0'],
-    ['origin', 'origin text'],
-    ['external_id', 'external_id text'],
-  ],
-  postgres: [
-    ['pending', 'pending boolean not null default false'],
-    ['origin', 'origin text'],
-    ['external_id', 'external_id text'],
-  ],
+/**
+ * Columns added after the first release, per dialect and per table. All of
+ * them nullable or defaulted: an existing row must stay valid, and no read
+ * path may require one.
+ */
+const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
+  threads: {
+    sqlite: [
+      ['pending', 'pending integer not null default 0'],
+      ['origin', 'origin text'],
+      ['external_id', 'external_id text'],
+      ['actor_id', 'actor_id integer references actors(id)'],
+    ],
+    postgres: [
+      ['pending', 'pending boolean not null default false'],
+      ['origin', 'origin text'],
+      ['external_id', 'external_id text'],
+      ['actor_id', 'actor_id integer references actors(id)'],
+    ],
+  },
+  messages: {
+    sqlite: [['actor_id', 'actor_id integer references actors(id)']],
+    postgres: [['actor_id', 'actor_id integer references actors(id)']],
+  },
 }
 
 async function existingColumns(db: Db, table: string): Promise<Set<string>> {
@@ -136,10 +166,12 @@ async function existingColumns(db: Db, table: string): Promise<Set<string>> {
 
 export async function applySchema(db: Db): Promise<void> {
   await db.exec(db.dialect === 'sqlite' ? sqlite_schema : postgres_schema)
-  const existing = await existingColumns(db, 'threads')
-  for (const [name, ddl] of thread_columns[db.dialect]) {
-    if (!existing.has(name)) {
-      await db.exec(`alter table threads add column ${ddl}`)
+  for (const [table, per_dialect] of Object.entries(added_columns)) {
+    const existing = await existingColumns(db, table)
+    for (const [name, ddl] of per_dialect[db.dialect]) {
+      if (!existing.has(name)) {
+        await db.exec(`alter table ${table} add column ${ddl}`)
+      }
     }
   }
 }

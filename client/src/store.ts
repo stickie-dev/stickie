@@ -12,6 +12,7 @@ import type {
 import { api } from './api'
 import type { CommitBetween, NavHit } from './api'
 import { cachedFile, prefetchFile } from './fileCache'
+import type { TabRef } from './routes'
 import {
   previous_tabs,
   restoredDrafts,
@@ -103,13 +104,19 @@ interface ReviewState {
   connected: boolean
   promptCopied: boolean
   theme: Theme
-  reveal: { path: string; line: number } | null
+  reveal: { path: string; line: number; side?: Side } | null
   usages: { name: string; scope: 'repo' | 'workspace'; hits: NavHit[] } | null
   toasts: Toast[]
   navHistory: NavEntry[]
   navIndex: number
   sidePane: { repoId: number; repoName: string; path: string; line: number } | null
   searchOpen: boolean
+  /**
+   * Whether the review workspace is the page on screen. It stays mounted
+   * under the other pages, so anything listening on `window` has to ask:
+   * `inert` withholds focus from a subtree, not events from `window`.
+   */
+  reviewActive: boolean
   /** flow = continuous GitLab-style scroll of every changed file */
   viewMode: 'flow' | 'file' | 'commits'
   /**
@@ -153,6 +160,11 @@ interface ReviewState {
   ) => Promise<void>
   navBack: () => Promise<void>
   navForward: () => Promise<void>
+  /**
+   * Lands on what an address names. Nothing here reads the address itself —
+   * the shell hands over the repository and the tab it asked for.
+   */
+  openAddress: (repoId: number, tab: TabRef) => Promise<void>
   openFileInRepo: (
     repoId: number,
     path: string,
@@ -168,9 +180,14 @@ interface ReviewState {
   openHitSide: (hit: NavHit) => void
   closeSide: () => void
   setSearchOpen: (open: boolean) => void
+  setReviewActive: (active: boolean) => void
   clearReveal: () => void
   toggleTheme: () => void
-  init: () => Promise<void>
+  /**
+   * `start` is what the address asked for, so restoring tabs settles there
+   * instead of fighting the router for it.
+   */
+  init: (start?: { repoId: number; tab: TabRef }) => Promise<void>
   addRepo: (path: string) => Promise<void>
   selectRepo: (repoId: number) => Promise<void>
   setSource: (source: ReviewSource, baseRef?: string) => Promise<void>
@@ -211,6 +228,7 @@ interface ReviewState {
   moveInPromptOrder: (threadId: number, delta: number) => void
   /** comma-separated extensions that open soft-wrapped, from settings */
   wrapExtensions: string
+  setWrapExtensions: (extensions: string) => void
   /** per-file wrap decisions taken from the editor's context menu */
   wrapOverrides: Record<string, boolean>
   toggleWrap: (path: string) => void
@@ -373,12 +391,20 @@ export const useReview = create<ReviewState>((set, get) => {
     set({ drafts, activeDraftId: drafts.at(-1)?.id ?? null })
   }
 
-  /** Reopens the tabs of the previous session; false when there are none. */
-  async function restoreTabs(repos: RepoInfo[]): Promise<boolean> {
+  /**
+   * Reopens the tabs of the previous session and lands on one of them; false
+   * when there was nothing to reopen and no address to honour. An address wins
+   * over the tab that was last active, and can name a tab the stored set does
+   * not have — following a link has to work on a machine that has never opened
+   * that file.
+   */
+  async function restoreTabs(
+    repos: RepoInfo[],
+    addressed?: { repoId: number; tab: TabRef },
+  ): Promise<boolean> {
     const stored = previous_tabs
-    if (stored === null || stored.tabs.length === 0) return false
     const restored: Tab[] = []
-    for (const entry of stored.tabs) {
+    for (const entry of stored?.tabs ?? []) {
       const repo = repos.find((r) => r.path === entry.repo)
       if (repo === undefined) continue
       if (entry.kind === 'file' && entry.path === undefined) continue
@@ -390,9 +416,12 @@ export const useReview = create<ReviewState>((set, get) => {
         ...(entry.path === undefined ? {} : { path: entry.path }),
       })
     }
-    if (restored.length === 0) return false
-    set({ tabs: restored })
-    const wanted = restored[stored.active] ?? restored[0]
+    if (restored.length > 0) set({ tabs: restored })
+    if (addressed !== undefined) {
+      await get().openAddress(addressed.repoId, addressed.tab)
+      return true
+    }
+    const wanted = restored[stored?.active ?? 0] ?? restored[0]
     if (wanted === undefined) return false
     await get().activateTab(wanted.id)
     return true
@@ -524,6 +553,7 @@ export const useReview = create<ReviewState>((set, get) => {
     navIndex: -1,
     sidePane: null,
     searchOpen: false,
+    reviewActive: false,
     viewMode: 'flow',
     commits: [],
     commitView: null,
@@ -619,6 +649,8 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     setSearchOpen: (open) => set({ searchOpen: open }),
+    setWrapExtensions: (extensions) => set({ wrapExtensions: extensions }),
+    setReviewActive: (active) => set({ reviewActive: active }),
 
     navBack: async () => {
       const { navHistory, navIndex } = get()
@@ -640,7 +672,7 @@ export const useReview = create<ReviewState>((set, get) => {
       set({ theme })
     },
 
-    init: async () => {
+    init: async (start) => {
       try {
         void api
           .settings()
@@ -650,13 +682,47 @@ export const useReview = create<ReviewState>((set, get) => {
         set({ repos })
         await Promise.all(repos.map((r) => ensureRepoSession(r.id)))
         restoreDrafts(repos)
-        if (await restoreTabs(repos)) return
+        const addressed =
+          start !== undefined && repos.some((repo) => repo.id === start.repoId)
+            ? start
+            : undefined
+        if (await restoreTabs(repos, addressed)) return
         const first = repos[0]
         if (first !== undefined) {
           await get().selectRepo(first.id)
         }
       } catch (error) {
         set({ error: error instanceof Error ? error.message : String(error) })
+      }
+    },
+
+    openAddress: async (repoId, tab) => {
+      if (repoId !== get().activeRepoId) await get().selectRepo(repoId)
+      if (tab.kind === 'flow') {
+        set({ viewMode: 'flow', activeTabId: ensureFlowTab(repoId).id })
+        return
+      }
+      if (tab.kind === 'commits') {
+        // an address names the commits tab, never which commits are in it:
+        // that stays the sidebar's choice
+        set({ viewMode: 'commits', activeTabId: ensureCommitsTab(repoId).id })
+        return
+      }
+      try {
+        await get().openFile(tab.path)
+      } catch (error) {
+        // a pasted link can name a file this review does not have
+        get().pushToast('error', `${tab.path}: ${message(error)}`)
+        return
+      }
+      if (tab.line !== undefined) {
+        set({
+          reveal: {
+            path: tab.path,
+            line: tab.line,
+            ...(tab.side === undefined ? {} : { side: tab.side }),
+          },
+        })
       }
     },
 

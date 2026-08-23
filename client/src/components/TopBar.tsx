@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { Link } from 'react-router'
 import type { ReviewSource } from '@stickie/shared'
+import { formatRoute } from '../routes'
 import { useReview } from '../store'
-import { SettingsModal } from './SettingsModal'
 
 function shortPath(path: string): string {
   const parts = path.split('/')
@@ -29,7 +29,6 @@ export function TopBar() {
   const canForward = useReview(
     (s) => s.navIndex < s.navHistory.length - 1,
   )
-  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const submitReview = useReview((s) => s.submitReview)
   const toggleComments = useReview((s) => s.toggleComments)
@@ -194,13 +193,13 @@ export function TopBar() {
       >
         Import MR
       </button>
-      <button
+      <Link
         className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
         title="settings"
-        onClick={() => setSettingsOpen(true)}
+        to={formatRoute({ kind: 'settings', section: 'identity' })}
       >
         ⚙
-      </button>
+      </Link>
       <button
         className="rounded bg-accent px-2.5 py-1 font-medium text-white hover:bg-accent-strong disabled:opacity-50"
         disabled={session === null}
@@ -208,7 +207,6 @@ export function TopBar() {
       >
         {promptCopied ? 'copied ✓' : 'Copy prompt'}
       </button>
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </header>
   )
 }

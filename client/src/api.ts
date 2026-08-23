@@ -20,6 +20,13 @@ export interface SettingsState {
   defaultPromptInstructions: string
   /** comma-separated extensions that open soft-wrapped */
   wrapExtensions: string
+  /** the command that points an MCP client at this server */
+  mcpCommand: string
+  identity: {
+    name: string
+    chosenName: string
+    source: string
+  }
   storage: {
     active: string
     databaseUrl: string | null
@@ -161,6 +168,7 @@ export const api = {
     promptInstructions?: string
     wrapExtensions?: string
     databaseUrl?: string
+    actorName?: string
   }) =>
     fetch('/api/settings', {
       method: 'PUT',

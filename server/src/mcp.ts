@@ -87,11 +87,23 @@ export const tools: McpTool[] = [
     input: z.object({
       threadId: z.number().int(),
       body: z.string().min(1).describe('what was done, or why it was not'),
+      actor: z
+        .string()
+        .max(64)
+        .optional()
+        .describe(
+          'what to call yourself in the record, e.g. "claude-code"; ' +
+            'omitted replies are recorded as a generic agent',
+        ),
     }),
     request: (args) => ({
       method: 'POST',
       path: `/api/threads/${String(args.threadId)}/reply`,
-      body: { author: 'agent', body: args.body },
+      body: {
+        author: 'agent',
+        body: args.body,
+        ...(args.actor === undefined ? {} : { actor: args.actor }),
+      },
     }),
   },
   {

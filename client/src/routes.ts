@@ -1,0 +1,151 @@
+import type { Side } from '@stickie/shared'
+
+/**
+ * The URL, as data. No React and no store here, so the mapping between an
+ * address and what the app shows can be read and tested on its own.
+ *
+ * What an address carries: the page, the repository, and the *active* tab —
+ * for a file tab, its path and optionally a line and a side. What it never
+ * carries: the tab set, scroll positions, selections, drafts or viewed state.
+ * The tab set is a per-machine concern that localStorage already owns, and a
+ * link nobody can paste is not a link.
+ */
+
+export const settings_sections = [
+  'identity',
+  'storage',
+  'gitlab',
+  'prompt',
+  'appearance',
+  'agents',
+] as const
+
+export type SettingsSection = (typeof settings_sections)[number]
+
+export type TabRef =
+  | { kind: 'flow' }
+  | { kind: 'commits' }
+  | { kind: 'file'; path: string; line?: number; side?: Side }
+
+export type Page =
+  | { kind: 'home' }
+  | { kind: 'settings'; section: SettingsSection }
+  | { kind: 'review'; repoId: number; tab: TabRef }
+
+/** Path segments are encoded one at a time so the slashes stay readable. */
+function encodePath(path: string): string {
+  return path.split('/').map(encodeURIComponent).join('/')
+}
+
+function decodePath(segments: string[]): string | null {
+  if (segments.length === 0) return null
+  const parts = segments.map((segment) => {
+    try {
+      return decodeURIComponent(segment)
+    } catch {
+      return null
+    }
+  })
+  if (parts.some((part) => part === null || part === '' || part === '..')) {
+    return null
+  }
+  return parts.join('/')
+}
+
+function isSettingsSection(value: string): value is SettingsSection {
+  return (settings_sections as readonly string[]).includes(value)
+}
+
+/** A positive integer, or null: "3x" and "-1" are not repo ids. */
+function repoId(segment: string): number | null {
+  if (!/^[1-9][0-9]*$/.test(segment)) return null
+  return Number(segment)
+}
+
+/** null for an address this app does not serve; the shell sends those home. */
+export function parseRoute(pathname: string, search = ''): Page | null {
+  const segments = pathname.split('/').filter((segment) => segment !== '')
+  if (segments.length === 0) return { kind: 'home' }
+
+  if (segments[0] === 'settings') {
+    if (segments.length === 1) return { kind: 'settings', section: 'identity' }
+    const section = segments[1] ?? ''
+    if (segments.length === 2 && isSettingsSection(section)) {
+      return { kind: 'settings', section }
+    }
+    return null
+  }
+
+  if (segments[0] === 'r') {
+    const id = repoId(segments[1] ?? '')
+    if (id === null) return null
+    const kind = segments[2]
+    if (kind === undefined || kind === 'flow') {
+      return segments.length <= 3
+        ? { kind: 'review', repoId: id, tab: { kind: 'flow' } }
+        : null
+    }
+    if (kind === 'commits') {
+      return segments.length === 3
+        ? { kind: 'review', repoId: id, tab: { kind: 'commits' } }
+        : null
+    }
+    if (kind === 'file') {
+      const path = decodePath(segments.slice(3))
+      if (path === null) return null
+      const params = new URLSearchParams(search)
+      const raw_line = params.get('line')
+      const line =
+        raw_line !== null && /^[1-9][0-9]*$/.test(raw_line)
+          ? Number(raw_line)
+          : undefined
+      const raw_side = params.get('side')
+      const side: Side | undefined =
+        raw_side === 'base' || raw_side === 'source' ? raw_side : undefined
+      return {
+        kind: 'review',
+        repoId: id,
+        tab: {
+          kind: 'file',
+          path,
+          ...(line === undefined ? {} : { line }),
+          ...(side === undefined ? {} : { side }),
+        },
+      }
+    }
+    return null
+  }
+
+  return null
+}
+
+export function formatRoute(page: Page): string {
+  if (page.kind === 'home') return '/'
+  if (page.kind === 'settings') return `/settings/${page.section}`
+  const base = `/r/${page.repoId}`
+  const { tab } = page
+  if (tab.kind === 'flow') return `${base}/flow`
+  if (tab.kind === 'commits') return `${base}/commits`
+  const params = new URLSearchParams()
+  if (tab.line !== undefined) params.set('line', String(tab.line))
+  if (tab.side !== undefined) params.set('side', tab.side)
+  const query = params.toString()
+  return `${base}/file/${encodePath(tab.path)}${query === '' ? '' : `?${query}`}`
+}
+
+/**
+ * Whether two addresses name the same tab. Line and side are deliberately
+ * not part of it: they are what a link asks for on arrival, not something the
+ * open tab can be out of step with, so comparing them would have the mirror
+ * strip `?line=` off the address the moment it was followed.
+ */
+export function sameTab(a: TabRef, b: TabRef): boolean {
+  if (a.kind !== b.kind) return false
+  if (a.kind !== 'file') return true
+  return b.kind === 'file' && a.path === b.path
+}
+
+/** Whether the review workspace is the thing on screen at this address. */
+export function isReviewRoute(page: Page | null): boolean {
+  return page?.kind === 'review'
+}

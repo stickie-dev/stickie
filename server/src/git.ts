@@ -25,6 +25,28 @@ async function gitOrNull(repo: string, args: string[]): Promise<string | null> {
   }
 }
 
+/**
+ * A git config value, or null. With no repo it reads the global config, which
+ * is where a person's own name and email normally live.
+ */
+export async function gitConfigValue(
+  key: string,
+  repo?: string,
+): Promise<string | null> {
+  const args =
+    repo === undefined
+      ? ['config', '--global', '--get', key]
+      : ['-C', repo, 'config', '--get', key]
+  try {
+    const { stdout } = await execa('git', args)
+    const value = stdout.trim()
+    return value === '' ? null : value
+  } catch {
+    // exit 1 simply means the key is unset
+    return null
+  }
+}
+
 /** Resolve ~ and relative segments the way a shell would. */
 export function expandUserPath(p: string): string {
   const trimmed = p.trim()

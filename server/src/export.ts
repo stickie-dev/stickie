@@ -172,7 +172,13 @@ export async function buildPrompt(
     }
     const seen_refs = new Set<string>()
     for (const message of thread.messages) {
-      lines.push(`- ${message.author}: ${message.body}`)
+      // the role stays in the line so an agent can tell its own words from
+      // yours even when both carry a name
+      const who =
+        message.actorName === null
+          ? message.author
+          : `${message.actorName} (${message.author})`
+      lines.push(`- ${who}: ${message.body}`)
       for (const ref of parseRefs(message.body)) {
         const repo_prefix = ref.repo === null ? '' : `${ref.repo}:`
         const label =

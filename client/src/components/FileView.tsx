@@ -7,6 +7,7 @@ import { api } from '../api'
 import type { NavHit } from '../api'
 import { flowJump, markFlowClick } from '../flowNav'
 import { languageFor } from '../languages'
+import { formatRoute } from '../routes'
 import { useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
 import { CommitTimeline } from './CommitTimeline'
@@ -72,6 +73,31 @@ function refToActiveNote(startLine: number, endLine: number): void {
   const state = useReview.getState()
   if (state.selectedPath === null) return
   state.insertDraftRef(state.selectedPath, startLine, endLine)
+}
+
+/**
+ * An address for one line, on the clipboard. Only a line and a side travel
+ * with it: whoever follows it gets the file open at that line, and their own
+ * tabs are left alone.
+ */
+async function copyLineLink(line: number, side: Side): Promise<void> {
+  const state = useReview.getState()
+  const { activeRepoId, selectedPath } = state
+  if (activeRepoId === null || selectedPath === null) return
+  const link = `${window.location.origin}${formatRoute({
+    kind: 'review',
+    repoId: activeRepoId,
+    tab: { kind: 'file', path: selectedPath, line, side },
+  })}`
+  try {
+    await navigator.clipboard.writeText(link)
+    state.pushToast('info', 'link copied')
+  } catch (error) {
+    state.pushToast(
+      'error',
+      `clipboard: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
 }
 
 interface CaptureTarget {
@@ -184,6 +210,16 @@ function makeCaptureAttacher(
       run: () => {
         const path = filePath ?? useReview.getState().selectedPath
         if (path !== null) useReview.getState().toggleWrap(path)
+      },
+    })
+    instance.addAction({
+      id: 'stickie.copyLineLink',
+      label: 'Copy link to this line',
+      contextMenuGroupId: 'view',
+      contextMenuOrder: 1,
+      run: (ed) => {
+        const line = ed.getPosition()?.lineNumber
+        if (line !== undefined) void copyLineLink(line, side)
       },
     })
     instance.addAction({
@@ -313,6 +349,16 @@ function CaptureActions({
           ↗ ref {span}
         </button>
       )}
+      <button
+        className={`${button_classes} border-l border-edge`}
+        title="copy an address that opens this file at this line"
+        onClick={() => {
+          void copyLineLink(target.startLine, target.side)
+          onDone()
+        }}
+      >
+        ⧉ link
+      </button>
     </div>
   )
 }
@@ -365,6 +411,9 @@ export function FileView() {
   // review keyboard flow; inert while any input has focus
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // the workspace stays mounted under the other pages, and a window
+      // listener fires there too — `inert` only withholds focus
+      if (!useReview.getState().reviewActive) return
       const target = event.target as HTMLElement | null
       // monaco's hidden input carries key events from a clicked-in editor;
       // it must not mute the review keys the way a real note field does
@@ -472,7 +521,11 @@ export function FileView() {
   const session = useReview((s) => s.session)
   const reveal = useReview((s) => s.reveal)
   const clearReveal = useReview((s) => s.clearReveal)
-  const reveal_editor = modifiedEditor ?? singleEditor
+  // a link can name the base side; everything else reveals in the source
+  const reveal_editor =
+    reveal?.side === 'base'
+      ? (originalEditor ?? singleEditor)
+      : (modifiedEditor ?? singleEditor)
   const content_ready = sourceContent !== null || baseContent !== null
   useEffect(() => {
     if (
@@ -485,7 +538,7 @@ export function FileView() {
     }
     // a collapsed unchanged region swallows reveals into it; expand first
     // and let the effect re-run once the option has applied
-    if (collapseUnchanged && modifiedEditor !== null) {
+    if (collapseUnchanged && (modifiedEditor !== null || originalEditor !== null)) {
       setCollapseUnchanged(false)
       return
     }
@@ -503,6 +556,7 @@ export function FileView() {
     clearReveal,
     collapseUnchanged,
     modifiedEditor,
+    originalEditor,
   ])
 
   useEffect(() => {

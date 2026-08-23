@@ -77,7 +77,10 @@ function thread(over: Partial<Thread>): Thread {
     pending: false,
     origin: null,
     createdAt: '2026-08-22 10:00:00',
-    messages: [{ id: 1, author: 'user', body: 'rename this', createdAt: '' }],
+    actorName: null,
+    messages: [
+      { id: 1, author: 'user', body: 'rename this', createdAt: '', actorName: null },
+    ],
     ...over,
   }
 }

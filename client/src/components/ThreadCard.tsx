@@ -191,8 +191,9 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
                     ? 'font-semibold text-sky-600 dark:text-sky-400'
                     : 'font-semibold text-ink'
                 }
+                title={`role: ${message.author}`}
               >
-                {message.author}
+                {message.actorName ?? message.author}
               </span>
               <MessageBody body={message.body} />
               {message.author === 'user' && (

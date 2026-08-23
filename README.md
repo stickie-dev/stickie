@@ -24,8 +24,12 @@ the only output.
 - **Status bar** — the current path as clickable segments: each one opens
   what sits beside it (folders and files at that level) or copies the path,
   beside the review's tally — files changed, viewed, unresolved, pending
+- **Linkable** — every tab has an address (`/r/1/file/src/store.ts?line=42`),
+  so a file at a line can be pasted to someone else, or bookmarked; browser
+  back and forward walk the tabs you opened
 - **Nothing lost on reload** — open tabs, viewed files, scroll position and
-  half-written notes all come back
+  half-written notes all come back, and leaving the review for settings never
+  tears it down
 - **Comment anywhere** — changed lines, unchanged lines, untouched files
   (the *All files* tab), base or source side, single lines or ranges, or no
   code at all: notes on a whole file or on the review itself
@@ -63,6 +67,10 @@ the only output.
   reads left to right through the commits that touched it
 - **Session continuity** — when HEAD moves past the pinned base (the agent
   committed), one click re-pins and carries open notes forward
+- **Who wrote what** — notes carry a name, not just a role: yours from
+  `git config user.name` (or Settings → Identity), and an agent's from what it
+  calls itself when it posts. There is no login and nothing is verified — it is
+  a label on the record, which is all a local tool can honestly claim
 - **Keyboard flow** — j/k files, n/p changes (across the whole flow, not just
   the open file), v viewed, ? for help; viewed files persist per session, and
   open tabs come back after a reload
@@ -75,8 +83,10 @@ the only output.
 - **Reading comfort** — light and dark themes built for diffs, soft wrap by
   file type (settings) or per file (header button, right-click menu), and
   width rulers at 80/100/120 on anything unwrapped
-- **Settings** — GitLab instance and token resolution, the instruction block
-  *Copy prompt* appends, which file types wrap, and the theme
+- **Settings** — a page at `/settings` with a section each for storage, GitLab
+  instance and token resolution, the instruction block *Copy prompt* appends,
+  appearance (theme and which file types wrap), and agents (this server's API
+  address, the MCP command with your own path filled in, and the tool table)
 
 ## Run
 
@@ -125,7 +135,7 @@ spec is generated from the code and cannot drift.
 | GET | `/api/sessions/:id/file?path=&side=` | full file content per side |
 | GET | `/api/sessions/:id/threads?status=open` | notes, re-anchored |
 | POST | `/api/sessions/:id/threads` | create a note |
-| POST | `/api/threads/:id/reply` | `{author, body}` |
+| POST | `/api/threads/:id/reply` | `{author, body, actor?}` |
 | POST | `/api/threads/:id/resolve` · `/reopen` | close / reopen |
 | GET | `/api/sessions/:id/prompt` | self-contained markdown export |
 | GET | `/api/sessions` | every review, newest first |

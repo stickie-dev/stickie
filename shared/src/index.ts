@@ -83,13 +83,33 @@ export interface FileContent {
 
 export type ThreadStatus = 'open' | 'resolved' | 'detached'
 
+/**
+ * The *role* a message was written in, which is what decides whether a new
+ * note starts out pending, whether it may be edited, and how the export labels
+ * it. Not a name — see `actorName` for who.
+ */
 export type Author = 'user' | 'agent'
+
+export type ActorKind = 'human' | 'agent'
+
+/**
+ * Who did something. There is no authentication: a human's name comes from
+ * git config (or Settings), an agent names itself when it posts. So an actor
+ * is a label on the record, not a verified identity.
+ */
+export interface Actor {
+  id: number
+  kind: ActorKind
+  name: string
+}
 
 export interface ThreadMessage {
   id: number
   author: Author
   body: string
   createdAt: string
+  /** null on anything written before there were actors, or imported */
+  actorName: string | null
 }
 
 export interface Thread {
@@ -106,6 +126,8 @@ export interface Thread {
   /** e.g. "gitlab" for imported threads */
   origin: string | null
   createdAt: string
+  /** who raised the note; null for imported and pre-actor threads */
+  actorName: string | null
   messages: ThreadMessage[]
 }
 

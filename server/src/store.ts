@@ -1,6 +1,8 @@
 import type { Db } from './db/driver.js'
 import { toBool, toText } from './db/driver.js'
 import type {
+  Actor,
+  ActorKind,
   Author,
   ReviewSource,
   Session,
@@ -25,6 +27,12 @@ interface SessionRow {
   base_sha: string
 }
 
+interface ActorRow {
+  id: number
+  kind: string
+  name: string
+}
+
 interface ThreadRow {
   id: number
   session_id: number
@@ -40,6 +48,8 @@ interface ThreadRow {
   origin: string | null
   external_id: string | null
   created_at: string | Date
+  /** from the left join, not a column of threads */
+  actor_name: string | null
 }
 
 interface MessageRow {
@@ -48,7 +58,21 @@ interface MessageRow {
   author: string
   body: string
   created_at: string | Date
+  /** from the left join, not a column of messages */
+  actor_name: string | null
 }
+
+/**
+ * Every read of a thread or a message carries the actor's name, so no caller
+ * has to remember a second query. A left join because the column is nullable
+ * by design: rows written before there were actors, and imported ones whose
+ * author was somebody else's account, have none.
+ */
+const thread_select =
+  'select t.*, a.name as actor_name from threads t left join actors a on a.id = t.actor_id'
+
+const message_select =
+  'select m.*, a.name as actor_name from messages m left join actors a on a.id = m.actor_id'
 
 export class Store {
   constructor(private db: Db) {}
@@ -140,6 +164,41 @@ export class Store {
     return this.db.dialect === 'postgres' ? true : 1
   }
 
+  /**
+   * The actor for a (kind, name) pair, creating it the first time it is seen.
+   * `externalKey` is the seam for a later identity provider — nothing reads it
+   * yet, and it is only written when the row is created, so a name that later
+   * gains an email does not silently rewrite history.
+   */
+  async getOrCreateActor(
+    kind: ActorKind,
+    name: string,
+    externalKey?: string | null,
+  ): Promise<Actor> {
+    await this.db.run(
+      'insert into actors (kind, name, external_key) values (?, ?, ?) on conflict do nothing',
+      [kind, name, externalKey ?? null],
+    )
+    const row = await this.db.get<ActorRow>(
+      'select id, kind, name from actors where kind = ? and name = ?',
+      [kind, name],
+    )
+    if (row === undefined) throw new Error('actor insert failed')
+    return { id: row.id, kind: row.kind as ActorKind, name: row.name }
+  }
+
+  listActors(): Promise<Actor[]> {
+    return this.db
+      .all<ActorRow>('select id, kind, name from actors order by kind, name')
+      .then((rows) =>
+        rows.map((row) => ({
+          id: row.id,
+          kind: row.kind as ActorKind,
+          name: row.name,
+        })),
+      )
+  }
+
   createThread(
     sessionId: number,
     path: string,
@@ -150,14 +209,19 @@ export class Store {
     snippet: string,
     author: Author,
     body: string,
-    options: { pending?: boolean; origin?: string; externalId?: string } = {},
+    options: {
+      pending?: boolean
+      origin?: string
+      externalId?: string
+      actorId?: number | null
+    } = {},
   ): Promise<Thread> {
     // the note and its first message are one act; a reader must never find a
     // thread with no message in it
     return this.db.transaction(async () => {
       const threadId = await this.db.insert(
-        `insert into threads (session_id, path, side, start_line, end_line, blob_sha, snippet, pending, origin, external_id)
-         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `insert into threads (session_id, path, side, start_line, end_line, blob_sha, snippet, pending, origin, external_id, actor_id)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           sessionId,
           path,
@@ -169,9 +233,10 @@ export class Store {
           options.pending === true ? this.trueValue : this.falseValue,
           options.origin ?? null,
           options.externalId ?? null,
+          options.actorId ?? null,
         ],
       )
-      await this.addMessage(threadId, author, body)
+      await this.addMessage(threadId, author, body, options.actorId)
       const thread = await this.getThread(threadId)
       if (thread === undefined) throw new Error('thread insert failed')
       return thread
@@ -180,7 +245,7 @@ export class Store {
 
   async getThread(id: number): Promise<Thread | undefined> {
     const row = await this.db.get<ThreadRow>(
-      'select * from threads where id = ?',
+      `${thread_select} where t.id = ?`,
       [id],
     )
     if (row === undefined) return undefined
@@ -194,11 +259,11 @@ export class Store {
     const rows =
       status === undefined
         ? await this.db.all<ThreadRow>(
-            'select * from threads where session_id = ? order by id',
+            `${thread_select} where t.session_id = ? order by t.id`,
             [sessionId],
           )
         : await this.db.all<ThreadRow>(
-            'select * from threads where session_id = ? and status = ? order by id',
+            `${thread_select} where t.session_id = ? and t.status = ? order by t.id`,
             [sessionId, status],
           )
     const threads: Thread[] = []
@@ -210,13 +275,14 @@ export class Store {
     threadId: number,
     author: Author,
     body: string,
+    actorId?: number | null,
   ): Promise<ThreadMessage> {
     const id = await this.db.insert(
-      'insert into messages (thread_id, author, body) values (?, ?, ?)',
-      [threadId, author, body],
+      'insert into messages (thread_id, author, body, actor_id) values (?, ?, ?, ?)',
+      [threadId, author, body, actorId ?? null],
     )
     const row = await this.db.get<MessageRow>(
-      'select * from messages where id = ?',
+      `${message_select} where m.id = ?`,
       [id],
     )
     if (row === undefined) throw new Error('message insert failed')
@@ -302,7 +368,7 @@ export class Store {
     externalId: string,
   ): Promise<Thread | undefined> {
     const row = await this.db.get<ThreadRow>(
-      'select * from threads where session_id = ? and external_id = ?',
+      `${thread_select} where t.session_id = ? and t.external_id = ?`,
       [sessionId, externalId],
     )
     return row === undefined ? undefined : this.threadFromRow(row)
@@ -359,7 +425,7 @@ export class Store {
 
   private async threadFromRow(row: ThreadRow): Promise<Thread> {
     const rows = await this.db.all<MessageRow>(
-      'select * from messages where thread_id = ? order by id',
+      `${message_select} where m.thread_id = ? order by m.id`,
       [row.id],
     )
     const messages = rows.map(messageFromRow)
@@ -375,6 +441,7 @@ export class Store {
       pending: toBool(row.pending),
       origin: row.origin,
       createdAt: toText(row.created_at),
+      actorName: row.actor_name,
       messages,
     }
   }
@@ -400,5 +467,6 @@ function messageFromRow(row: MessageRow): ThreadMessage {
     author: row.author as Author,
     body: row.body,
     createdAt: toText(row.created_at),
+    actorName: row.actor_name,
   }
 }

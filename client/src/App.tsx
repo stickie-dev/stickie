@@ -1,130 +1,192 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Navigate, useLocation, useNavigate } from 'react-router'
 import type { ClientEvent } from '@stickie/shared'
 import './monacoSetup'
 import { AddRepo } from './components/AddRepo'
-import { CommentsPanel } from './components/CommentsPanel'
-import { CommitsPanel } from './components/CommitsPanel'
-import { FileTree } from './components/FileTree'
-import { FileView } from './components/FileView'
-import { SearchOverlay } from './components/SearchOverlay'
-import { SidePane } from './components/SidePane'
-import { StatusBar } from './components/StatusBar'
-import { TabBar } from './components/TabBar'
+import { SettingsPage } from './components/settings/SettingsPage'
 import { Toasts } from './components/Toasts'
-import { TopBar } from './components/TopBar'
-import { UsagesPanel } from './components/UsagesPanel'
+import { Workspace } from './components/Workspace'
+import type { Page, TabRef } from './routes'
+import { formatRoute, isReviewRoute, parseRoute, sameTab } from './routes'
+import type { Tab } from './store'
 import { useReview } from './store'
 
+/** Where the store currently is, in the terms an address is written in. */
+interface Here {
+  repoId: number
+  tab: TabRef
+}
+
+function tabRef(tab: Tab): TabRef | null {
+  if (tab.kind === 'flow') return { kind: 'flow' }
+  if (tab.kind === 'commits') return { kind: 'commits' }
+  return tab.path === undefined ? null : { kind: 'file', path: tab.path }
+}
+
+function useHere(): Here | null {
+  const tabs = useReview((s) => s.tabs)
+  const activeTabId = useReview((s) => s.activeTabId)
+  return useMemo(() => {
+    const tab = tabs.find((entry) => entry.id === activeTabId)
+    if (tab === undefined) return null
+    const ref = tabRef(tab)
+    return ref === null ? null : { repoId: tab.repoId, tab: ref }
+  }, [tabs, activeTabId])
+}
+
+function signature(here: Here | null): string {
+  if (here === null) return ''
+  const path = here.tab.kind === 'file' ? here.tab.path : ''
+  return `${here.repoId}|${here.tab.kind}|${path}`
+}
+
 /**
- * Shown while the active draft belongs to a file other than the open one —
- * only with the comments panel closed, since the panel keeps every note in
- * progress editable in place.
+ * Keeps the address and the store in step, in whichever direction moved last:
+ * the address wins on a load or a back/forward, the store wins when something
+ * in the app opened a different tab. One effect and one record of what was
+ * last synced, because two independent effects on the same pair ping-pong.
  */
-function DraftPill() {
-  const drafts = useReview((s) => s.drafts)
-  const activeDraftId = useReview((s) => s.activeDraftId)
-  const commentsOpen = useReview((s) => s.commentsOpen)
-  const selectedPath = useReview((s) => s.selectedPath)
-  const activeRepoId = useReview((s) => s.activeRepoId)
+function useRouteSync(page: Page | null, here: Here | null): void {
+  const location = useLocation()
+  const navigate = useNavigate()
   const repos = useReview((s) => s.repos)
-  const selectRepo = useReview((s) => s.selectRepo)
-  const openFile = useReview((s) => s.openFile)
-  const cancelDraft = useReview((s) => s.cancelDraft)
+  const openAddress = useReview((s) => s.openAddress)
+  const synced = useRef<{ address: string; here: string }>({
+    address: '',
+    here: '',
+  })
+  /**
+   * What the address asked for and has not been given yet. Until it is, the
+   * store is not allowed to write the address back — otherwise a still-loading
+   * `init` settling somewhere else silently rewrites the link just followed.
+   */
+  const owed = useRef<Here | null>(null)
+  /** The last thing asked of the store, so an in-flight open is not re-asked. */
+  const asked = useRef('')
 
-  const active =
-    drafts.find((d) => d.id === activeDraftId) ?? drafts.at(-1)
-  if (
-    commentsOpen ||
-    active === undefined ||
-    (active.path === selectedPath && active.repoId === activeRepoId)
-  ) {
-    return null
+  const address = `${location.pathname}${location.search}`
+
+  useEffect(() => {
+    if (repos.length === 0) return
+    const last = synced.current
+    if (address !== last.address) {
+      synced.current = { address, here: signature(here) }
+      owed.current =
+        page?.kind === 'review' ? { repoId: page.repoId, tab: page.tab } : null
+      asked.current = ''
+    }
+
+    const wanted = owed.current
+    if (wanted !== null) {
+      if (!repos.some((repo) => repo.id === wanted.repoId)) {
+        owed.current = null
+        navigate('/', { replace: true })
+        return
+      }
+      const arrived =
+        here !== null &&
+        here.repoId === wanted.repoId &&
+        sameTab(here.tab, wanted.tab)
+      if (!arrived) {
+        const key = signature(wanted)
+        if (asked.current !== key) {
+          asked.current = key
+          void openAddress(wanted.repoId, wanted.tab)
+        }
+        return
+      }
+      owed.current = null
+      synced.current = { address, here: signature(here) }
+      return
+    }
+
+    // the store moved on its own: mirror it, and push so back walks the tabs.
+    // Only while the review is the page on screen — the workspace stays mounted
+    // and keeps settling underneath, and that must not drag the reader off a
+    // settings address they loaded directly.
+    if (page?.kind !== 'review') return
+    if (signature(here) !== last.here) {
+      synced.current = { address, here: signature(here) }
+      if (here !== null) navigate(formatRoute({ kind: 'review', ...here }))
+    }
+  }, [address, page, here, repos, openAddress, navigate])
+}
+
+/**
+ * What a non-review address shows. Drawn over the workspace rather than in
+ * place of it, so the review surface behind keeps its editors and its scroll.
+ */
+function PageLayer({ page, here }: { page: Page | null; here: Here | null }) {
+  const repos = useReview((s) => s.repos)
+
+  if (page === null) return <Navigate to="/" replace />
+
+  if (page.kind === 'settings') return <SettingsPage section={page.section} />
+
+  if (page.kind === 'home') {
+    if (repos.length === 0) return <AddRepo />
+    // the landing page arrives with the dashboard; for now the root is the way
+    // back to whichever tab was last open
+    if (here !== null) {
+      return <Navigate to={formatRoute({ kind: 'review', ...here })} replace />
+    }
+    return <div className="p-6 text-xs text-faint">loading…</div>
   }
-  const cross_repo = active.repoId !== activeRepoId
-  const repo_name = repos.find((r) => r.id === active.repoId)?.name
 
-  return (
-    <div className="fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-lg border border-accent bg-panel px-3 py-2 text-xs shadow-xl">
-      <span className="text-soft">
-        {drafts.length > 1 ? `${drafts.length} notes in progress; active on` : 'note in progress on'}{' '}
-        <span className="font-mono text-ink">
-          {cross_repo && repo_name !== undefined ? `${repo_name}:` : ''}
-          {active.path}:L{active.startLine}
-        </span>{' '}
-        — “+ ref” on a selection here adds a reference to it
-      </span>
-      <button
-        className="rounded bg-accent px-2 py-1 font-medium text-white hover:bg-accent-strong"
-        onClick={() => {
-          void (async () => {
-            if (cross_repo) await selectRepo(active.repoId)
-            await openFile(active.path)
-          })()
-        }}
-      >
-        back to note
-      </button>
-      <button
-        className="text-soft hover:text-ink"
-        onClick={() => cancelDraft(active.id)}
-      >
-        discard
-      </button>
-    </div>
-  )
+  return null
 }
 
 export function App() {
+  const location = useLocation()
   const init = useReview((s) => s.init)
-  const repos = useReview((s) => s.repos)
   const error = useReview((s) => s.error)
   const refresh = useReview((s) => s.refresh)
   const syncThreads = useReview((s) => s.syncThreads)
   const setConnected = useReview((s) => s.setConnected)
+  const setReviewActive = useReview((s) => s.setReviewActive)
   const theme = useReview((s) => s.theme)
-  const commentsOpen = useReview((s) => s.commentsOpen)
-  const setSearchOpen = useReview((s) => s.setSearchOpen)
+
+  // a fresh object every render would re-run the sync effect every render
+  const page = useMemo(
+    () => parseRoute(location.pathname, location.search),
+    [location.pathname, location.search],
+  )
+  const here = useHere()
+  const on_review = isReviewRoute(page)
+  useRouteSync(page, here)
+
+  // the workspace is expensive to build and cheap to keep, so it mounts on
+  // the first review address and is never taken down again
+  const [workspaceMounted, setWorkspaceMounted] = useState(on_review)
+  useEffect(() => {
+    if (on_review) setWorkspaceMounted(true)
+  }, [on_review])
+
+  useEffect(() => {
+    setReviewActive(on_review)
+  }, [on_review, setReviewActive])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
-  // cmd+shift+F always opens workspace search; plain cmd+F only outside
-  // editors and inputs so Monaco's in-file find keeps working
+  // the address is part of the starting state: `init` gets what it asked for
+  // so restoring tabs does not settle somewhere else first
+  const start = useRef(
+    page?.kind === 'review'
+      ? { repoId: page.repoId, tab: page.tab }
+      : undefined,
+  )
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) return
-      if (event.key !== 'f' && event.key !== 'F') return
-      if (event.shiftKey) {
-        event.preventDefault()
-        setSearchOpen(true)
-        return
-      }
-      const target = event.target as HTMLElement | null
-      const in_editor =
-        target !== null &&
-        (target.closest('.monaco-editor') !== null ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA')
-      if (!in_editor) {
-        event.preventDefault()
-        setSearchOpen(true)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [setSearchOpen])
-
-  useEffect(() => {
-    void init()
+    void init(start.current)
   }, [init])
 
   useEffect(() => {
     let socket: WebSocket | null = null
     let closed = false
     const connect = () => {
-      const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
-      socket = new WebSocket(`${protocol}://${location.host}/ws`)
+      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+      socket = new WebSocket(`${protocol}://${window.location.host}/ws`)
       socket.onopen = () => setConnected(true)
       socket.onmessage = (message) => {
         try {
@@ -149,38 +211,19 @@ export function App() {
 
   return (
     <div className="flex h-screen flex-col bg-surface text-ink">
-      <TopBar />
       {error !== null && (
         <div className="border-b border-rose-300 bg-rose-100 px-3 py-1.5 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-300">
           {error}
         </div>
       )}
-      {repos.length === 0 ? (
-        <AddRepo />
-      ) : (
-        <div className="flex min-h-0 grow flex-col">
-          <div className="flex min-h-0 grow">
-            <aside className="flex w-64 shrink-0 flex-col border-r border-edge">
-              <div className="min-h-0 grow">
-                <FileTree />
-              </div>
-              <CommitsPanel />
-            </aside>
-            <main className="flex min-w-0 grow flex-col">
-              <TabBar />
-              <div className="min-h-0 grow">
-                <FileView />
-              </div>
-            </main>
-            <SidePane />
-            {commentsOpen && <CommentsPanel />}
+      <div className="relative min-h-0 grow">
+        {workspaceMounted && <Workspace active={on_review} />}
+        {!on_review && (
+          <div className="absolute inset-0 z-30 overflow-auto bg-surface">
+            <PageLayer page={page} here={here} />
           </div>
-          <UsagesPanel />
-          <StatusBar />
-        </div>
-      )}
-      <DraftPill />
-      <SearchOverlay />
+        )}
+      </div>
       <Toasts />
     </div>
   )

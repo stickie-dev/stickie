@@ -38,6 +38,20 @@ style and rewritten for Postgres. Two rules keep the two honest:
 Tests run against `:memory:` SQLite; the Postgres path needs a live database,
 which CI does not have — exercise it by hand with `STICKIE_DATABASE_URL`.
 
+Columns added after a release go in `added_columns` in `schema.ts`, and they
+are nullable or defaulted without exception: an existing row has to stay valid
+and no read path may require one.
+
+## Identity
+
+`author` on a message is a *role* — `'user' | 'agent'` — and three behaviours
+read it: whether a new note starts pending, whether a message may be edited,
+and how the export labels it. It is not a name. Names live in `actors`, reached
+through a nullable `actor_id`, so a row with no actor is normal rather than
+broken. There is no authentication: a human's name comes from git config or
+Settings and an agent's from what it claims, so nothing in the interface may
+present an actor as verified.
+
 ## Conventions
 
 - comments state constraints the code cannot, nothing else

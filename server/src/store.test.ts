@@ -134,3 +134,79 @@ describe('Store', () => {
     expect(await store.listViewed(session.id)).toEqual([])
   })
 })
+
+describe('Store actors', () => {
+  it('returns the same actor for a name it has already seen', async () => {
+    const store = await freshStore()
+    const first = await store.getOrCreateActor('human', 'Jane Doe', 'jane@doe.com')
+    const again = await store.getOrCreateActor('human', 'Jane Doe')
+    expect(again.id).toBe(first.id)
+    expect(await store.listActors()).toHaveLength(1)
+  })
+
+  it('keeps a human and an agent of the same name apart', async () => {
+    const store = await freshStore()
+    const human = await store.getOrCreateActor('human', 'stickie')
+    const agent = await store.getOrCreateActor('agent', 'stickie')
+    expect(agent.id).not.toBe(human.id)
+    expect(agent.kind).toBe('agent')
+  })
+
+  it('carries the actor name onto the thread and every message', async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const session = await store.getOrCreateSession(
+      repo.id,
+      { kind: 'worktree', value: '/tmp/repo' },
+      'master',
+      'abc123',
+    )
+    const human = await store.getOrCreateActor('human', 'Jane Doe')
+    const agent = await store.getOrCreateActor('agent', 'claude-code')
+    const thread = await store.createThread(
+      session.id,
+      'a.ts',
+      'source',
+      1,
+      1,
+      null,
+      'x',
+      'user',
+      'rename this',
+      { actorId: human.id },
+    )
+    await store.addMessage(thread.id, 'agent', 'done', agent.id)
+
+    const [read] = await store.listThreads(session.id)
+    expect(read?.actorName).toBe('Jane Doe')
+    expect(read?.messages.map((m) => [m.author, m.actorName])).toEqual([
+      ['user', 'Jane Doe'],
+      ['agent', 'claude-code'],
+    ])
+  })
+
+  it('leaves the actor name null when nothing was attributed', async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const session = await store.getOrCreateSession(
+      repo.id,
+      { kind: 'worktree', value: '/tmp/repo' },
+      'master',
+      'abc123',
+    )
+    const thread = await store.createThread(
+      session.id,
+      'a.ts',
+      'source',
+      1,
+      1,
+      null,
+      'x',
+      'user',
+      'imported note',
+      { origin: 'gitlab', externalId: 'gl-1' },
+    )
+    expect(thread.actorName).toBeNull()
+    expect(thread.messages[0]?.actorName).toBeNull()
+  })
+})
