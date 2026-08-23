@@ -21,9 +21,11 @@ the only output.
   it takes to tell two of them apart, whatever does not fit moves into a
   dropdown rather than off the side, and the whole set comes back after a
   reload
-- **Status bar** — the current path as clickable segments (a folder shows
-  itself in the tree, the file name copies its path) beside the review's
-  tally: files changed, viewed, unresolved, pending
+- **Status bar** — the current path as clickable segments: each one opens
+  what sits beside it (folders and files at that level) or copies the path,
+  beside the review's tally — files changed, viewed, unresolved, pending
+- **Nothing lost on reload** — open tabs, viewed files, scroll position and
+  half-written notes all come back
 - **Comment anywhere** — changed lines, unchanged lines, untouched files
   (the *All files* tab), base or source side, single lines or ranges, or no
   code at all: notes on a whole file or on the review itself

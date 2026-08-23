@@ -6,3 +6,6 @@ dist/
 *.sqlite-*
 dist-pkg/
 *.tgz
+
+# private product notes, not part of the tool
+PRODUCT.md

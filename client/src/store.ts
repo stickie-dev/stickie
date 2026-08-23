@@ -12,6 +12,12 @@ import type {
 import { api } from './api'
 import type { CommitBetween, NavHit } from './api'
 import { cachedFile, prefetchFile } from './fileCache'
+import {
+  previous_tabs,
+  restoredDrafts,
+  storeDrafts,
+  storeTabs,
+} from './persistence'
 
 export interface Draft {
   id: number
@@ -33,43 +39,6 @@ export interface Tab {
 }
 
 let tab_seq = 0
-
-/** Tabs outlive a reload; repos are keyed by path so ids may be reassigned. */
-interface StoredTab {
-  kind: Tab['kind']
-  repo: string
-  path?: string
-}
-
-const tabs_key = 'stickie-tabs'
-
-function readStoredTabs(): { tabs: StoredTab[]; active: number } | null {
-  const raw = localStorage.getItem(tabs_key)
-  if (raw === null) return null
-  try {
-    const parsed = JSON.parse(raw) as { tabs?: unknown; active?: unknown }
-    if (!Array.isArray(parsed.tabs)) return null
-    const tabs = parsed.tabs.filter(
-      (entry): entry is StoredTab =>
-        typeof entry === 'object' &&
-        entry !== null &&
-        ((entry as StoredTab).kind === 'flow' ||
-          (entry as StoredTab).kind === 'file' ||
-          (entry as StoredTab).kind === 'commits') &&
-        typeof (entry as StoredTab).repo === 'string',
-    )
-    return {
-      tabs,
-      active: typeof parsed.active === 'number' ? parsed.active : -1,
-    }
-  } catch {
-    return null
-  }
-}
-
-// captured before the store can write over it, so a restore always sees the
-// previous session rather than this one's empty starting point
-const previous_tabs = readStoredTabs()
 
 export interface CommitView {
   repoId: number
@@ -390,6 +359,20 @@ export const useReview = create<ReviewState>((set, get) => {
     }
   }
 
+  /** Brings back notes that were being written when the page went away. */
+  function restoreDrafts(repos: RepoInfo[]): void {
+    const drafts = restoredDrafts(
+      repos,
+      (repoId) => get().repoSessions[repoId]?.sessionId,
+      () => {
+        draft_seq += 1
+        return draft_seq
+      },
+    )
+    if (drafts.length === 0) return
+    set({ drafts, activeDraftId: drafts.at(-1)?.id ?? null })
+  }
+
   /** Reopens the tabs of the previous session; false when there are none. */
   async function restoreTabs(repos: RepoInfo[]): Promise<boolean> {
     const stored = previous_tabs
@@ -666,6 +649,7 @@ export const useReview = create<ReviewState>((set, get) => {
         const repos = await api.repos()
         set({ repos })
         await Promise.all(repos.map((r) => ensureRepoSession(r.id)))
+        restoreDrafts(repos)
         if (await restoreTabs(repos)) return
         const first = repos[0]
         if (first !== undefined) {
@@ -1383,25 +1367,13 @@ export const useReview = create<ReviewState>((set, get) => {
   }
 })
 
-// tabs are written back on every change rather than from each action that
-// touches them, so no path can forget to persist
-let written = ''
+// both snapshots are written on every change rather than from each action
+// that touches them, so no path can forget to persist
+let written_tabs = ''
+let written_drafts = ''
 useReview.subscribe((state) => {
-  const payload = JSON.stringify({
-    tabs: state.tabs.flatMap((tab) => {
-      const repo = state.repos.find((r) => r.id === tab.repoId)
-      if (repo === undefined) return []
-      return [
-        {
-          kind: tab.kind,
-          repo: repo.path,
-          ...(tab.path === undefined ? {} : { path: tab.path }),
-        },
-      ]
-    }),
-    active: state.tabs.findIndex((tab) => tab.id === state.activeTabId),
-  })
-  if (payload === written) return
-  written = payload
-  localStorage.setItem(tabs_key, payload)
+  const tabs = storeTabs(state.tabs, state.activeTabId, state.repos)
+  if (tabs !== written_tabs) written_tabs = tabs
+  const drafts = storeDrafts(state.drafts, state.repos)
+  if (drafts !== written_drafts) written_drafts = drafts
 })

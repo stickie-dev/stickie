@@ -8,13 +8,21 @@ description: Fetch open review notes from a running stickie server, address each
 Stickie is a local review UI. The user has left line-anchored notes on the
 working tree you are editing. Your job: fetch them, fix them, close them out.
 
+## Two ways in
+
+If stickie's MCP tools are connected (`list_reviews`, `get_review_notes`,
+`list_notes`, `reply_to_note`, `resolve_note`), use them — they are the same
+routes with the arguments checked for you. Otherwise use curl against the
+REST API, as below. Either way the loop is identical, and mixing them is
+fine: the tools and the routes read the same database.
+
 ## Steps
 
-1. Find the session. List repos and sessions if needed; default server is
-   `http://localhost:4870`. If exactly one session exists, use it. If the
-   user named a session or repo, match it.
+1. Find the session: `list_reviews`, or list repos and sessions over HTTP.
+   The default server is `http://localhost:4870`. If exactly one session
+   exists, use it. If the user named a session or repo, match it.
 
-2. Fetch the work order as markdown:
+2. Fetch the work order as markdown — `get_review_notes`, or:
 
    ```sh
    curl -s "http://localhost:4870/api/sessions/<id>/prompt"
@@ -38,7 +46,8 @@ working tree you are editing. Your job: fetch them, fix them, close them out.
    - Make the change the note asks for. If a note is unclear or you decide
      not to make a change, do not silently skip it — reply explaining why
      and leave it open.
-   - After a successful change, reply and resolve:
+   - After a successful change, reply and resolve — `reply_to_note` then
+     `resolve_note`, or:
 
      ```sh
      curl -s -X POST http://localhost:4870/api/threads/<tid>/reply \
