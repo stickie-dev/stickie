@@ -96,6 +96,19 @@ carries two binaries: `stickie` (the server) and `stickie-mcp` (the MCP bridge).
 The server binds 127.0.0.1 only (`STICKIE_HOST` overrides). The GitLab import
 is the only outbound network call and only runs when you trigger it.
 
+## Storage
+
+Notes live in SQLite by default — one file at `~/.stickie/stickie.sqlite`
+(`STICKIE_DB` overrides), no server to run. Point stickie at Postgres instead when
+the record should outlive one laptop: paste a URL into Settings → Storage, or
+set `STICKIE_DATABASE_URL`; a restart picks it up. The data-access layer is async
+either way, so nothing above it knows which backend it is talking to, and
+stickie never falls back on its own — an unreachable database is an error, not a
+quiet detour into a local file.
+
+A URL saved from Settings lands in `~/.stickie/config.json` (owner-only, and
+shown back redacted). Prefer the environment variable on shared machines.
+
 ## API (agent-facing)
 
 Interactive docs: **http://localhost:4870/api/docs** (Swagger UI); machine
@@ -151,7 +164,7 @@ skill.
 ## Layout
 
 - `client/` — Vite + React + Monaco UI
-- `server/` — Hono API + static hosting; git via the CLI, SQLite storage
-  (`~/.stickie/stickie.sqlite`, override with `STICKIE_DB`)
+- `server/` — Hono API + static hosting; git via the CLI, and `server/src/db/`
+  holding the async storage layer (SQLite by default, Postgres on request)
 - `shared/` — types crossing the API boundary, consumed as source
 - `agents/` — integration docs and per-agent adapters

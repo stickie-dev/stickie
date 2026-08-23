@@ -19,10 +19,12 @@
     "chokidar": "^4.0.0",
     "execa": "^9.5.0",
     "hono": "^4.6.0",
+    "pg": "^8.23.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"

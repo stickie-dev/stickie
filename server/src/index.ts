@@ -6,7 +6,7 @@ import { createNodeWebSocket } from '@hono/node-ws'
 import type { WSContext } from 'hono/ws'
 import type { ClientEvent } from '@stickie/shared'
 import { createApp } from './app.js'
-import { openDb } from './db.js'
+import { openDatabase } from './db.js'
 import { isGitRepo, repoRoot } from './git.js'
 import { Store } from './store.js'
 import { WatchHub } from './watcher.js'
@@ -19,7 +19,13 @@ const client_dist = path.relative(
   path.resolve(here, '../../client/dist'),
 )
 
-const store = new Store(openDb(process.env.STICKIE_DB))
+let store: Store
+try {
+  store = new Store(await openDatabase())
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error)
+  process.exit(1)
+}
 const hub = new WatchHub()
 const sockets = new Set<WSContext>()
 
@@ -59,7 +65,7 @@ app.get('*', serveStatic({ path: path.join(client_dist, 'index.html') }))
 
 const add_repo = process.env.STICKIE_ADD_REPO
 if (add_repo !== undefined && (await isGitRepo(add_repo))) {
-  store.addRepo(await repoRoot(add_repo))
+  await store.addRepo(await repoRoot(add_repo))
 }
 
 const port = Number(process.env.PORT ?? default_port)

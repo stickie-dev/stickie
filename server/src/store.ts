@@ -1,4 +1,5 @@
-import type { DatabaseSync } from 'node:sqlite'
+import type { Db } from './db/driver.js'
+import { toBool, toText } from './db/driver.js'
 import type {
   Author,
   ReviewSource,
@@ -34,10 +35,11 @@ interface ThreadRow {
   blob_sha: string | null
   snippet: string
   status: string
-  pending: number
+  /** 0/1 from sqlite, boolean from postgres */
+  pending: number | boolean
   origin: string | null
   external_id: string | null
-  created_at: string
+  created_at: string | Date
 }
 
 interface MessageRow {
@@ -45,88 +47,97 @@ interface MessageRow {
   thread_id: number
   author: string
   body: string
-  created_at: string
+  created_at: string | Date
 }
 
 export class Store {
-  constructor(private db: DatabaseSync) {}
+  constructor(private db: Db) {}
 
-  listRepos(): RepoRow[] {
-    return this.db
-      .prepare('select id, path from repos order by path')
-      .all() as unknown as RepoRow[]
+  /** Where the record lives, safe to show: never carries credentials. */
+  get describe(): string {
+    return this.db.describe
   }
 
-  getRepo(id: number): RepoRow | undefined {
-    return this.db
-      .prepare('select id, path from repos where id = ?')
-      .get(id) as unknown as RepoRow | undefined
+  listRepos(): Promise<RepoRow[]> {
+    return this.db.all<RepoRow>('select id, path from repos order by path')
   }
 
-  addRepo(path: string): RepoRow {
-    this.db
-      .prepare('insert into repos (path) values (?) on conflict do nothing')
-      .run(path)
-    return this.db
-      .prepare('select id, path from repos where path = ?')
-      .get(path) as unknown as RepoRow
+  getRepo(id: number): Promise<RepoRow | undefined> {
+    return this.db.get<RepoRow>('select id, path from repos where id = ?', [id])
   }
 
-  removeRepo(id: number): void {
-    this.db.prepare('delete from repos where id = ?').run(id)
+  async addRepo(path: string): Promise<RepoRow> {
+    await this.db.run(
+      'insert into repos (path) values (?) on conflict do nothing',
+      [path],
+    )
+    const row = await this.db.get<RepoRow>(
+      'select id, path from repos where path = ?',
+      [path],
+    )
+    if (row === undefined) throw new Error('repo insert failed')
+    return row
   }
 
-  getOrCreateSession(
+  async removeRepo(id: number): Promise<void> {
+    await this.db.run('delete from repos where id = ?', [id])
+  }
+
+  async getOrCreateSession(
     repoId: number,
     source: ReviewSource,
     baseRef: string,
     baseSha: string,
-  ): Session {
-    this.db
-      .prepare(
-        `insert into sessions (repo_id, source_kind, source_value, base_ref, base_sha)
-         values (?, ?, ?, ?, ?) on conflict do nothing`,
-      )
-      .run(repoId, source.kind, source.value, baseRef, baseSha)
-    const row = this.db
-      .prepare(
-        `select s.*, r.path as repo_path from sessions s
-         join repos r on r.id = s.repo_id
-         where s.repo_id = ? and s.source_kind = ? and s.source_value = ? and s.base_sha = ?`,
-      )
-      .get(repoId, source.kind, source.value, baseSha) as unknown as SessionRow
+  ): Promise<Session> {
+    await this.db.run(
+      `insert into sessions (repo_id, source_kind, source_value, base_ref, base_sha)
+       values (?, ?, ?, ?, ?) on conflict do nothing`,
+      [repoId, source.kind, source.value, baseRef, baseSha],
+    )
+    const row = await this.db.get<SessionRow>(
+      `select s.*, r.path as repo_path from sessions s
+       join repos r on r.id = s.repo_id
+       where s.repo_id = ? and s.source_kind = ? and s.source_value = ? and s.base_sha = ?`,
+      [repoId, source.kind, source.value, baseSha],
+    )
+    if (row === undefined) throw new Error('session insert failed')
     return sessionFromRow(row)
   }
 
-  getSession(id: number): Session | undefined {
-    const row = this.db
-      .prepare(
-        `select s.*, r.path as repo_path from sessions s
-         join repos r on r.id = s.repo_id where s.id = ?`,
-      )
-      .get(id) as unknown as SessionRow | undefined
+  async getSession(id: number): Promise<Session | undefined> {
+    const row = await this.db.get<SessionRow>(
+      `select s.*, r.path as repo_path from sessions s
+       join repos r on r.id = s.repo_id where s.id = ?`,
+      [id],
+    )
     return row === undefined ? undefined : sessionFromRow(row)
   }
 
   /** Newest first, so an agent handed no id can take the obvious one. */
-  listSessions(): Session[] {
-    const rows = this.db
-      .prepare(
-        `select s.*, r.path as repo_path from sessions s
-         join repos r on r.id = s.repo_id order by s.id desc`,
-      )
-      .all() as unknown as SessionRow[]
+  async listSessions(): Promise<Session[]> {
+    const rows = await this.db.all<SessionRow>(
+      `select s.*, r.path as repo_path from sessions s
+       join repos r on r.id = s.repo_id order by s.id desc`,
+    )
     return rows.map(sessionFromRow)
   }
 
-  countOpenThreads(sessionId: number): number {
-    const row = this.db
-      .prepare(
-        `select count(*) as n from threads
-         where session_id = ? and status != 'resolved' and pending = 0`,
-      )
-      .get(sessionId) as unknown as { n: number }
-    return row.n
+  async countOpenThreads(sessionId: number): Promise<number> {
+    const row = await this.db.get<{ n: number }>(
+      `select count(*) as n from threads
+       where session_id = ? and status != 'resolved' and pending = ?`,
+      [sessionId, this.falseValue],
+    )
+    return Number(row?.n ?? 0)
+  }
+
+  /** Postgres wants a real boolean where SQLite wants 0/1. */
+  private get falseValue(): boolean | number {
+    return this.db.dialect === 'postgres' ? false : 0
+  }
+
+  private get trueValue(): boolean | number {
+    return this.db.dialect === 'postgres' ? true : 1
   }
 
   createThread(
@@ -140,189 +151,218 @@ export class Store {
     author: Author,
     body: string,
     options: { pending?: boolean; origin?: string; externalId?: string } = {},
-  ): Thread {
-    const result = this.db
-      .prepare(
+  ): Promise<Thread> {
+    // the note and its first message are one act; a reader must never find a
+    // thread with no message in it
+    return this.db.transaction(async () => {
+      const threadId = await this.db.insert(
         `insert into threads (session_id, path, side, start_line, end_line, blob_sha, snippet, pending, origin, external_id)
          values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          sessionId,
+          path,
+          side,
+          startLine,
+          endLine,
+          blobSha,
+          snippet,
+          options.pending === true ? this.trueValue : this.falseValue,
+          options.origin ?? null,
+          options.externalId ?? null,
+        ],
       )
-      .run(
-        sessionId,
-        path,
-        side,
-        startLine,
-        endLine,
-        blobSha,
-        snippet,
-        options.pending === true ? 1 : 0,
-        options.origin ?? null,
-        options.externalId ?? null,
-      )
-    const threadId = Number(result.lastInsertRowid)
-    this.addMessage(threadId, author, body)
-    const thread = this.getThread(threadId)
-    if (thread === undefined) throw new Error('thread insert failed')
-    return thread
+      await this.addMessage(threadId, author, body)
+      const thread = await this.getThread(threadId)
+      if (thread === undefined) throw new Error('thread insert failed')
+      return thread
+    })
   }
 
-  getThread(id: number): Thread | undefined {
-    const row = this.db
-      .prepare('select * from threads where id = ?')
-      .get(id) as unknown as ThreadRow | undefined
+  async getThread(id: number): Promise<Thread | undefined> {
+    const row = await this.db.get<ThreadRow>(
+      'select * from threads where id = ?',
+      [id],
+    )
     if (row === undefined) return undefined
     return this.threadFromRow(row)
   }
 
-  listThreads(sessionId: number, status?: ThreadStatus): Thread[] {
-    const rows = (
+  async listThreads(
+    sessionId: number,
+    status?: ThreadStatus,
+  ): Promise<Thread[]> {
+    const rows =
       status === undefined
-        ? this.db
-            .prepare('select * from threads where session_id = ? order by id')
-            .all(sessionId)
-        : this.db
-            .prepare(
-              'select * from threads where session_id = ? and status = ? order by id',
-            )
-            .all(sessionId, status)
-    ) as unknown as ThreadRow[]
-    return rows.map((row) => this.threadFromRow(row))
+        ? await this.db.all<ThreadRow>(
+            'select * from threads where session_id = ? order by id',
+            [sessionId],
+          )
+        : await this.db.all<ThreadRow>(
+            'select * from threads where session_id = ? and status = ? order by id',
+            [sessionId, status],
+          )
+    const threads: Thread[] = []
+    for (const row of rows) threads.push(await this.threadFromRow(row))
+    return threads
   }
 
-  addMessage(threadId: number, author: Author, body: string): ThreadMessage {
-    const result = this.db
-      .prepare('insert into messages (thread_id, author, body) values (?, ?, ?)')
-      .run(threadId, author, body)
-    const row = this.db
-      .prepare('select * from messages where id = ?')
-      .get(Number(result.lastInsertRowid)) as unknown as MessageRow
+  async addMessage(
+    threadId: number,
+    author: Author,
+    body: string,
+  ): Promise<ThreadMessage> {
+    const id = await this.db.insert(
+      'insert into messages (thread_id, author, body) values (?, ?, ?)',
+      [threadId, author, body],
+    )
+    const row = await this.db.get<MessageRow>(
+      'select * from messages where id = ?',
+      [id],
+    )
+    if (row === undefined) throw new Error('message insert failed')
     return messageFromRow(row)
   }
 
-  getMessage(
+  async getMessage(
     id: number,
-  ): { id: number; threadId: number; author: Author } | undefined {
-    const row = this.db
-      .prepare('select id, thread_id, author from messages where id = ?')
-      .get(id) as unknown as
-      | { id: number; thread_id: number; author: string }
-      | undefined
+  ): Promise<{ id: number; threadId: number; author: Author } | undefined> {
+    const row = await this.db.get<{
+      id: number
+      thread_id: number
+      author: string
+    }>('select id, thread_id, author from messages where id = ?', [id])
     if (row === undefined) return undefined
     return { id: row.id, threadId: row.thread_id, author: row.author as Author }
   }
 
-  updateMessage(id: number, body: string): void {
-    this.db.prepare('update messages set body = ? where id = ?').run(body, id)
+  async updateMessage(id: number, body: string): Promise<void> {
+    await this.db.run('update messages set body = ? where id = ?', [body, id])
   }
 
-  deleteMessage(id: number): void {
-    this.db.prepare('delete from messages where id = ?').run(id)
+  async deleteMessage(id: number): Promise<void> {
+    await this.db.run('delete from messages where id = ?', [id])
   }
 
-  countMessages(threadId: number): number {
-    const row = this.db
-      .prepare('select count(*) as n from messages where thread_id = ?')
-      .get(threadId) as unknown as { n: number }
-    return row.n
+  async countMessages(threadId: number): Promise<number> {
+    const row = await this.db.get<{ n: number }>(
+      'select count(*) as n from messages where thread_id = ?',
+      [threadId],
+    )
+    return Number(row?.n ?? 0)
   }
 
-  deleteThread(id: number): void {
-    this.db.prepare('delete from threads where id = ?').run(id)
+  async deleteThread(id: number): Promise<void> {
+    await this.db.run('delete from threads where id = ?', [id])
   }
 
-  setThreadStatus(threadId: number, status: ThreadStatus): void {
-    this.db
-      .prepare('update threads set status = ? where id = ?')
-      .run(status, threadId)
+  async setThreadStatus(threadId: number, status: ThreadStatus): Promise<void> {
+    await this.db.run('update threads set status = ? where id = ?', [
+      status,
+      threadId,
+    ])
   }
 
-  getSetting(key: string): string | null {
-    const row = this.db
-      .prepare('select value from settings where key = ?')
-      .get(key) as unknown as { value: string } | undefined
+  async getSetting(key: string): Promise<string | null> {
+    const row = await this.db.get<{ value: string }>(
+      'select value from settings where key = ?',
+      [key],
+    )
     return row?.value ?? null
   }
 
-  setSetting(key: string, value: string | null): void {
+  async setSetting(key: string, value: string | null): Promise<void> {
     if (value === null || value === '') {
-      this.db.prepare('delete from settings where key = ?').run(key)
-    } else {
-      this.db
-        .prepare(
-          'insert into settings (key, value) values (?, ?) on conflict (key) do update set value = excluded.value',
-        )
-        .run(key, value)
+      await this.db.run('delete from settings where key = ?', [key])
+      return
     }
+    await this.db.run(
+      'insert into settings (key, value) values (?, ?) on conflict (key) do update set value = excluded.value',
+      [key, value],
+    )
   }
 
   /** Post every pending note of a session; returns how many were posted. */
-  postPending(sessionId: number): number {
-    const result = this.db
-      .prepare(
-        'update threads set pending = 0 where session_id = ? and pending = 1',
-      )
-      .run(sessionId)
-    return Number(result.changes)
+  async postPending(sessionId: number): Promise<number> {
+    const result = await this.db.run(
+      'update threads set pending = ? where session_id = ? and pending = ?',
+      [this.falseValue, sessionId, this.trueValue],
+    )
+    return result.changes
   }
 
-  setThreadPending(threadId: number, pending: boolean): void {
-    this.db
-      .prepare('update threads set pending = ? where id = ?')
-      .run(pending ? 1 : 0, threadId)
+  async setThreadPending(threadId: number, pending: boolean): Promise<void> {
+    await this.db.run('update threads set pending = ? where id = ?', [
+      pending ? this.trueValue : this.falseValue,
+      threadId,
+    ])
   }
 
-  findThreadByExternalId(sessionId: number, externalId: string): Thread | undefined {
-    const row = this.db
-      .prepare(
-        'select * from threads where session_id = ? and external_id = ?',
-      )
-      .get(sessionId, externalId) as unknown as ThreadRow | undefined
+  async findThreadByExternalId(
+    sessionId: number,
+    externalId: string,
+  ): Promise<Thread | undefined> {
+    const row = await this.db.get<ThreadRow>(
+      'select * from threads where session_id = ? and external_id = ?',
+      [sessionId, externalId],
+    )
     return row === undefined ? undefined : this.threadFromRow(row)
   }
 
-  setViewed(sessionId: number, path: string, viewed: boolean): void {
+  async setViewed(
+    sessionId: number,
+    path: string,
+    viewed: boolean,
+  ): Promise<void> {
     if (viewed) {
-      this.db
-        .prepare(
-          'insert into viewed_files (session_id, path) values (?, ?) on conflict do nothing',
-        )
-        .run(sessionId, path)
-    } else {
-      this.db
-        .prepare('delete from viewed_files where session_id = ? and path = ?')
-        .run(sessionId, path)
+      await this.db.run(
+        'insert into viewed_files (session_id, path) values (?, ?) on conflict do nothing',
+        [sessionId, path],
+      )
+      return
     }
+    await this.db.run(
+      'delete from viewed_files where session_id = ? and path = ?',
+      [sessionId, path],
+    )
   }
 
-  listViewed(sessionId: number): string[] {
-    return (
-      this.db
-        .prepare('select path from viewed_files where session_id = ?')
-        .all(sessionId) as unknown as { path: string }[]
-    ).map((r) => r.path)
+  async listViewed(sessionId: number): Promise<string[]> {
+    const rows = await this.db.all<{ path: string }>(
+      'select path from viewed_files where session_id = ?',
+      [sessionId],
+    )
+    return rows.map((r) => r.path)
   }
 
   /** Carry unresolved threads over to a re-pinned session. */
-  moveOpenThreads(fromSessionId: number, toSessionId: number): number {
-    const result = this.db
-      .prepare(
-        `update threads set session_id = ? where session_id = ? and status != 'resolved'`,
-      )
-      .run(toSessionId, fromSessionId)
-    return Number(result.changes)
+  async moveOpenThreads(
+    fromSessionId: number,
+    toSessionId: number,
+  ): Promise<number> {
+    const result = await this.db.run(
+      `update threads set session_id = ? where session_id = ? and status != 'resolved'`,
+      [toSessionId, fromSessionId],
+    )
+    return result.changes
   }
 
-  setThreadAnchor(threadId: number, startLine: number, endLine: number): void {
-    this.db
-      .prepare('update threads set start_line = ?, end_line = ? where id = ?')
-      .run(startLine, endLine, threadId)
+  async setThreadAnchor(
+    threadId: number,
+    startLine: number,
+    endLine: number,
+  ): Promise<void> {
+    await this.db.run(
+      'update threads set start_line = ?, end_line = ? where id = ?',
+      [startLine, endLine, threadId],
+    )
   }
 
-  private threadFromRow(row: ThreadRow): Thread {
-    const messages = (
-      this.db
-        .prepare('select * from messages where thread_id = ? order by id')
-        .all(row.id) as unknown as MessageRow[]
-    ).map(messageFromRow)
+  private async threadFromRow(row: ThreadRow): Promise<Thread> {
+    const rows = await this.db.all<MessageRow>(
+      'select * from messages where thread_id = ? order by id',
+      [row.id],
+    )
+    const messages = rows.map(messageFromRow)
     return {
       id: row.id,
       sessionId: row.session_id,
@@ -332,9 +372,9 @@ export class Store {
       endLine: row.end_line,
       snippet: row.snippet,
       status: row.status as ThreadStatus,
-      pending: row.pending === 1,
+      pending: toBool(row.pending),
       origin: row.origin,
-      createdAt: row.created_at,
+      createdAt: toText(row.created_at),
       messages,
     }
   }
@@ -359,6 +399,6 @@ function messageFromRow(row: MessageRow): ThreadMessage {
     id: row.id,
     author: row.author as Author,
     body: row.body,
-    createdAt: row.created_at,
+    createdAt: toText(row.created_at),
   }
 }

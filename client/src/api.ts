@@ -20,6 +20,11 @@ export interface SettingsState {
   defaultPromptInstructions: string
   /** comma-separated extensions that open soft-wrapped */
   wrapExtensions: string
+  storage: {
+    active: string
+    databaseUrl: string | null
+    fromEnv: boolean
+  }
 }
 
 export interface CommitBetween {
@@ -155,12 +160,13 @@ export const api = {
     gitlabTokenEnv?: string
     promptInstructions?: string
     wrapExtensions?: string
+    databaseUrl?: string
   }) =>
     fetch('/api/settings', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
-    }).then(toJson<{ ok: boolean }>),
+    }).then(toJson<{ ok: boolean; restartRequired: boolean }>),
 
   importMr: (sessionId: number, mr: string) =>
     post(`/api/sessions/${sessionId}/import-mr`, { mr }).then(

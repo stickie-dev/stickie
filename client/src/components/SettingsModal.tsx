@@ -15,6 +15,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [clearToken, setClearToken] = useState(false)
   const [instructions, setInstructions] = useState('')
   const [wrapExtensions, setWrapExtensions] = useState('')
+  const [databaseUrl, setDatabaseUrl] = useState('')
 
   useEffect(() => {
     void api.settings().then((s) => {
@@ -23,21 +24,33 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       setTokenEnv(s.gitlabTokenEnv ?? '')
       setInstructions(s.promptInstructions)
       setWrapExtensions(s.wrapExtensions)
+      setDatabaseUrl(s.storage.databaseUrl ?? '')
     })
   }, [])
 
   const save = async () => {
     try {
-      await api.saveSettings({
+      // a redacted url must not be saved back over the real one
+      const url_changed =
+        state !== null && databaseUrl !== (state.storage.databaseUrl ?? '')
+      const result = await api.saveSettings({
         gitlabUrl: url,
         gitlabTokenEnv: tokenEnv,
         promptInstructions: instructions,
         wrapExtensions: wrapExtensions,
+        ...(url_changed && !(state?.storage.fromEnv ?? false)
+          ? { databaseUrl }
+          : {}),
         // untouched unless a new value was typed or clearing was requested
         ...(token !== '' ? { gitlabToken: token } : {}),
         ...(clearToken ? { gitlabToken: '' } : {}),
       })
-      pushToast('info', 'settings saved')
+      pushToast(
+        'info',
+        result.restartRequired
+          ? 'settings saved — restart stickie to use the new database'
+          : 'settings saved',
+      )
       onClose()
     } catch (error) {
       pushToast(
@@ -145,6 +158,45 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <> No token is currently available.</>
             )}{' '}
             The stored token lives in plaintext in the local database.
+          </p>
+        </section>
+
+        <section className="mt-5 space-y-2">
+          <h3 className="text-xs font-semibold tracking-wide text-soft uppercase">
+            Storage
+          </h3>
+          <p className="text-xs text-faint">
+            Now using{' '}
+            <span className="font-mono text-soft">
+              {state?.storage.active ?? '…'}
+            </span>
+            . Leave the field empty to keep the local SQLite file.
+          </p>
+          <label className="block text-xs text-soft">
+            Postgres URL
+            <input
+              className={`mt-1 ${field_classes}`}
+              placeholder="postgresql://user:password@host:5432/stickie"
+              value={databaseUrl}
+              disabled={state?.storage.fromEnv === true}
+              onChange={(e) => setDatabaseUrl(e.target.value)}
+            />
+          </label>
+          <p className="text-xs text-faint">
+            {state?.storage.fromEnv === true ? (
+              <>
+                <span className="font-mono">STICKIE_DATABASE_URL</span> is set, so
+                the environment decides and this field is read-only.
+              </>
+            ) : (
+              <>
+                Takes effect after a restart. The password is stored in
+                plaintext in <span className="font-mono">~/.stickie/config.json</span>{' '}
+                (owner-only) and shown back to you redacted — prefer{' '}
+                <span className="font-mono">STICKIE_DATABASE_URL</span> on shared
+                machines.
+              </>
+            )}
           </p>
         </section>
 

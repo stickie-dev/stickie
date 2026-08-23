@@ -9,6 +9,11 @@ import type {
   ThreadEvent,
 } from '@stickie/shared'
 import { extractSnippet, reanchor } from './anchors.js'
+import {
+  configuredDatabaseUrl,
+  databaseFromEnv,
+  setDatabaseUrl,
+} from './config.js'
 import { buildPrompt, default_prompt_instructions } from './export.js'
 import {
   changedFiles,
@@ -218,6 +223,18 @@ function json_response<T extends z.ZodType>(schema: T, description: string) {
 const not_found = json_response(error_schema, 'Unknown resource')
 const bad_request = json_response(error_schema, 'Invalid request')
 
+/** A database url without its password, for showing back to the user. */
+function redactUrl(url: string | null): string | null {
+  if (url === null) return null
+  try {
+    const parsed = new URL(url)
+    if (parsed.password !== '') parsed.password = '***'
+    return parsed.toString()
+  } catch {
+    return url
+  }
+}
+
 // extensions whose files open soft-wrapped; prose and data, not code
 const default_wrap_extensions = 'md,markdown,txt,rst,csv,log,json'
 
@@ -256,7 +273,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const repos = store.listRepos()
+      const repos = await store.listRepos()
       const infos: RepoInfo[] = await Promise.all(
         repos.map(async (repo) => {
           const status = await gitStatus(repo.path)
@@ -292,7 +309,7 @@ export function createApp(
         return c.json({ error: `not a git repository: ${expanded}` }, 400)
       }
       const root = await repoRoot(expanded)
-      return c.json(store.addRepo(root), 200)
+      return c.json(await store.addRepo(root), 200)
     },
   )
 
@@ -307,8 +324,8 @@ export function createApp(
         200: json_response(z.object({ ok: z.boolean() }), 'Removed'),
       },
     }),
-    (c) => {
-      store.removeRepo(c.req.valid('param').id)
+    async (c) => {
+      await store.removeRepo(c.req.valid('param').id)
       return c.json({ ok: true }, 200)
     },
   )
@@ -326,7 +343,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const repo = store.getRepo(c.req.valid('param').id)
+      const repo = await store.getRepo(c.req.valid('param').id)
       if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
       const [worktrees, branches, recentCommits, default_branch] =
         await Promise.all([
@@ -364,7 +381,7 @@ export function createApp(
     }),
     async (c) => {
       const body = c.req.valid('json')
-      const repo = store.getRepo(body.repoId)
+      const repo = await store.getRepo(body.repoId)
       if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
 
       if (body.source.kind === 'worktree') {
@@ -401,7 +418,7 @@ export function createApp(
         base_sha = await resolveRef(resolve_in, base_ref)
       }
 
-      const session = store.getOrCreateSession(
+      const session = await store.getOrCreateSession(
         repo.id,
         body.source,
         base_ref,
@@ -427,7 +444,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
@@ -453,7 +470,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
@@ -465,13 +482,13 @@ export function createApp(
       if (current === session.baseSha) {
         return c.json({ ...session, baseStale: false }, 200)
       }
-      const next = store.getOrCreateSession(
+      const next = await store.getOrCreateSession(
         session.repoId,
         session.source,
         session.baseRef,
         current,
       )
-      store.moveOpenThreads(session.id, next.id)
+      await store.moveOpenThreads(session.id, next.id)
       return c.json({ ...next, baseStale: false }, 200)
     },
   )
@@ -499,7 +516,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
@@ -525,7 +542,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
@@ -549,7 +566,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
@@ -579,7 +596,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
@@ -619,7 +636,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const repo = store.getRepo(c.req.valid('param').id)
+      const repo = await store.getRepo(c.req.valid('param').id)
       if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
       const shas = c.req
         .valid('query')
@@ -659,14 +676,17 @@ export function createApp(
         ),
       },
     }),
-    (c) =>
-      c.json(
-        store.listSessions().map((session) => ({
+    async (c) => {
+      const sessions = await store.listSessions()
+      const listed = []
+      for (const session of sessions) {
+        listed.push({
           ...session,
-          openNotes: store.countOpenThreads(session.id),
-        })),
-        200,
-      ),
+          openNotes: await store.countOpenThreads(session.id),
+        })
+      }
+      return c.json(listed, 200)
+    },
   )
 
   app.openapi(
@@ -691,13 +711,13 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
       const { status, include_pending } = c.req.valid('query')
       const threads = (
-        await reanchorThreads(store, session, store.listThreads(session.id))
+        await reanchorThreads(store, session, await store.listThreads(session.id))
       ).filter((t) => include_pending === true || !t.pending)
       return c.json(
         status === undefined
@@ -722,7 +742,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
@@ -731,7 +751,7 @@ export function createApp(
         return c.json({ error: 'endLine before startLine' }, 400)
       }
       if (body.startLine === 0) {
-        const note = store.createThread(
+        const note = await store.createThread(
           session.id,
           body.path,
           body.side,
@@ -760,7 +780,7 @@ export function createApp(
         )
       }
       const snippet = extractSnippet(blob.content, body.startLine, body.endLine)
-      const thread = store.createThread(
+      const thread = await store.createThread(
         session.id,
         body.path,
         body.side,
@@ -790,11 +810,11 @@ export function createApp(
       },
     }),
     async (c) => {
-      const thread = store.getThread(c.req.valid('param').id)
+      const thread = await store.getThread(c.req.valid('param').id)
       if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
       const body = c.req.valid('json')
-      store.addMessage(thread.id, body.author, body.body)
-      const updated = store.getThread(thread.id)
+      await store.addMessage(thread.id, body.author, body.body)
+      const updated = await store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
       threadChanged('updated', updated.sessionId, updated.id)
       return c.json(updated, 200)
@@ -814,16 +834,16 @@ export function createApp(
         404: not_found,
       },
     }),
-    (c) => {
-      const message = store.getMessage(c.req.valid('param').id)
+    async (c) => {
+      const message = await store.getMessage(c.req.valid('param').id)
       if (message === undefined) {
         return c.json({ error: 'unknown message' }, 404)
       }
       if (message.author !== 'user') {
         return c.json({ error: 'agent messages cannot be edited' }, 400)
       }
-      store.updateMessage(message.id, c.req.valid('json').body)
-      const thread = store.getThread(message.threadId)
+      await store.updateMessage(message.id, c.req.valid('json').body)
+      const thread = await store.getThread(message.threadId)
       if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
       threadChanged('updated', thread.sessionId, thread.id)
       return c.json(thread, 200)
@@ -842,10 +862,10 @@ export function createApp(
         404: not_found,
       },
     }),
-    (c) => {
-      const thread = store.getThread(c.req.valid('param').id)
+    async (c) => {
+      const thread = await store.getThread(c.req.valid('param').id)
       if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
-      store.deleteThread(thread.id)
+      await store.deleteThread(thread.id)
       threadChanged('deleted', thread.sessionId, thread.id)
       return c.json({ ok: true }, 200)
     },
@@ -871,24 +891,24 @@ export function createApp(
         404: not_found,
       },
     }),
-    (c) => {
-      const message = store.getMessage(c.req.valid('param').id)
+    async (c) => {
+      const message = await store.getMessage(c.req.valid('param').id)
       if (message === undefined) {
         return c.json({ error: 'unknown message' }, 404)
       }
       if (message.author !== 'user') {
         return c.json({ error: 'agent messages cannot be deleted' }, 400)
       }
-      const owner = store.getThread(message.threadId)
-      store.deleteMessage(message.id)
-      if (store.countMessages(message.threadId) === 0) {
-        store.deleteThread(message.threadId)
+      const owner = await store.getThread(message.threadId)
+      await store.deleteMessage(message.id)
+      if (await store.countMessages(message.threadId) === 0) {
+        await store.deleteThread(message.threadId)
         if (owner !== undefined) {
           threadChanged('deleted', owner.sessionId, owner.id)
         }
         return c.json({ deletedThread: true, thread: null }, 200)
       }
-      const thread = store.getThread(message.threadId)
+      const thread = await store.getThread(message.threadId)
       if (thread !== undefined) {
         threadChanged('updated', thread.sessionId, thread.id)
       }
@@ -910,11 +930,11 @@ export function createApp(
     })
 
   for (const action of ['resolve', 'reopen'] as const) {
-    app.openapi(status_route(action), (c) => {
-      const thread = store.getThread(c.req.valid('param').id)
+    app.openapi(status_route(action), async (c) => {
+      const thread = await store.getThread(c.req.valid('param').id)
       if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
-      store.setThreadStatus(thread.id, action === 'resolve' ? 'resolved' : 'open')
-      const updated = store.getThread(thread.id)
+      await store.setThreadStatus(thread.id, action === 'resolve' ? 'resolved' : 'open')
+      const updated = await store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
       threadChanged('updated', updated.sessionId, updated.id)
       return c.json(updated, 200)
@@ -947,14 +967,14 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
       const { order, include_pending } = c.req.valid('query')
       const with_pending = include_pending !== false
       const unresolved = (
-        await reanchorThreads(store, session, store.listThreads(session.id))
+        await reanchorThreads(store, session, await store.listThreads(session.id))
       ).filter((t) => t.status !== 'resolved' && (with_pending || !t.pending))
       const wanted =
         order === undefined
@@ -972,7 +992,7 @@ export function createApp(
       const api_base = new URL(c.req.url).origin
       const source_cache = new Map<string, string | null>()
       const repo_by_name = new Map(
-        store.listRepos().map((r) => [r.path.split('/').at(-1) ?? r.path, r]),
+        (await store.listRepos()).map((r) => [r.path.split('/').at(-1) ?? r.path, r]),
       )
       const readSource = async (
         repoName: string | null,
@@ -1011,7 +1031,7 @@ export function createApp(
           threads,
           api_base,
           readSource,
-          store.getSetting('prompt_instructions') ??
+          await store.getSetting('prompt_instructions') ??
             default_prompt_instructions,
         ),
         200,
@@ -1034,12 +1054,12 @@ export function createApp(
         404: not_found,
       },
     }),
-    (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+    async (c) => {
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      const posted = store.postPending(session.id)
+      const posted = await store.postPending(session.id)
       if (posted > 0) threadChanged('updated', session.id)
       return c.json({ posted }, 200)
     },
@@ -1057,11 +1077,11 @@ export function createApp(
         404: not_found,
       },
     }),
-    (c) => {
-      const thread = store.getThread(c.req.valid('param').id)
+    async (c) => {
+      const thread = await store.getThread(c.req.valid('param').id)
       if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
-      store.setThreadPending(thread.id, false)
-      const updated = store.getThread(thread.id)
+      await store.setThreadPending(thread.id, false)
+      const updated = await store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
       threadChanged('updated', updated.sessionId, updated.id)
       return c.json(updated, 200)
@@ -1080,12 +1100,12 @@ export function createApp(
         404: not_found,
       },
     }),
-    (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+    async (c) => {
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      return c.json(store.listViewed(session.id), 200)
+      return c.json(await store.listViewed(session.id), 200)
     },
   )
 
@@ -1107,20 +1127,20 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
       const body = c.req.valid('json')
-      store.setViewed(session.id, body.path, body.viewed)
+      await store.setViewed(session.id, body.path, body.viewed)
       return c.json({ ok: true }, 200)
     },
   )
 
-  const gitlabSettings = () => ({
-    url: store.getSetting('gitlab_url'),
-    token: store.getSetting('gitlab_token'),
-    tokenEnv: store.getSetting('gitlab_token_env'),
+  const gitlabSettings = async () => ({
+    url: await store.getSetting('gitlab_url'),
+    token: await store.getSetting('gitlab_token'),
+    tokenEnv: await store.getSetting('gitlab_token_env'),
   })
 
   app.openapi(
@@ -1140,13 +1160,21 @@ export function createApp(
             promptInstructions: z.string(),
             defaultPromptInstructions: z.string(),
             wrapExtensions: z.string(),
+            storage: z.object({
+              /** what the running server is using */
+              active: z.string(),
+              /** the configured postgres url, with the password removed */
+              databaseUrl: z.string().nullable(),
+              /** the environment decides; the page cannot change it */
+              fromEnv: z.boolean(),
+            }),
           }),
           'Settings state',
         ),
       },
     }),
-    (c) => {
-      const settings = gitlabSettings()
+    async (c) => {
+      const settings = await gitlabSettings()
       const config = gitlabConfig(settings)
       return c.json(
         {
@@ -1156,10 +1184,17 @@ export function createApp(
           effectiveUrl: config?.url ?? null,
           tokenSource: config?.tokenSource ?? null,
           promptInstructions:
-            store.getSetting('prompt_instructions') ??
+            await store.getSetting('prompt_instructions') ??
             default_prompt_instructions,
           defaultPromptInstructions: default_prompt_instructions,
-          wrapExtensions: store.getSetting('wrap_extensions') ?? default_wrap_extensions,
+          wrapExtensions:
+            (await store.getSetting('wrap_extensions')) ??
+            default_wrap_extensions,
+          storage: {
+            active: store.describe,
+            databaseUrl: redactUrl(configuredDatabaseUrl()),
+            fromEnv: databaseFromEnv(),
+          },
         },
         200,
       )
@@ -1184,31 +1219,46 @@ export function createApp(
             gitlabTokenEnv: z.string().optional(),
             promptInstructions: z.string().optional(),
             wrapExtensions: z.string().optional(),
+            /** a postgres url, or '' to go back to the local sqlite file */
+            databaseUrl: z.string().optional(),
           }),
         ),
       },
       responses: {
-        200: json_response(z.object({ ok: z.boolean() }), 'Stored'),
+        200: json_response(
+          z.object({ ok: z.boolean(), restartRequired: z.boolean() }),
+          'Stored',
+        ),
+        400: bad_request,
       },
     }),
     async (c) => {
       const body = c.req.valid('json')
       if (body.gitlabUrl !== undefined) {
-        store.setSetting('gitlab_url', body.gitlabUrl)
+        await store.setSetting('gitlab_url', body.gitlabUrl)
       }
       if (body.gitlabToken !== undefined) {
-        store.setSetting('gitlab_token', body.gitlabToken)
+        await store.setSetting('gitlab_token', body.gitlabToken)
       }
       if (body.gitlabTokenEnv !== undefined) {
-        store.setSetting('gitlab_token_env', body.gitlabTokenEnv)
+        await store.setSetting('gitlab_token_env', body.gitlabTokenEnv)
       }
       if (body.promptInstructions !== undefined) {
-        store.setSetting('prompt_instructions', body.promptInstructions.trim())
+        await store.setSetting('prompt_instructions', body.promptInstructions.trim())
       }
       if (body.wrapExtensions !== undefined) {
-        store.setSetting('wrap_extensions', body.wrapExtensions.trim())
+        await store.setSetting('wrap_extensions', body.wrapExtensions.trim())
       }
-      return c.json({ ok: true }, 200)
+      let restart = false
+      if (body.databaseUrl !== undefined && !databaseFromEnv()) {
+        const url = body.databaseUrl.trim()
+        if (url !== '' && !/^postgres(ql)?:\/\//.test(url)) {
+          return c.json({ error: 'expected a postgres:// url' }, 400)
+        }
+        restart = url !== (configuredDatabaseUrl() ?? '')
+        setDatabaseUrl(url === '' ? null : url)
+      }
+      return c.json({ ok: true, restartRequired: restart }, 200)
     },
   )
 
@@ -1237,11 +1287,11 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      const config = gitlabConfig(gitlabSettings())
+      const config = gitlabConfig(await gitlabSettings())
       if (config === null) {
         return c.json(
           {
@@ -1271,7 +1321,7 @@ export function createApp(
       let skipped = 0
       for (const note of notes) {
         if (
-          store.findThreadByExternalId(session.id, note.externalId) !==
+          await store.findThreadByExternalId(session.id, note.externalId) !==
           undefined
         ) {
           skipped += 1
@@ -1290,7 +1340,7 @@ export function createApp(
         }
         const line = Math.min(note.line, blob.content.split('\n').length)
         const [first, ...rest] = note.messages
-        const thread = store.createThread(
+        const thread = await store.createThread(
           session.id,
           note.path,
           note.side,
@@ -1303,7 +1353,7 @@ export function createApp(
           { origin: 'gitlab', externalId: note.externalId },
         )
         for (const body of rest) {
-          store.addMessage(thread.id, 'user', body)
+          await store.addMessage(thread.id, 'user', body)
         }
         imported += 1
       }
@@ -1344,7 +1394,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
@@ -1357,8 +1407,7 @@ export function createApp(
       }
       const roots = [
         navRoot(session),
-        ...store
-          .listRepos()
+        ...(await store.listRepos())
           .map((r) => r.path)
           .filter((p) => p !== session.repoPath),
       ]
@@ -1393,7 +1442,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
@@ -1403,8 +1452,7 @@ export function createApp(
       }
       const roots = [
         navRoot(session),
-        ...store
-          .listRepos()
+        ...(await store.listRepos())
           .map((r) => r.path)
           .filter((p) => p !== session.repoPath),
       ]
@@ -1434,7 +1482,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const session = store.getSession(c.req.valid('param').id)
+      const session = await store.getSession(c.req.valid('param').id)
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
@@ -1444,8 +1492,7 @@ export function createApp(
       }
       const roots = [
         navRoot(session),
-        ...store
-          .listRepos()
+        ...(await store.listRepos())
           .map((r) => r.path)
           .filter((p) => p !== session.repoPath),
       ]
@@ -1486,7 +1533,7 @@ export function createApp(
       },
     }),
     async (c) => {
-      const repo = store.getRepo(c.req.valid('param').id)
+      const repo = await store.getRepo(c.req.valid('param').id)
       if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
       const { path: file_path, rev } = c.req.valid('query')
       const blob =
@@ -1550,13 +1597,13 @@ async function reanchorThreads(
       contents.set(thread.path, content)
     }
     if (content === null) {
-      store.setThreadStatus(thread.id, 'detached')
+      await store.setThreadStatus(thread.id, 'detached')
       result.push({ ...thread, status: 'detached' })
       continue
     }
     const anchor = reanchor(thread.snippet, content, thread.startLine)
     if (anchor === null) {
-      store.setThreadStatus(thread.id, 'detached')
+      await store.setThreadStatus(thread.id, 'detached')
       result.push({ ...thread, status: 'detached' })
       continue
     }
@@ -1565,8 +1612,8 @@ async function reanchorThreads(
       anchor.endLine !== thread.endLine ||
       thread.status === 'detached'
     ) {
-      store.setThreadAnchor(thread.id, anchor.startLine, anchor.endLine)
-      if (thread.status === 'detached') store.setThreadStatus(thread.id, 'open')
+      await store.setThreadAnchor(thread.id, anchor.startLine, anchor.endLine)
+      if (thread.status === 'detached') await store.setThreadStatus(thread.id, 'open')
       result.push({
         ...thread,
         ...anchor,
