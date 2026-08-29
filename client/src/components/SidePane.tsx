@@ -5,6 +5,7 @@ import { api } from '../api'
 import { editor_font } from '../monacoSetup'
 import { languageFor } from '../languages'
 import { useReview } from '../store'
+import { Loading, SkeletonCode } from './Skeleton'
 
 interface RefOffer {
   x: number
@@ -95,9 +96,9 @@ export function SidePane() {
           </div>
         )}
         {!binary && content === null && (
-          <div className="flex h-full items-center justify-center text-sm text-faint">
-            loading…
-          </div>
+          <Loading what={pane.path}>
+            <SkeletonCode lines={12} />
+          </Loading>
         )}
         {!binary && content !== null && (
           <Editor

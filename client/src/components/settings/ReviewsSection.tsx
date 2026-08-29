@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { NoteDefault, RepinMode, SubmitKey } from '../../api'
+import type { NoteDefault, RemoveMode, RepinMode, SubmitKey } from '../../api'
 import { Field, Mono, SaveRow, Section } from './parts'
 import type { SettingsAccess } from './useSettings'
 
@@ -47,15 +47,30 @@ const note_choices: { value: NoteDefault; label: string; why: string }[] = [
   },
 ]
 
+const remove_choices: { value: RemoveMode; label: string; why: string }[] = [
+  {
+    value: 'delete',
+    label: 'Delete its reviews and notes with it',
+    why: 'A repository is removed because it is finished with, and a workspace holding every review of every repository ever added is its own kind of mess. What was removed, and how many notes went, stays in the record.',
+  },
+  {
+    value: 'unregister',
+    label: 'Keep them, out of the workspace',
+    why: 'The notes matter more than the tidiness: the repository leaves the workspace and adding the same path back brings its reviews and notes again. A repository with no notes is deleted either way.',
+  },
+]
+
 export function ReviewsSection({ state, save, saving }: SettingsAccess) {
   const [mode, setMode] = useState<RepinMode>('always')
   const [submit, setSubmit] = useState<SubmitKey>('enter')
   const [note, setNote] = useState<NoteDefault>('draft')
+  const [removal, setRemoval] = useState<RemoveMode>('delete')
   useEffect(() => {
     if (state !== null) {
       setMode(state.repinMode)
       setSubmit(state.submitKey)
       setNote(state.noteDefault)
+      setRemoval(state.removeMode)
     }
   }, [state])
 
@@ -152,6 +167,32 @@ export function ReviewsSection({ state, save, saving }: SettingsAccess) {
         </div>
       </Field>
 
+      <Field
+        label="Removing a repository"
+        hint="The overview asks before it does either, and says how many notes are at stake."
+      >
+        <div className="space-y-2">
+          {remove_choices.map((choice) => (
+            <label
+              key={choice.value}
+              className="flex cursor-pointer gap-2 text-xs"
+            >
+              <input
+                type="radio"
+                name="remove-mode"
+                className="mt-0.5 shrink-0"
+                checked={removal === choice.value}
+                onChange={() => setRemoval(choice.value)}
+              />
+              <span>
+                <span className="text-ink">{choice.label}</span>
+                <span className="block text-faint">{choice.why}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </Field>
+
       <SaveRow
         saving={saving}
         onSave={() =>
@@ -159,6 +200,7 @@ export function ReviewsSection({ state, save, saving }: SettingsAccess) {
             repinMode: mode,
             submitKey: submit,
             noteDefault: note,
+            removeMode: removal,
           })
         }
       />

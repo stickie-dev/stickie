@@ -3,6 +3,7 @@ import type { ActivityEntry } from '@stickie/shared'
 import { api } from '../api'
 import { useReview } from '../store'
 import { TimeAgo } from './TimeAgo'
+import { Loading, Skeleton } from './Skeleton'
 
 /**
  * What happened in this review, newest first. Reading the record back is what
@@ -95,6 +96,16 @@ export function ActivityPanel() {
 
       <div className="min-h-0 grow overflow-y-auto px-3 py-2">
         {error !== null && <p className="text-xs text-rose-500">{error}</p>}
+        {entries === null && error === null && (
+          <Loading what="the record" className="space-y-3">
+            {[0, 1, 2, 3, 4].map((row) => (
+              <div key={row} className="space-y-1.5">
+                <Skeleton w="w-28" h="h-2.5" />
+                <Skeleton w="w-11/12" h="h-3" />
+              </div>
+            ))}
+          </Loading>
+        )}
         {entries !== null && entries.length === 0 && (
           <p className="text-xs text-faint">Nothing recorded yet.</p>
         )}

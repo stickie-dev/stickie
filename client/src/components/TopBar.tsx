@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import type { ReviewSource } from '@stickie/shared'
+import { api } from '../api'
 import { formatRoute } from '../routes'
 import { useReview } from '../store'
 
@@ -50,11 +51,83 @@ export function TopBar() {
     }
   }
 
+  /**
+   * What a source or a base is, as a ref, for the question below. A worktree
+   * is the branch it has checked out — a path is not something git can compare
+   * histories with, and the branch is what the notes were written against.
+   */
+  const asRef = (target: ReviewSource | null): string | null => {
+    if (target === null) return null
+    if (target.kind === 'ref') return target.value
+    return (
+      targets?.worktrees.find((wt) => wt.path === target.value)?.branch ?? null
+    )
+  }
+
+  /**
+   * Changing the source or the base opens a *different* review: which pair is
+   * being compared is what a review is. The notes stay with the review they
+   * were written in, which is right — but walking away from them silently is
+   * not, so this asks first.
+   *
+   * It does not ask when the new ref already contains the old one. There the
+   * code the notes were written against is still present, the notes will
+   * re-anchor onto it, and moving forward onto a branch that has your work in
+   * it is not leaving anything behind.
+   */
+  const leavingNotes = async (next: ReviewSource | null): Promise<boolean> => {
+    const notes = threads.length
+    if (notes === 0 || activeRepoId === null) return true
+    const from = asRef(source)
+    const to = asRef(next)
+    if (from !== null && to !== null && from !== to) {
+      const answer = await api
+        .ancestor(activeRepoId, from, to)
+        .catch(() => ({ ancestor: false }))
+      if (answer.ancestor) return true
+    }
+    if (from !== null && to !== null && from === to) return true
+    return window.confirm(
+      `This review has ${String(notes)} ${notes === 1 ? 'note' : 'notes'}. ` +
+        `They stay with ${from ?? 'it'} — comparing something else opens a ` +
+        'different review, with its own notes. Continue?',
+    )
+  }
+
   // A review is a worktree or a branch. Looking at one commit against its
   // parent is a way of reading that review, not a review of its own — the
   // commits list opens it in its own tab without minting anything.
   const changeSource = (key: string) => {
-    void setSource(parse_source(key), undefined)
+    const next = parse_source(key)
+    void (async () => {
+      if (await leavingNotes(next)) await setSource(next, undefined)
+    })()
+  }
+
+  const changeBase = (value: string) => {
+    void (async () => {
+      // the base moving is the same question with the same answer: a base that
+      // already contains the old one leaves the notes' code where it was
+      const next = value === 'auto' ? undefined : value
+      const from = baseRef ?? session?.baseRef ?? null
+      const notes = threads.length
+      if (notes > 0 && activeRepoId !== null && from !== null && next != null) {
+        const answer = await api
+          .ancestor(activeRepoId, from, next)
+          .catch(() => ({ ancestor: false }))
+        if (
+          !answer.ancestor &&
+          !window.confirm(
+            `This review has ${String(notes)} ${notes === 1 ? 'note' : 'notes'} ` +
+              `against ${from}. Comparing to ${next} instead opens a ` +
+              'different review, with its own notes. Continue?',
+          )
+        ) {
+          return
+        }
+      }
+      await setBase(next)
+    })()
   }
 
   const select_classes =
@@ -130,9 +203,7 @@ export function TopBar() {
       <select
         className={`min-w-20 max-w-52 shrink ${select_classes}`}
         value={baseRef ?? 'auto'}
-        onChange={(e) =>
-          void setBase(e.target.value === 'auto' ? undefined : e.target.value)
-        }
+        onChange={(e) => changeBase(e.target.value)}
       >
         <option value="auto">
           auto{session !== null ? ` (${session.baseRef})` : ''}

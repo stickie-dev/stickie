@@ -2,44 +2,89 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * The design tokens. Two rules hold this together:
+ *
+ * Chrome is compact, not airy — 11px for code and dense detail, 12–14px for
+ * everything a person reads, weight 400–500 rather than bold. The references
+ * this look is drawn from are 16px marketing pages; a review surface showing
+ * twenty files is not, and lines of code per screen is the job.
+ *
+ * Depth comes from surface and shadow, not from outlines. Every panel used to
+ * be a box with a hairline round it, which is what made the whole thing read
+ * as a debugger; a tint and a one-pixel shadow separate things without drawing
+ * a cage. `edge` survives for the few places a real division belongs — a table
+ * header, a pane split.
+ */
 @theme inline {
   --color-surface: var(--surface);
   --color-panel: var(--panel);
   --color-overlay: var(--overlay);
+  --color-sunken: var(--sunken);
   --color-edge: var(--edge);
   --color-ink: var(--ink);
   --color-soft: var(--soft);
   --color-faint: var(--faint);
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+
+  /* the standard scale, moved up: every existing rounded-* gets the new look */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --shadow-soft: var(--elevation-1);
+  --shadow-lifted: var(--elevation-2);
+
+  /* one curve for anything that moves, one duration unless it travels far */
+  --ease-swift: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --animate-shimmer: shimmer 1.4s var(--ease-smooth) infinite;
+  --animate-rise: rise 220ms var(--ease-swift) both;
 }
 
 /* native scrollbars, form controls and caret follow the app theme rather
    than the OS one, which the .dark class alone does not reach */
 :root {
   color-scheme: light;
-  --surface: #f6f6f7;
+  --surface: #f7f7f6;
   --panel: #ffffff;
-  --overlay: #ececee;
-  --edge: #d4d4d8;
-  --ink: #18181b;
-  --soft: #52525b;
-  --faint: #a1a1aa;
+  --overlay: #f0f0ef;
+  /* below the surface rather than above it: wells, code gutters, skeletons */
+  --sunken: #eaeae8;
+  --edge: #e4e4e1;
+  --ink: #1a1a19;
+  --soft: #5d5d5b;
+  --faint: #9a9a97;
   --accent: #0969da;
   --accent-strong: #0757b3;
+  --accent-soft: #e8f1fc;
+  --elevation-1: 0 1px 2px rgb(0 0 0 / 6%), 0 1px 1px rgb(0 0 0 / 4%);
+  --elevation-2: 0 4px 16px rgb(0 0 0 / 8%), 0 1px 3px rgb(0 0 0 / 6%);
+  --sheen: rgb(255 255 255 / 70%);
 }
 
 .dark {
   color-scheme: dark;
-  --surface: #18181b;
-  --panel: #101012;
-  --overlay: #27272a;
-  --edge: #3f3f46;
-  --ink: #f4f4f5;
-  --soft: #a1a1aa;
-  --faint: #71717a;
-  --accent: #0284c7;
-  --accent-strong: #0369a1;
+  --surface: #101012;
+  --panel: #17171a;
+  --overlay: #202024;
+  --sunken: #1c1c20;
+  --edge: #2b2b31;
+  --ink: #f2f2f3;
+  --soft: #a3a3a8;
+  --faint: #6e6e75;
+  --accent: #3b82f6;
+  --accent-strong: #2563eb;
+  --accent-soft: #16233a;
+  /* a light border reads as depth on dark where a shadow cannot */
+  --elevation-1: 0 1px 2px rgb(0 0 0 / 40%), inset 0 0 0 1px rgb(255 255 255 / 4%);
+  --elevation-2: 0 8px 24px rgb(0 0 0 / 45%), inset 0 0 0 1px rgb(255 255 255 / 6%);
+  --sheen: rgb(255 255 255 / 8%);
 }
 
 /* monaco view zones default to pointer-events none; comment widgets need input */
@@ -48,3 +93,56 @@
   z-index: 10;
 }
 
+/*
+ * A loading silhouette: the shape of the thing that is coming, with a sheen
+ * travelling across it. The gradient is on the background rather than a child
+ * element so any box can be one without a wrapper.
+ */
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.stickie-skeleton {
+  background-color: var(--sunken);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--sheen) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: var(--animate-shimmer);
+}
+
+/* a silhouette that pulses in place is still a silhouette; one that travels
+   is motion nobody asked for */
+@media (prefers-reduced-motion: reduce) {
+  .stickie-skeleton {
+    animation: none;
+    background-image: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

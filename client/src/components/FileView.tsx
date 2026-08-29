@@ -12,6 +12,7 @@ import { useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
 import { CommitTimeline } from './CommitTimeline'
 import { ContinuousDiff } from './ContinuousDiff'
+import { Loading, SkeletonCode } from './Skeleton'
 import { FileName } from './FileName'
 
 const side_by_side_min_width = 1440
@@ -665,7 +666,17 @@ export function FileView() {
   }
 
   if (viewMode === 'flow') {
-    if (session === null || files.length === 0) {
+    // a review that has not resolved yet is not a review with nothing in it,
+    // and saying "no changes" while git is still being asked is a small lie
+    // that reads as an answer
+    if (session === null) {
+      return (
+        <Loading what="the review">
+          <SkeletonCode lines={20} />
+        </Loading>
+      )
+    }
+    if (files.length === 0) {
       return (
         <div className="flex h-full items-center justify-center text-sm text-faint">
           No changes to review
@@ -799,9 +810,9 @@ export function FileView() {
           </div>
         )}
         {loading && (
-          <div className="flex h-full items-center justify-center text-sm text-faint">
-            loading…
-          </div>
+          <Loading what={selectedPath ?? 'the file'}>
+            <SkeletonCode lines={22} />
+          </Loading>
         )}
         {!binary && !loading && has_both && (
           <>

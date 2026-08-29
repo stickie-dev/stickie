@@ -177,6 +177,13 @@ create index if not exists activity_repo on activity (repo_id, id);
  * path may require one.
  */
 const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
+  repos: {
+    // when this repository left the workspace without its reviews being
+    // deleted. Null is the normal state; a row with a stamp is kept only so
+    // that re-adding the same path finds its notes again
+    sqlite: [['removed_at', 'removed_at text']],
+    postgres: [['removed_at', 'removed_at timestamptz']],
+  },
   sessions: {
     // how many note numbers this review has handed out. Defaulting to 0 on an
     // existing review is safe: `createThread` takes whichever is higher, this

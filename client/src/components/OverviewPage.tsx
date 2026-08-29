@@ -11,6 +11,7 @@ import { formatRoute } from '../routes'
 import { timeValue } from '../time'
 import { TimeAgo } from './TimeAgo'
 import { useReview } from '../store'
+import { Loading, Skeleton, SkeletonRows } from './Skeleton'
 
 /**
  * The landing page: every review across every registered repository, and what
@@ -38,6 +39,9 @@ const actions: Record<string, string> = {
   'review.exported': 'took the notes to an agent',
   'file.viewed': 'marked a file read',
   'file.unviewed': 'unmarked a file',
+  'repo.added': 'added a repository',
+  'repo.removed': 'removed a repository, and its reviews with it',
+  'repo.unregistered': 'took a repository out of the workspace',
 }
 
 /** Reviews sort by how much they want from you, not by age. */
@@ -250,7 +254,13 @@ function Th({
   )
 }
 
-function ReviewsTable({ reviews }: { reviews: ReviewRow[] }) {
+function ReviewsTable({
+  reviews,
+  loading,
+}: {
+  reviews: ReviewRow[]
+  loading: boolean
+}) {
   const navigate = useNavigate()
   const sorted = [...reviews].sort((a, b) => {
     const by_status = status_rank[statusOf(a)] - status_rank[statusOf(b)]
@@ -282,6 +292,22 @@ function ReviewsTable({ reviews }: { reviews: ReviewRow[] }) {
         </tr>
       </thead>
       <tbody>
+        {loading && (
+          <SkeletonRows
+            rows={3}
+            columns={[
+              'w-16',
+              'w-24',
+              'w-48',
+              'w-6',
+              'w-6',
+              'w-6',
+              'w-6',
+              'w-6',
+              'w-40',
+            ]}
+          />
+        )}
         {sorted.map((review) => {
           const status = statusOf(review)
           // the newest session of the group: the base this review is pinned
@@ -346,9 +372,13 @@ function ReviewsTable({ reviews }: { reviews: ReviewRow[] }) {
 export function OverviewPage() {
   const navigate = useNavigate()
   const repos_in_store = useReview((s) => s.repos)
+  const addRepoToWorkspace = useReview((s) => s.addRepo)
+  const removeRepoFromWorkspace = useReview((s) => s.removeRepo)
+  const removeMode = useReview((s) => s.removeMode)
   const [overview, setOverview] = useState<Overview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showIdle, setShowIdle] = useState(false)
+  const [newPath, setNewPath] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -358,6 +388,52 @@ export function OverviewPage() {
       setError(e instanceof Error ? e.message : String(e))
     }
   }, [])
+
+  const addRepo = useCallback(async () => {
+    const path = newPath.trim()
+    if (path === '') return
+    try {
+      await addRepoToWorkspace(path)
+      setNewPath('')
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [newPath, addRepoToWorkspace])
+
+  /**
+   * Removing asks first, and what it asks depends on the setting, because the
+   * two answers are not comparable: one deletes a review history, the other
+   * puts it out of sight. The count comes from the reviews already on this
+   * page, so the dialog can say what is at stake rather than "are you sure".
+   */
+  const removeRepo = useCallback(
+    async (repo: RepoOverview) => {
+      if (removeMode === null) return
+      const notes = (overview?.reviews ?? [])
+        .filter((review) => review.repoId === repo.id)
+        .reduce((n, review) => n + review.notes.total, 0)
+      const counted =
+        notes === 0
+          ? 'It has no notes.'
+          : `${String(notes)} ${notes === 1 ? 'note goes' : 'notes go'} with it.`
+      const question =
+        removeMode === 'unregister' && notes > 0
+          ? `Take ${repo.name} out of the workspace? Its ${String(notes)} ${
+              notes === 1 ? 'note is' : 'notes are'
+            } kept — adding the path back brings them again.`
+          : `Remove ${repo.name} and delete its reviews? ${counted} This cannot be undone.`
+      if (!window.confirm(question)) return
+      try {
+        await removeRepoFromWorkspace(repo.id, removeMode)
+        await load()
+        setError(null)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [overview, removeMode, removeRepoFromWorkspace, load],
+  )
 
   /**
    * What clicking a repository does: review its working tree against the
@@ -410,9 +486,11 @@ export function OverviewPage() {
   const needs_you = all_rows.filter((r) => statusOf(r) === 'needs-you').length
   const drafts = all_rows.reduce((n, r) => n + r.notes.pending, 0)
 
+  const loading = overview === null
+
   const headline =
     overview === null
-      ? 'Loading…'
+      ? ''
       : needs_you > 0
         ? `${String(needs_you)} ${needs_you === 1 ? 'review has' : 'reviews have'} an agent answer nobody has read yet.`
         : substantial.length === 0
@@ -444,18 +522,29 @@ export function OverviewPage() {
       <div className="min-h-0 grow overflow-y-auto p-6">
         {error !== null && <p className="mb-4 text-xs text-rose-500">{error}</p>}
 
-        <p className="mb-1 text-sm text-ink">{headline}</p>
-        <p className="mb-6 text-xs text-faint">
-          {drafts > 0
-            ? `${String(drafts)} ${drafts === 1 ? 'note is still a draft' : 'notes are still drafts'}, so no agent can see ${drafts === 1 ? 'it' : 'them'} yet.`
-            : 'Every note you have written has been sent.'}
-        </p>
+        {loading ? (
+          <Loading what="the overview">
+            <div className="mb-6 space-y-2">
+              <Skeleton w="w-80" h="h-4" />
+              <Skeleton w="w-56" h="h-3" />
+            </div>
+          </Loading>
+        ) : (
+          <>
+            <p className="mb-1 text-sm text-ink">{headline}</p>
+            <p className="mb-6 text-xs text-faint">
+              {drafts > 0
+                ? `${String(drafts)} ${drafts === 1 ? 'note is still a draft' : 'notes are still drafts'}, so no agent can see ${drafts === 1 ? 'it' : 'them'} yet.`
+                : 'Every note you have written has been sent.'}
+            </p>
+          </>
+        )}
 
-        {listed.length > 0 && (
+        {(listed.length > 0 || loading) && (
           <section className="mb-8">
             <h2 className="mb-2 text-sm font-semibold text-ink">Reviews</h2>
             <div className="overflow-x-auto rounded border border-edge">
-              <ReviewsTable reviews={listed} />
+              <ReviewsTable reviews={listed} loading={loading} />
             </div>
             <p className="mt-2 text-xs text-faint">
               A row is one thing being reviewed — a repository&rsquo;s working
@@ -492,6 +581,7 @@ export function OverviewPage() {
                   <Th>Branch</Th>
                   <Th>Working tree</Th>
                   <Th>Review</Th>
+                  <Th>{''}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -530,15 +620,61 @@ export function OverviewPage() {
                           : `review against ${repo.defaultBranch}`}
                       </span>
                     </td>
+                    <td className="px-2 py-2 text-right">
+                      <button
+                        // the setting decides what this does, so it cannot be
+                        // offered before the setting has been read
+                        disabled={removeMode === null}
+                        title={
+                          removeMode === 'unregister'
+                            ? 'take this repository out of the workspace, keeping its notes'
+                            : 'remove this repository and delete its reviews'
+                        }
+                        className="text-faint hover:text-rose-500 disabled:opacity-40"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void removeRepo(repo)
+                        }}
+                      >
+                        remove
+                      </button>
+                    </td>
                   </tr>
                 ))}
+                {loading && (
+                  <SkeletonRows
+                    rows={2}
+                    columns={['w-24', 'w-32', 'w-24', 'w-36', 'w-12']}
+                  />
+                )}
                 {overview !== null && repos.length === 0 && (
                   <tr>
-                    <td className="px-2 py-2 text-faint" colSpan={4}>
+                    <td className="px-2 py-2 text-faint" colSpan={5}>
                       No repositories registered yet.
                     </td>
                   </tr>
                 )}
+                <tr className="border-t border-edge">
+                  <td className="px-2 py-2" colSpan={3}>
+                    <input
+                      className="w-full rounded border border-edge bg-surface px-2 py-1 font-mono text-xs text-ink outline-none focus:border-accent"
+                      placeholder="~/path/to/a/git/repository"
+                      value={newPath}
+                      onChange={(e) => setNewPath(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void addRepo()
+                      }}
+                    />
+                  </td>
+                  <td className="px-2 py-2" colSpan={2}>
+                    <button
+                      className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
+                      onClick={() => void addRepo()}
+                    >
+                      add repository
+                    </button>
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -578,6 +714,12 @@ export function OverviewPage() {
                     </td>
                   </tr>
                 ))}
+                {loading && (
+                  <SkeletonRows
+                    rows={6}
+                    columns={['w-16', 'w-20', 'w-24', 'w-40', 'w-32']}
+                  />
+                )}
                 {overview !== null && overview.recent.length === 0 && (
                   <tr>
                     <td className="px-2 py-2 text-faint" colSpan={5}>

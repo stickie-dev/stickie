@@ -5,6 +5,7 @@ import { api } from './api'
 import './monacoSetup'
 import { AddRepo } from './components/AddRepo'
 import { OverviewPage } from './components/OverviewPage'
+import { OverviewSkeleton } from './components/OverviewSkeleton'
 import { SettingsPage } from './components/settings/SettingsPage'
 import { Toasts } from './components/Toasts'
 import { Workspace } from './components/Workspace'
@@ -244,13 +245,17 @@ function useNoteAddress(page: Page | null, address: string): Here | null {
  */
 function PageLayer({ page }: { page: Page | null }) {
   const repos = useReview((s) => s.repos)
+  const reposLoaded = useReview((s) => s.reposLoaded)
 
   if (page === null) return <Navigate to="/" replace />
 
   if (page.kind === 'settings') return <SettingsPage section={page.section} />
 
-  // the root is the overview, and the way in to a workspace with no repos yet
+  // the root is the overview, and the way in to a workspace with no repos yet.
+  // "No repositories" is an answer, so it waits to be sure of it rather than
+  // offering to add the first one every time a cold load takes a moment
   if (page.kind === 'home') {
+    if (!reposLoaded) return <OverviewSkeleton />
     return repos.length === 0 ? <AddRepo /> : <OverviewPage />
   }
 

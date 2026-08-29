@@ -291,6 +291,27 @@ export async function defaultBranch(repo: string): Promise<string> {
   return git(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])
 }
 
+/**
+ * Whether `older` is in `newer`'s history — `git merge-base --is-ancestor`,
+ * which exits 1 for "no" and non-zero for a ref it cannot resolve alike, so an
+ * unresolvable ref reads as "no" rather than as an error. The caller is asking
+ * whether moving from one to the other keeps the first one's code, and "cannot
+ * tell" and "no" lead to the same place.
+ */
+export async function isAncestor(
+  repo: string,
+  older: string,
+  newer: string,
+): Promise<boolean> {
+  const out = await gitOrNull(repo, [
+    'merge-base',
+    '--is-ancestor',
+    older,
+    newer,
+  ])
+  return out !== null
+}
+
 export async function gitOrigin(repo: string): Promise<string | null> {
   return gitOrNull(repo, ['remote', 'get-url', 'origin'])
 }

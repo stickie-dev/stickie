@@ -5,6 +5,7 @@ import { api } from '../api'
 import type { CommitBetween } from '../api'
 import { languageFor } from '../languages'
 import { useReview, wrapFor } from '../store'
+import { Loading, Skeleton, SkeletonCode } from './Skeleton'
 
 interface Step {
   /** the commit this column arrives at */
@@ -74,9 +75,16 @@ export function CommitTimeline({
         </button>
       </div>
       {view.files.length === 0 ? (
-        <div className="flex grow items-center justify-center text-sm text-faint">
-          loading…
-        </div>
+        <Loading what="the commits">
+          <div className="space-y-3 p-3">
+            {[0, 1, 2].map((row) => (
+              <div key={row} className="rounded-lg bg-panel p-2 shadow-soft">
+                <Skeleton w="w-40" h="h-3" className="mb-2" />
+                <SkeletonCode lines={3} className="px-0 py-0" />
+              </div>
+            ))}
+          </div>
+        </Loading>
       ) : (
         <div className="min-h-0 grow overflow-y-auto">
           {view.files.map((file) => (
@@ -233,8 +241,12 @@ function FileTimeline({
         </button>
       </div>
       {steps === null ? (
-        <div className="flex h-24 items-center justify-center text-xs text-faint">
-          {visible ? 'loading…' : ''}
+        <div className="h-24 overflow-hidden">
+          {visible && (
+            <Loading what={file.path}>
+              <SkeletonCode lines={5} />
+            </Loading>
+          )}
         </div>
       ) : (
         <div

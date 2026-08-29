@@ -39,6 +39,7 @@ import {
   fileInWorktree,
   gitOrigin,
   gitStatus,
+  isAncestor,
   isGitRepo,
   listAllFiles,
   listRecentBranches,
@@ -48,6 +49,7 @@ import {
   repoRoot,
   resolveRef,
   shortenRev,
+  shortSha,
 } from './git.js'
 import {
   fetchMrDiscussions,
@@ -218,19 +220,41 @@ const rev_label_schema = z
  * A ref source is a branch (named, with its tip's subject) or a raw sha (shown
  * short, since forty characters of hex tells a reader nothing).
  */
+/**
+ * What a review's source is called where someone reads it.
+ *
+ * A working tree is named by the *branch it is on*, because that is what a
+ * person knows it by and a branch name is unique within a repository. Calling
+ * every one of them "working tree" said only that it was a checkout with
+ * uncommitted changes in it — true of all of them, and unable to say that this
+ * row is the one you were on last week. It is read live rather than stored, so
+ * checking out another branch changes what the row says, which is the point:
+ * the review is of that checkout, and the checkout has moved.
+ *
+ * `branches` maps a worktree path to its branch, from one `git worktree list`
+ * per repository. A detached checkout has no branch to give, so it says where
+ * its HEAD is instead.
+ */
 function sourceLabel(
   session: Session,
   repoPath: string | undefined,
   subjects: Map<string, string>,
+  branches?: Map<string, { branch: string | null; head: string }>,
 ): { name: string; subject: string | null } {
   const { source } = session
   if (source.kind === 'worktree') {
     const own = repoPath !== undefined && repoPath === source.value
-    const name = source.value.split('/').at(-1) ?? source.value
-    return {
-      name: own ? 'working tree' : `worktree ${name}`,
-      subject: null,
+    const folder = source.value.split('/').at(-1) ?? source.value
+    const checkout = branches?.get(source.value)
+    // which checkout, when it is not the repository's own
+    const where = own ? 'working tree' : `working tree · ${folder}`
+    if (checkout?.branch != null && checkout.branch !== '') {
+      return { name: checkout.branch, subject: where }
     }
+    if (checkout !== undefined) {
+      return { name: `detached at ${shortSha(checkout.head)}`, subject: where }
+    }
+    return { name: own ? 'working tree' : `worktree ${folder}`, subject: null }
   }
   return {
     name: shortenRev(source.value) ?? source.value,
@@ -242,7 +266,7 @@ const activity_schema = z
   .object({
     id: z.number().int(),
     at: z.string(),
-    subject: z.enum(['note', 'review', 'file']),
+    subject: z.enum(['note', 'review', 'file', 'repo']),
     action: z.string(),
     actorName: z.string().nullable(),
     repoId: z.number().int().nullable(),
@@ -402,6 +426,16 @@ const repin_modes = ['always', 'when-clear', 'never'] as const
 const default_repin_mode = 'always'
 
 /**
+ * What removing a repository does to the reviews in it. Deleting is the
+ * default: a repository is removed because it is finished with, and a workspace
+ * quietly keeping every review of every repository ever added is its own kind
+ * of mess. `unregister` is for when the notes matter more than the tidiness —
+ * it keeps them, and re-adding the path brings them back.
+ */
+const remove_modes = ['delete', 'unregister'] as const
+const default_remove_mode = 'delete'
+
+/**
  * Which keystroke posts a comment. Enter by default — a note is usually one
  * sentence, and reaching for a modifier to send it is friction on the thing
  * this tool exists to do.
@@ -427,6 +461,10 @@ function repinMode(stored: string | null): (typeof repin_modes)[number] {
 
 function submitKey(stored: string | null): (typeof submit_keys)[number] {
   return submit_keys.find((key) => key === stored) ?? default_submit_key
+}
+
+function removeMode(stored: string | null): (typeof remove_modes)[number] {
+  return remove_modes.find((mode) => mode === stored) ?? default_remove_mode
 }
 
 function errorMessage(error: unknown): string {
@@ -572,7 +610,7 @@ export function createApp(
       path: '/api/repos',
       tags: ['repos'],
       summary: 'Register a repository by absolute path',
-      request: { body: json_body(repo_body) },
+      request: { body: json_body(repo_body), query: actor_query },
       responses: {
         200: json_response(repo_schema, 'Registered repo'),
         400: bad_request,
@@ -585,7 +623,23 @@ export function createApp(
         return c.json({ error: `not a git repository: ${expanded}` }, 400)
       }
       const root = await repoRoot(expanded)
-      return c.json(await store.addRepo(root), 200)
+      const before = await store.repoByPath(root)
+      const repo = await store.addRepo(root)
+      // when it actually joined the workspace, which is a new path or one
+      // coming back from being unregistered. This route is idempotent and the
+      // client calls it whenever a path is typed in, so most calls record
+      // nothing
+      const entered = before === undefined || before.removed_at !== null
+      if (entered) {
+        await record({
+          subject: 'repo',
+          action: 'added',
+          actorId: await claimedActor(c.req.valid('query'), root),
+          repoId: repo.id,
+          detail: { path: root },
+        })
+      }
+      return c.json(repo, 200)
     },
   )
 
@@ -594,15 +648,84 @@ export function createApp(
       method: 'delete',
       path: '/api/repos/{id}',
       tags: ['repos'],
-      summary: 'Remove a repository registration',
-      request: { params: id_param },
+      summary: 'Take a repository out of the workspace',
+      description:
+        '`mode=delete` deletes its reviews, notes and replies with it; ' +
+        '`unregister` keeps them, and adding the same path back brings them ' +
+        'again. Without a mode the setting decides. A repository with no ' +
+        'notes is deleted either way — there is nothing to keep. What it did ' +
+        'is recorded, including how many notes went with it.',
+      request: {
+        params: id_param,
+        query: actor_query.extend({
+          mode: z.enum(remove_modes).optional(),
+        }),
+      },
       responses: {
-        200: json_response(z.object({ ok: z.boolean() }), 'Removed'),
+        200: json_response(
+          z.object({
+            ok: z.boolean(),
+            deleted: z.boolean(),
+            notes: z.number().int(),
+          }),
+          'Removed',
+        ),
+        404: not_found,
       },
     }),
     async (c) => {
-      await store.removeRepo(c.req.valid('param').id)
-      return c.json({ ok: true }, 200)
+      const { id } = c.req.valid('param')
+      const query = c.req.valid('query')
+      const repo = await store.getRepo(id)
+      if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
+      const mode =
+        query.mode ?? removeMode(await store.getSetting('repo_remove_mode'))
+      const { deleted, notes } = await store.removeRepo(id, mode)
+      // the record outlives what it points at: after a delete this row is the
+      // only thing left saying those reviews and notes were ever here
+      await record({
+        subject: 'repo',
+        action: deleted ? 'removed' : 'unregistered',
+        actorId: await claimedActor(query, repo.path),
+        repoId: id,
+        detail: { path: repo.path, notes },
+      })
+      return c.json({ ok: true, deleted, notes }, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/repos/{id}/ancestor',
+      tags: ['repos'],
+      summary: 'Whether one ref is in another ref\'s history',
+      description:
+        'Asked before a review is left for another one: if the notes were ' +
+        'written against something the new ref already contains, their code ' +
+        'is still there and nothing needs saying. A ref that cannot be ' +
+        'resolved answers false — "cannot tell" and "no" lead to the same ' +
+        'question being asked.',
+      request: {
+        params: id_param,
+        query: z.object({ older: z.string().min(1), newer: z.string().min(1) }),
+      },
+      responses: {
+        200: json_response(
+          z.object({ ancestor: z.boolean() }),
+          'Whether older is in newer',
+        ),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const repo = await store.getRepo(c.req.valid('param').id)
+      if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
+      const { older, newer } = c.req.valid('query')
+      return c.json(
+        { ancestor: await isAncestor(repo.path, older, newer) },
+        200,
+      )
     },
   )
 
@@ -1052,6 +1175,28 @@ export function createApp(
           repo.path.split('/').at(-1) ?? repo.path,
         ]),
       )
+
+      // one `git worktree list` per repository, not per review: a working tree
+      // review is named by the branch it is on, and every checkout of a
+      // repository comes back in the one call
+      const checkouts = new Map<
+        number,
+        Map<string, { branch: string | null; head: string }>
+      >()
+      await Promise.all(
+        repos.map(async (repo) => {
+          const trees = await listWorktrees(repo.path).catch(() => [])
+          checkouts.set(
+            repo.id,
+            new Map(
+              trees.map((tree) => [
+                tree.path,
+                { branch: tree.branch, head: tree.head },
+              ]),
+            ),
+          )
+        }),
+      )
       // listSessions is newest first, so the first hit per repo is the newest
       const latest = new Map<number, number>()
       for (const session of sessions) {
@@ -1100,7 +1245,12 @@ export function createApp(
               baseRef: session.baseRef,
               baseSha: session.baseSha,
               comparing: {
-                source: sourceLabel(session, repo?.path, known),
+                source: sourceLabel(
+                  session,
+                  repo?.path,
+                  known,
+                  checkouts.get(session.repoId),
+                ),
                 // the base's subject comes from the pinned sha, which is
                 // always resolvable, rather than from baseRef, which may be a
                 // symbolic name that has since moved
@@ -1934,6 +2084,8 @@ export function createApp(
             mcpCommand: z.string(),
             /** who moves a review's base pin when it goes stale */
             repinMode: z.enum(repin_modes),
+            /** what removing a repository does to the reviews in it */
+            removeMode: z.enum(remove_modes),
             /** which keystroke posts a comment */
             submitKey: z.enum(submit_keys),
             /** whether a new note is a draft or goes straight to the agent */
@@ -1995,6 +2147,7 @@ export function createApp(
             default_wrap_extensions,
           mcpCommand: mcpCommand(),
           repinMode: repinMode(await store.getSetting('repin_mode')),
+          removeMode: removeMode(await store.getSetting('repo_remove_mode')),
           submitKey: submitKey(await store.getSetting('submit_key')),
           noteDefault:
             note_defaults.find(
@@ -2045,6 +2198,7 @@ export function createApp(
             /** '' falls back to git config */
             actorName: z.string().max(64).optional(),
             repinMode: z.enum(repin_modes).optional(),
+            removeMode: z.enum(remove_modes).optional(),
             submitKey: z.enum(submit_keys).optional(),
             noteDefault: z.enum(note_defaults).optional(),
           }),
@@ -2077,6 +2231,9 @@ export function createApp(
       }
       if (body.repinMode !== undefined) {
         await store.setSetting('repin_mode', body.repinMode)
+      }
+      if (body.removeMode !== undefined) {
+        await store.setSetting('repo_remove_mode', body.removeMode)
       }
       if (body.submitKey !== undefined) {
         await store.setSetting('submit_key', body.submitKey)

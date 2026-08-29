@@ -25,6 +25,12 @@ export type SubmitKey = 'enter' | 'mod-enter'
 export type NoteDefault = 'draft' | 'comment'
 
 /**
+ * What removing a repository does to the reviews in it: delete them with it,
+ * or keep them and let re-adding the path bring them back.
+ */
+export type RemoveMode = 'delete' | 'unregister'
+
+/**
  * Everything this client does, a person did. The routes that change something
  * cannot tell an agent from a reviewer, and now record no actor rather than
  * guessing at one — so every call from the UI says which it is.
@@ -44,6 +50,7 @@ export interface SettingsState {
   /** the command that points an MCP client at this server */
   mcpCommand: string
   repinMode: RepinMode
+  removeMode: RemoveMode
   submitKey: SubmitKey
   noteDefault: NoteDefault
   identity: {
@@ -100,7 +107,25 @@ export const api = {
   repos: () => fetch('/api/repos').then(toJson<RepoInfo[]>),
 
   addRepo: (path: string) =>
-    post('/api/repos', { path }).then(toJson<{ id: number; path: string }>),
+    post(`/api/repos?${as_user}`, { path }).then(
+      toJson<{ id: number; path: string }>,
+    ),
+
+  /**
+   * Takes a repository out of the workspace. The mode is passed rather than
+   * left to the server so that what the user was asked to confirm and what
+   * happens cannot come apart.
+   */
+  removeRepo: (repoId: number, mode: RemoveMode) =>
+    fetch(`/api/repos/${String(repoId)}?mode=${mode}&${as_user}`, {
+      method: 'DELETE',
+    }).then(toJson<{ ok: boolean; deleted: boolean; notes: number }>),
+
+  /** whether `older` is in `newer`'s history; false for anything unresolvable */
+  ancestor: (repoId: number, older: string, newer: string) =>
+    fetch(
+      `/api/repos/${String(repoId)}/ancestor?older=${encodeURIComponent(older)}&newer=${encodeURIComponent(newer)}`,
+    ).then(toJson<{ ancestor: boolean }>),
 
   targets: (repoId: number) =>
     fetch(`/api/repos/${repoId}/targets`).then(toJson<TargetOptions>),
@@ -225,6 +250,7 @@ export const api = {
     databaseUrl?: string
     actorName?: string
     repinMode?: RepinMode
+    removeMode?: RemoveMode
     submitKey?: SubmitKey
     noteDefault?: NoteDefault
   }) =>

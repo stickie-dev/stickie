@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ChangedFile } from '@stickie/shared'
 import { fileIconUrl, folderIconUrl } from '../fileIcons'
 import { useReview } from '../store'
+import { Loading, Skeleton } from './Skeleton'
 
 const status_letter: Record<ChangedFile['status'], string> = {
   added: 'A',
@@ -302,6 +303,16 @@ function RepoNode({ repoId }: { repoId: number }) {
           <span className="text-faint">{entry?.files.length ?? 0}</span>
         </span>
       </div>
+      {expanded && entry === undefined && (
+        <Loading
+          what="the file tree"
+          className="ml-[13px] space-y-1.5 py-1.5 pl-3"
+        >
+          {['w-32', 'w-24', 'w-36', 'w-20'].map((width) => (
+            <Skeleton key={width} w={width} h="h-2.5" />
+          ))}
+        </Loading>
+      )}
       {expanded && tree !== null && (
         <div className="ml-[13px] border-l border-edge/70">
           {renderDir(tree)}

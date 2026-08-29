@@ -14,6 +14,7 @@ import type {
   CommitBetween,
   NavHit,
   NoteDefault,
+  RemoveMode,
   RepinMode,
   SubmitKey,
 } from './api'
@@ -85,6 +86,14 @@ function initialTheme(): Theme {
 
 interface ReviewState {
   repos: RepoInfo[]
+  /**
+   * Whether the repository list has been read yet. An empty list means "this
+   * workspace has no repositories", which is a different thing from "nobody
+   * has looked" — and the root page acts on it, offering to add the first one.
+   * Without this it offers that on every cold load, for as long as the fetch
+   * takes.
+   */
+  reposLoaded: boolean
   activeRepoId: number | null
   targets: TargetOptions | null
   source: ReviewSource | null
@@ -209,6 +218,10 @@ interface ReviewState {
    */
   init: (start?: { reviewId: number; tab: TabRef }) => Promise<void>
   addRepo: (path: string) => Promise<void>
+  removeRepo: (
+    repoId: number,
+    mode: RemoveMode,
+  ) => Promise<{ deleted: boolean; notes: number }>
   selectRepo: (repoId: number) => Promise<void>
   setSource: (source: ReviewSource, baseRef?: string) => Promise<void>
   setBase: (baseRef: string | undefined) => Promise<void>
@@ -260,6 +273,13 @@ interface ReviewState {
    */
   repinMode: RepinMode | null
   setRepinMode: (mode: RepinMode) => void
+  /**
+   * What removing a repository does to the reviews in it. Null until the
+   * settings have been read, for the same reason: what the user is asked to
+   * confirm has to be what will happen, so nothing may offer the choice while
+   * the stored answer is still on its way.
+   */
+  removeMode: RemoveMode | null
   /** whether Enter posts a comment or only ⌘/ctrl+Enter does, from settings */
   submitKey: SubmitKey
   setSubmitKey: (key: SubmitKey) => void
@@ -604,6 +624,7 @@ export const useReview = create<ReviewState>((set, get) => {
 
   return {
     repos: [],
+    reposLoaded: false,
     activeRepoId: null,
     targets: null,
     source: null,
@@ -647,6 +668,7 @@ export const useReview = create<ReviewState>((set, get) => {
     revealDir: null,
     wrapExtensions: default_wrap_extensions,
     repinMode: null,
+    removeMode: null,
     submitKey: 'enter',
     noteDefault: 'draft',
     wrapOverrides: {},
@@ -780,13 +802,14 @@ export const useReview = create<ReviewState>((set, get) => {
             set({
               wrapExtensions: settings.wrapExtensions,
               repinMode: settings.repinMode,
+              removeMode: settings.removeMode,
               submitKey: settings.submitKey,
               noteDefault: settings.noteDefault,
             }),
           )
           .catch(() => undefined)
         const repos = await api.repos()
-        set({ repos })
+        set({ repos, reposLoaded: true })
         await Promise.all(repos.map((r) => ensureRepoSession(r.id)))
         restoreDrafts(repos)
         if (await restoreTabs(repos, start)) return
@@ -1020,9 +1043,40 @@ export const useReview = create<ReviewState>((set, get) => {
     addRepo: async (path) => {
       const created = await api.addRepo(path)
       const repos = await api.repos()
-      set({ repos })
+      set({ repos, reposLoaded: true })
       await ensureRepoSession(created.id)
       await get().selectRepo(created.id)
+    },
+
+    /**
+     * Takes a repository out of the workspace and drops everything the
+     * workspace was holding for it: its tabs, its session, its per-repo
+     * choices. Reviews of it are gone from the server either way — deleted, or
+     * kept but out of reach until the path is added back — so a tab pointing
+     * at one would fail on its next read.
+     */
+    removeRepo: async (repoId, mode) => {
+      const answer = await api.removeRepo(repoId, mode)
+      const repos = await api.repos()
+      const tabs = get().tabs.filter((tab) => tab.repoId !== repoId)
+      const sessions = { ...get().repoSessions }
+      const per_repo = { ...get().perRepo }
+      delete sessions[repoId]
+      delete per_repo[repoId]
+      const active = get().activeTabId
+      set({
+        repos,
+        tabs,
+        repoSessions: sessions,
+        perRepo: per_repo,
+        activeTabId: tabs.some((tab) => tab.id === active)
+          ? active
+          : (tabs[0]?.id ?? null),
+        ...(get().activeRepoId === repoId
+          ? { activeRepoId: null, session: null, files: [], threads: [] }
+          : {}),
+      })
+      return answer
     },
 
     selectRepo: async (repoId) => {

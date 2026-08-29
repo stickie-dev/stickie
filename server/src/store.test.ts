@@ -513,6 +513,72 @@ describe('session identity', () => {
   })
 })
 
+describe('taking a repository out of the workspace', () => {
+  const withNote = async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const session = await store.getOrCreateSession(
+      repo.id,
+      { kind: 'worktree', value: '/tmp/repo' },
+      'master',
+      'abc123',
+    )
+    await store.createThread(
+      session.id,
+      'a.ts',
+      'source',
+      1,
+      1,
+      null,
+      'x',
+      'user',
+      'note',
+    )
+    return { store, repo, session }
+  }
+
+  it('deleting takes the reviews and the notes with it', async () => {
+    const { store, repo, session } = await withNote()
+    expect(await store.removeRepo(repo.id, 'delete')).toEqual({
+      deleted: true,
+      notes: 1,
+    })
+    expect(await store.listRepos()).toHaveLength(0)
+    expect(await store.getSession(session.id)).toBeUndefined()
+    expect(await store.listThreads(session.id)).toHaveLength(0)
+  })
+
+  it('unregistering keeps them, out of reach until the path comes back', async () => {
+    const { store, repo, session } = await withNote()
+    expect(await store.removeRepo(repo.id, 'unregister')).toEqual({
+      deleted: false,
+      notes: 1,
+    })
+    // out of the workspace: not listed, not findable, and neither are its
+    // reviews — an address or an agent holding one gets nothing
+    expect(await store.listRepos()).toHaveLength(0)
+    expect(await store.getRepo(repo.id)).toBeUndefined()
+    expect(await store.listSessions()).toHaveLength(0)
+    expect(await store.getSession(session.id)).toBeUndefined()
+    // but kept: adding the same path back brings all of it again
+    const again = await store.addRepo('/tmp/repo')
+    expect(again.id).toBe(repo.id)
+    expect(await store.getSession(session.id)).toBeDefined()
+    expect(await store.listThreads(session.id)).toHaveLength(1)
+  })
+
+  it('deletes a repository with no notes whichever is asked for', async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/empty')
+    expect(await store.removeRepo(repo.id, 'unregister')).toEqual({
+      deleted: true,
+      notes: 0,
+    })
+    // deleted, not hidden: a row nobody can see, holding nothing, is worse
+    expect(await store.repoByPath('/tmp/empty')).toBeUndefined()
+  })
+})
+
 describe('numbering notes within a review', () => {
   const note = (store: Store, sessionId: number, body: string) =>
     store.createThread(

@@ -18,7 +18,11 @@ the only output.
   commit subject rather than forty characters of hex. Re-pinning the base as a
   branch moves keeps the same row. Plus one activity feed across every
   repository. A draft review in another repository used to be invisible until
-  you switched to it. Clicking a registered repository below the reviews starts
+  you switched to it. Registered repositories are listed below the reviews:
+  add one by path, and remove one you are done with — which deletes its reviews
+  and notes, or keeps them out of the way so that adding the path back brings
+  them again, whichever Settings → Reviews says, asked about by name and note
+  count first either way. Clicking a registered repository starts
   a review of its working tree against the default branch — every commit on the
   branch you are on plus what is not committed yet, compared from where the
   branch left the default one, the way a merge request does — or, when you are

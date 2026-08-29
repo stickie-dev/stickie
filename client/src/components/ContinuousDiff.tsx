@@ -15,6 +15,7 @@ import { languageFor } from '../languages'
 import { useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
 import { FileName } from './FileName'
+import { Loading, SkeletonCode } from './Skeleton'
 
 type Attach = (
   instance: editor.IStandaloneCodeEditor,
@@ -207,8 +208,14 @@ function DiffSection({
         </button>
       </div>
       {!loaded && (
-        <div className="flex h-24 items-center justify-center text-xs text-faint">
-          {visible ? 'loading…' : ''}
+        // only once it is near the viewport: a silhouette for each of twenty
+        // files below the fold is twenty animations nobody is looking at
+        <div className="h-24 overflow-hidden">
+          {visible && (
+            <Loading what={file.path}>
+              <SkeletonCode lines={5} />
+            </Loading>
+          )}
         </div>
       )}
       {loaded && binary && (

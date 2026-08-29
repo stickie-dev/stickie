@@ -153,7 +153,7 @@ export interface Thread {
 export interface ActivityEntry {
   id: number
   at: string
-  subject: 'note' | 'review' | 'file'
+  subject: 'note' | 'review' | 'file' | 'repo'
   action: string
   /** null for rows recorded before there were actors */
   actorName: string | null

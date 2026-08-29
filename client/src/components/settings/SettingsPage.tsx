@@ -10,6 +10,7 @@ import { PromptSection } from './PromptSection'
 import { ReviewsSection } from './ReviewsSection'
 import { StorageSection } from './StorageSection'
 import { useSettings } from './useSettings'
+import { Loading, Skeleton, SkeletonLines } from '../Skeleton'
 
 const titles: Record<SettingsSection, string> = {
   identity: 'Identity',
@@ -70,7 +71,28 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
           ))}
         </nav>
         <div className="min-h-0 grow overflow-y-auto p-6">
-          {sections[section](access)}
+          {/*
+            Sections render their own fields empty until the settings land,
+            which reads as a page of blank controls. One silhouette of a
+            section, until there is something in them.
+          */}
+          {access.state === null && section !== 'app' ? (
+            <Loading what="settings">
+              <div className="max-w-2xl space-y-6">
+                <Skeleton w="w-40" h="h-4" />
+                <SkeletonLines lines={2} />
+                {[0, 1].map((field) => (
+                  <div key={field} className="space-y-2">
+                    <Skeleton w="w-28" h="h-3" />
+                    <Skeleton h="h-8" rounded="rounded-md" />
+                    <Skeleton w="w-2/3" h="h-2.5" />
+                  </div>
+                ))}
+              </div>
+            </Loading>
+          ) : (
+            sections[section](access)
+          )}
         </div>
       </div>
     </div>

@@ -94,17 +94,49 @@ export class Store {
     return this.db.describe
   }
 
+  /**
+   * The registered repositories. A repository that was unregistered rather
+   * than deleted keeps its row, and its reviews with it, so re-adding the same
+   * path finds the notes again — but it is not in the workspace, and nothing
+   * that lists what is in the workspace may show it.
+   */
   listRepos(): Promise<RepoRow[]> {
-    return this.db.all<RepoRow>('select id, path from repos order by path')
+    return this.db.all<RepoRow>(
+      'select id, path from repos where removed_at is null order by path',
+    )
   }
 
   getRepo(id: number): Promise<RepoRow | undefined> {
-    return this.db.get<RepoRow>('select id, path from repos where id = ?', [id])
+    return this.db.get<RepoRow>(
+      'select id, path from repos where id = ? and removed_at is null',
+      [id],
+    )
+  }
+
+  /**
+   * A path's row whether or not it is in the workspace, so a caller can tell a
+   * repository joining it from one that was already there. `getRepo` cannot
+   * answer that: an unregistered repository reads as absent, which is the
+   * point of it.
+   */
+  repoByPath(
+    path: string,
+  ): Promise<{ id: number; removed_at: string | null } | undefined> {
+    return this.db.get<{ id: number; removed_at: string | null }>(
+      'select id, removed_at from repos where path = ?',
+      [path],
+    )
   }
 
   async addRepo(path: string): Promise<RepoRow> {
     await this.db.run(
       'insert into repos (path) values (?) on conflict do nothing',
+      [path],
+    )
+    // adding a path that was unregistered brings it back, reviews and notes
+    // included — which is the whole reason unregistering keeps the row
+    await this.db.run(
+      'update repos set removed_at = null where path = ? and removed_at is not null',
       [path],
     )
     const row = await this.db.get<RepoRow>(
@@ -115,8 +147,42 @@ export class Store {
     return row
   }
 
-  async removeRepo(id: number): Promise<void> {
-    await this.db.run('delete from repos where id = ?', [id])
+  /** How many notes would go with this repository. Nothing else counts them. */
+  async countNotesInRepo(repoId: number): Promise<number> {
+    const row = await this.db.get<{ n: number }>(
+      `select count(*) as n from threads t
+       join sessions s on s.id = t.session_id
+       where s.repo_id = ?`,
+      [repoId],
+    )
+    return Number(row?.n ?? 0)
+  }
+
+  /**
+   * Takes a repository out of the workspace, one of two ways.
+   *
+   * `delete` removes the row, and the foreign keys take its reviews, notes and
+   * replies with it. `unregister` stamps `removed_at` and keeps all of it.
+   * Either way its `activity` rows stay: those keys are plain integers with no
+   * cascade, so the record of what was reviewed here outlives the reviews.
+   *
+   * A repository with no notes is deleted whichever way is asked for — there
+   * is nothing to keep, and a hidden row nobody can see is worse than no row.
+   */
+  async removeRepo(
+    id: number,
+    mode: 'delete' | 'unregister',
+  ): Promise<{ deleted: boolean; notes: number }> {
+    const notes = await this.countNotesInRepo(id)
+    if (mode === 'delete' || notes === 0) {
+      await this.db.run('delete from repos where id = ?', [id])
+      return { deleted: true, notes }
+    }
+    await this.db.run('update repos set removed_at = ? where id = ?', [
+      new Date().toISOString(),
+      id,
+    ])
+    return { deleted: false, notes }
   }
 
   /**
@@ -164,10 +230,16 @@ export class Store {
     ])
   }
 
+  /**
+   * A review of an unregistered repository reads as gone, the same way its
+   * files do: it is not in the workspace, so neither an address nor an agent
+   * should reach it. Re-adding the path brings both back.
+   */
   async getSession(id: number): Promise<Session | undefined> {
     const row = await this.db.get<SessionRow>(
       `select s.*, r.path as repo_path from sessions s
-       join repos r on r.id = s.repo_id where s.id = ?`,
+       join repos r on r.id = s.repo_id
+       where s.id = ? and r.removed_at is null`,
       [id],
     )
     return row === undefined ? undefined : sessionFromRow(row)
@@ -177,7 +249,8 @@ export class Store {
   async listSessions(): Promise<Session[]> {
     const rows = await this.db.all<SessionRow>(
       `select s.*, r.path as repo_path from sessions s
-       join repos r on r.id = s.repo_id order by s.id desc`,
+       join repos r on r.id = s.repo_id
+       where r.removed_at is null order by s.id desc`,
     )
     return rows.map(sessionFromRow)
   }
