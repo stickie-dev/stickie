@@ -184,13 +184,22 @@ references this look came from are 16px marketing pages; a surface showing
 twenty files is not one, and lines of code per screen is the job.
 
 The scale has names — `text-meta` (10), `text-dense` (11), `text-xs` (12),
-`text-note` (13), `text-sm` (14), `text-lede` (15) — and each is that number
-plus `--font-shift`, which Settings → Appearance sets to −1px for *Compact*.
-So no component writes `text-[11px]` any more, and one radio button makes the
-whole interface a pixel smaller. Only the type moves: spacing, radii and icons
-stay, because a reader asking for more rows on a laptop is not asking for
-smaller buttons. The diff's own font is not in the scale — Monaco picks it
-from the width of the window.
+`text-note` (13), `text-sm` (14), `text-lede` (15) — and each is
+`max(10px, that number + var(--font-shift))`, which Settings → Appearance sets
+to −1px for *Compact*. So no component writes `text-[11px]` any more, and one
+radio makes the whole interface a pixel smaller. Two things about that
+expression: the floor lives in it rather than in the mode, so what is already
+at 10px simply stays there and nothing has to ask which mode it is in; and
+only the type moves — spacing, radii and icons stay, because a reader asking
+for more rows on a laptop is not asking for smaller buttons.
+
+Monaco is the exception that proves it, since an editor is laid out in numbers
+it is handed rather than variables it can read. `fontShift` in the store is
+the same −1, and `editorOptions` applies it to the width ladder (11.5 / 12.5 /
+13) with its own floor at 11 — code is the content, and the last thing that
+should be squinted at to fit another line — and tightens the line from 1.7× to
+1.6×. That is the only place a component is allowed to know which mode it is
+in.
 
 **One frame per page.** `page` is fluid with a ceiling: no gutters on a laptop,
 and a nine-column table does not stretch across a 34-inch screen. Prose keeps

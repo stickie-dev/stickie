@@ -8,7 +8,7 @@ import type { NavHit } from '../api'
 import { flowJump, markFlowClick } from '../flowNav'
 import { languageFor } from '../languages'
 import { formatRoute } from '../routes'
-import { activeFiles, useReview, wrapFor } from '../store'
+import { activeFiles, fontShift, useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
 import { CommitTimeline } from './CommitTimeline'
 import { ContinuousDiff } from './ContinuousDiff'
@@ -38,8 +38,13 @@ function useWindowWidth(): number {
 function editorOptions(
   width: number,
   wrap: boolean,
+  shift: number,
 ): editor.IStandaloneEditorConstructionOptions {
-  const fontSize = width < 1440 ? 11.5 : width < 1800 ? 12.5 : 13
+  // the ladder is the window's; the shift is the reader's, and 11 is the floor
+  // — code is the content here, and it is the last thing that should be squinted
+  // at to fit one more line
+  const ladder = width < 1440 ? 11.5 : width < 1800 ? 12.5 : 13
+  const fontSize = Math.max(11, ladder + shift)
   return {
     readOnly: true,
     minimap: { enabled: false },
@@ -50,7 +55,9 @@ function editorOptions(
     fontSize,
     fontFamily: editor_font,
     fontLigatures: true,
-    lineHeight: Math.round(fontSize * 1.7),
+    // compact buys its rows back here too, but gently: 1.7 is what makes a
+    // diff readable rather than a wall, and 1.6 is as tight as that stays true
+    lineHeight: Math.round(fontSize * (shift < 0 ? 1.6 : 1.7)),
     letterSpacing: 0.2,
     wordWrap: wrap ? 'on' : 'off',
     rulers: wrap ? [] : [80, 100, 120],
@@ -418,6 +425,7 @@ export function FileView() {
   const viewed = useReview((s) => s.viewed)
   const toggleViewed = useReview((s) => s.toggleViewed)
   const files = useReview(activeFiles)
+  const shift = useReview(fontShift)
   const openFile = useReview((s) => s.openFile)
   const fileLoading = useReview((s) => s.fileLoading)
   const commits = useReview((s) => s.commits)
@@ -632,7 +640,7 @@ export function FileView() {
     return (
       <CommitTimeline
         commits={commits}
-        options={editorOptions(width, false)}
+        options={editorOptions(width, false, shift)}
         theme={monaco_theme}
       />
     )
@@ -666,7 +674,7 @@ export function FileView() {
             files={files}
             sessionId={session.id}
             repoId={activeRepoId ?? -1}
-            options={editorOptions(width, false)}
+            options={editorOptions(width, false, shift)}
             sideBySide={sideBySide}
             theme={monaco_theme}
             attach={attachCapture}
@@ -770,7 +778,7 @@ export function FileView() {
               language={language}
               theme={monaco_theme}
               options={{
-                ...editorOptions(width, wrap),
+                ...editorOptions(width, wrap, shift),
                 renderSideBySide: sideBySide,
                 hideUnchangedRegions: {
                   enabled: collapseUnchanged && !finding,
@@ -807,7 +815,7 @@ export function FileView() {
               value={single_content}
               language={language}
               theme={monaco_theme}
-              options={editorOptions(width, wrap)}
+              options={editorOptions(width, wrap, shift)}
               onMount={(instance) => {
                 setSingleEditor(instance)
                 attachCapture(instance, single_side)

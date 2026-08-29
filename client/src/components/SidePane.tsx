@@ -4,7 +4,7 @@ import type { editor } from 'monaco-editor'
 import { api } from '../api'
 import { editor_font } from '../monacoSetup'
 import { languageFor } from '../languages'
-import { useReview } from '../store'
+import { fontShift, useReview } from '../store'
 import { Loading, SkeletonCode } from './Skeleton'
 import { btn } from '../ui'
 
@@ -22,6 +22,7 @@ interface RefOffer {
  */
 export function SidePane() {
   const pane = useReview((s) => s.sidePane)
+  const shift = useReview(fontShift)
   const closeSide = useReview((s) => s.closeSide)
   const openRefTarget = useReview((s) => s.openRefTarget)
   const insertDraftRef = useReview((s) => s.insertDraftRef)
@@ -113,10 +114,10 @@ export function SidePane() {
               scrollBeyondLastLine: false,
               automaticLayout: true,
               renderLineHighlight: 'none',
-              fontSize: 11.5,
+              fontSize: Math.max(11, 11.5 + shift),
               fontFamily: editor_font,
               fontLigatures: true,
-              lineHeight: 20,
+              lineHeight: shift < 0 ? 18 : 20,
               wordWrap: 'on',
               padding: { top: 8, bottom: 8 },
               lineNumbersMinChars: 3,

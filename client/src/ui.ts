@@ -62,8 +62,12 @@ export function btn(kind: ButtonKind = 'text', extra = ''): string {
 /** A control that is currently on — a toggle showing its state, not a colour. */
 export const button_on = `${button_base} bg-accent-soft text-accent ${motion}`
 
-/** Square rather than wide, for a single glyph. */
-export const icon_button = `rounded-sm p-1 text-soft hover:bg-overlay hover:text-ink disabled:text-faint ${motion}`
+/**
+ * Square rather than wide, for a single glyph. The padding is what makes it a
+ * button: a 14px icon in 4px of padding is a 22px target, which is smaller
+ * than the text buttons beside it and smaller than a pointer expects.
+ */
+export const icon_button = `rounded-sm p-1.5 text-soft hover:bg-overlay hover:text-ink disabled:text-faint ${motion}`
 
 /**
  * Text entry and selects, filled rather than outlined, with the focus ring

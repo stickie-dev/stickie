@@ -400,6 +400,16 @@ function statusOf(
   return files.find((f) => f.path === path)?.status ?? 'unchanged'
 }
 
+/**
+ * The pixels the type scale is shifted by: the JS side of `--font-shift`, for
+ * the one thing CSS cannot reach. Monaco is laid out in numbers it is handed —
+ * font size, line height, column width — so the editor has to be told what the
+ * rest of the interface reads off a variable.
+ */
+export function fontShift(state: ReviewState): number {
+  return state.fontScale === 'compact' ? -1 : 0
+}
+
 /** One identity, so a selector falling back to it does not force a render. */
 const no_files: ChangedFile[] = []
 

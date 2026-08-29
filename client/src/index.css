@@ -36,13 +36,20 @@
    * how Settings → Appearance makes the whole interface one pixel smaller
    * without a component knowing that happened. Spacing, radii and icons do not
    * move: compact is a smaller face on the same frame, not a smaller frame.
+   *
+   * The floor is in the expression rather than in the mode. 10px is as small
+   * as anything here gets, so compact takes its pixel off what has one to
+   * spare and leaves the badges and column heads — already at the floor —
+   * where they are. `max()` says that once; a component asking which mode it
+   * is in would say it everywhere and eventually say it differently.
    */
-  --text-meta: calc(10px + var(--font-shift));
-  --text-dense: calc(11px + var(--font-shift));
-  --text-xs: calc(12px + var(--font-shift));
-  --text-note: calc(13px + var(--font-shift));
-  --text-sm: calc(14px + var(--font-shift));
-  --text-lede: calc(15px + var(--font-shift));
+  --text-floor: 10px;
+  --text-meta: max(var(--text-floor), calc(10px + var(--font-shift)));
+  --text-dense: max(var(--text-floor), calc(11px + var(--font-shift)));
+  --text-xs: max(var(--text-floor), calc(12px + var(--font-shift)));
+  --text-note: max(var(--text-floor), calc(13px + var(--font-shift)));
+  --text-sm: max(var(--text-floor), calc(14px + var(--font-shift)));
+  --text-lede: max(var(--text-floor), calc(15px + var(--font-shift)));
 
   /* the standard scale, moved up: every existing rounded-* gets the new look */
   --radius-xs: 4px;
