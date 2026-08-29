@@ -1,6 +1,6 @@
 ---
 name: stickie-review
-description: Fetch open review notes from a running stickie server, address each one in the working tree, then reply to and resolve the threads. Use when the user says to address stickie notes, pick up review comments, or after they finish reviewing in stickie.
+description: Fetch open review notes from a running stickie server, address each one in the working tree, then reply to and resolve them. Use when the user says to address stickie notes, pick up review comments, or after they finish reviewing in stickie.
 ---
 
 # Address stickie review notes
@@ -39,7 +39,9 @@ fine: the tools and the routes read the same database.
    curl -s "http://localhost:4870/api/sessions/<id>/threads?status=open"
    ```
 
-3. For each thread, in order:
+3. For each note, in order — a note is named by its `number` within the
+   review, counting from 0, which is what the headings in the markdown say and
+   what the reply and resolve calls take:
    - Read the current file around `startLine`–`endLine`. If the code there
      no longer matches the intent of the snippet, re-read more context
      before acting.
@@ -50,10 +52,10 @@ fine: the tools and the routes read the same database.
      `resolve_note`, or:
 
      ```sh
-     curl -s -X POST http://localhost:4870/api/threads/<tid>/reply \
+     curl -s -X POST http://localhost:4870/api/reviews/<id>/notes/<n>/reply \
        -H 'content-type: application/json' \
        -d '{"author": "agent", "actor": "claude-code", "body": "<one sentence: what changed>"}'
-     curl -s -X POST http://localhost:4870/api/threads/<tid>/resolve
+     curl -s -X POST http://localhost:4870/api/reviews/<id>/notes/<n>/resolve
      ```
 
      Pass `actor: "claude-code"` (or `actor` on `reply_to_note`) so the record
@@ -65,7 +67,7 @@ fine: the tools and the routes read the same database.
    referenced blocks arrive inlined in the prompt (content as of fetch
    time); for longer ones, read the file at that range yourself.
 
-5. Threads with `"status": "detached"` reference code that no longer exists.
+5. Notes with `"status": "detached"` reference code that no longer exists.
    Reply asking the user to re-anchor or clarify; never guess.
 
 6. Finish with a short summary: notes addressed, notes left open and why.
@@ -74,6 +76,6 @@ fine: the tools and the routes read the same database.
 
 - Reply bodies are read by the user in the UI — keep them to one or two
   plain sentences.
-- Never resolve a thread you did not act on.
+- Never resolve a note you did not act on.
 - Fetch line numbers fresh; do not reuse positions from an earlier fetch
   after you have edited the file.

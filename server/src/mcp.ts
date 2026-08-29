@@ -49,6 +49,18 @@ const actor_input = z
   .optional()
   .describe('what to call yourself in the record, e.g. "claude-code"')
 
+/**
+ * A note is named by its number inside its review, counting from 0 — the
+ * number `list_notes` and the markdown export both carry. Numbers are never
+ * reused, so one that no note holds is an error rather than the next note
+ * along.
+ */
+const note_input = z
+  .number()
+  .int()
+  .min(0)
+  .describe('the note number within that review, from list_notes')
+
 export const tools: McpTool[] = [
   {
     name: 'list_reviews',
@@ -83,9 +95,10 @@ export const tools: McpTool[] = [
   {
     name: 'list_notes',
     description:
-      'The same notes as structured JSON — ids, paths, line ranges, status, ' +
-      'messages — for filtering or exact line work. Status `detached` means ' +
-      'the code a note was written against is gone: ask, never guess.',
+      'The same notes as structured JSON — numbers, paths, line ranges, ' +
+      'status, messages — for filtering or exact line work. `number` is what ' +
+      'the reply and resolve tools take. Status `detached` means the code a ' +
+      'note was written against is gone: ask, never guess.',
     readOnly: true,
     input: session_id.extend({
       status: z
@@ -108,14 +121,14 @@ export const tools: McpTool[] = [
       'Reply to one note as the agent. Say what changed, in one sentence. ' +
       'Reply and leave the note open when declining or unsure.',
     readOnly: false,
-    input: z.object({
-      threadId: z.number().int(),
+    input: session_id.extend({
+      note: note_input,
       body: z.string().min(1).describe('what was done, or why it was not'),
       actor: actor_input,
     }),
     request: (args) => ({
       method: 'POST',
-      path: `/api/threads/${String(args.threadId)}/reply`,
+      path: `/api/reviews/${String(args.sessionId)}/notes/${String(args.note)}/reply`,
       body: {
         author: 'agent',
         body: args.body,
@@ -129,12 +142,14 @@ export const tools: McpTool[] = [
       'Mark one note resolved, after replying to it. Only for notes actually ' +
       'addressed — the user reopens what they disagree with.',
     readOnly: false,
-    input: z.object({ threadId: z.number().int(), actor: actor_input }),
+    input: session_id.extend({ note: note_input, actor: actor_input }),
     // an agent closing its own work and a human accepting it are different
     // facts; without saying which, the record used to credit the human
     request: (args) => ({
       method: 'POST',
-      path: `/api/threads/${String(args.threadId)}/resolve?${claiming(args.actor)}`,
+      path:
+        `/api/reviews/${String(args.sessionId)}/notes/${String(args.note)}` +
+        `/resolve?${claiming(args.actor)}`,
     }),
   },
 ]

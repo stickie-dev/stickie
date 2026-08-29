@@ -62,7 +62,12 @@ the only output.
 - **Agent loop** — open notes via REST or MCP (`stickie-mcp`, five tools over
   the same routes), agent replies and resolves; or the zero-integration
   *Copy prompt* export — markdown, language-tagged code fences, in an order
-  you can arrange — for pasting into anything
+  you can arrange — for pasting into anything. A note is named by its number
+  inside its review, counting from 0, and that number is what replies and
+  resolves take: *note 3 of review 631*, not a row id in the thousands that
+  says nothing about which review it belongs to or how many notes are in it.
+  Numbers are never reused, so one an agent was handed cannot come to mean a
+  different note
 - **Comments panel** — every note in the session in one list, in posting
   order, scrolling to new arrivals; notes still being written stay editable
   here while you browse elsewhere for references, and *prompt order* lets you
@@ -178,6 +183,9 @@ spec is generated from the code and cannot drift.
 | GET | `/api/threads/:id` | one note, re-anchored; no review id needed |
 | POST | `/api/threads/:id/reply` | `{author, body, actor?}` |
 | POST | `/api/threads/:id/resolve` · `/reopen` | close / reopen |
+| GET | `/api/reviews/:id/notes/:number` | the same note, by its number in the review |
+| POST | `/api/reviews/:id/notes/:number/reply` | `{author, body, actor?}` |
+| POST | `/api/reviews/:id/notes/:number/resolve` · `/reopen` | close / reopen |
 | GET | `/api/sessions/:id/prompt` | self-contained markdown export |
 | GET | `/api/sessions` | every review, newest first |
 | POST | `/api/sessions/:id/submit-review` | post the draft batch (`pending` in the API) |
@@ -203,8 +211,8 @@ For clients that only speak stdio, `stickie-mcp` bridges to the same five tools:
 | `list_reviews` | `GET /api/sessions` | read-only |
 | `get_review_notes` | `GET /api/sessions/:id/prompt` | read-only |
 | `list_notes` | `GET /api/sessions/:id/threads` | read-only |
-| `reply_to_note` | `POST /api/threads/:id/reply` | writes |
-| `resolve_note` | `POST /api/threads/:id/resolve` | writes |
+| `reply_to_note` | `POST /api/reviews/:id/notes/:number/reply` | writes |
+| `resolve_note` | `POST /api/reviews/:id/notes/:number/resolve` | writes |
 
 ```sh
 claude mcp add --transport http stickie http://localhost:4870/mcp

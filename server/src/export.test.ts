@@ -68,6 +68,7 @@ function thread(over: Partial<Thread>): Thread {
   return {
     id: 1,
     sessionId: 1,
+    number: 0,
     path: 'app/main.py',
     side: 'source',
     startLine: 4,
@@ -133,14 +134,32 @@ describe('buildPrompt', () => {
 describe('the heading of a note', () => {
   it('names the blob the code came from, so it can be read back', async () => {
     const text = await buildPrompt(session, [thread({})], 'http://x', noSource)
-    expect(text).toContain('## [thread 1](http://x/r/1/t/1) — app/main.py:L4 @ blob ab12cd34')
+    expect(text).toContain('## [note 0](http://x/r/1/t/1) — app/main.py:L4 @ blob ab12cd34')
   })
 
   it('says nothing about a blob for a note with no code', async () => {
     const whole_file = thread({ startLine: 0, endLine: 0, snippet: '' })
     const text = await buildPrompt(session, [whole_file], 'http://x', noSource)
-    expect(text).toContain('## [thread 1](http://x/r/1/t/1) — app/main.py (whole file)')
+    expect(text).toContain('## [note 0](http://x/r/1/t/1) — app/main.py (whole file)')
     expect(text).not.toContain('blob')
+  })
+
+  it('counts within the review, not across the database', async () => {
+    // the number an agent is told to act on, and the row id it must never be
+    // handed: a review of thirteen notes reads 0..12, whatever the ids are
+    const text = await buildPrompt(
+      session,
+      [thread({ id: 34, number: 3 })],
+      'http://x',
+      noSource,
+    )
+    expect(text).toContain('## [note 3]')
+    expect(text).not.toContain('note 34')
+  })
+
+  it('names the review, since the instructions cannot be followed without it', async () => {
+    const text = await buildPrompt(session, [thread({})], 'http://x', noSource)
+    expect(text).toContain('Review 1 — /repo')
   })
 
   it('no longer claims a capture time it cannot substantiate', async () => {

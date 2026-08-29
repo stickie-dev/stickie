@@ -17,9 +17,19 @@ model is specific to one provider.
    `GET /api/sessions/<id>/threads?status=open`)
 3. The agent addresses each note in the working tree.
 4. The agent replies and resolves:
-   `POST /api/threads/<id>/reply` with `{"author": "agent", "body": "..."}`
-   `POST /api/threads/<id>/resolve`
+   `POST /api/reviews/<review>/notes/<note>/reply` with
+   `{"author": "agent", "body": "..."}`
+   `POST /api/reviews/<review>/notes/<note>/resolve`
 5. The UI updates live; the user re-reviews or closes out.
+
+## Which note
+
+A note is numbered inside its review, counting from 0 — `number` in the JSON,
+and the heading in the markdown export. That is the handle to act on: numbers
+are never reused, so one that no note holds is a 404 rather than the next note
+along. Notes also have a global row id, which the older
+`POST /api/threads/<id>/reply` and `/resolve` still take and which every note
+link carries; either addresses the same note.
 
 ## Naming yourself
 
@@ -47,8 +57,8 @@ to a running server — five tools over the same routes:
 | `list_reviews` | `GET /api/sessions` | read-only |
 | `get_review_notes` | `GET /api/sessions/:id/prompt` | read-only |
 | `list_notes` | `GET /api/sessions/:id/threads` | read-only |
-| `reply_to_note` | `POST /api/threads/:id/reply` | writes |
-| `resolve_note` | `POST /api/threads/:id/resolve` | writes |
+| `reply_to_note` | `POST /api/reviews/:id/notes/:number/reply` | writes |
+| `resolve_note` | `POST /api/reviews/:id/notes/:number/resolve` | writes |
 
 ```sh
 claude mcp add stickie -- npx -y stickie stickie-mcp        # published install

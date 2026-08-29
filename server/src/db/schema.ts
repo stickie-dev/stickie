@@ -1,4 +1,5 @@
 import type { Db, Dialect } from './driver.js'
+import { numberNotes } from './noteNumbers.js'
 import { rekeySessions } from './sessionKey.js'
 
 /**
@@ -14,7 +15,8 @@ import { rekeySessions } from './sessionKey.js'
  *
  * A review is keyed by its base *ref*, not by the commit that ref pointed at
  * when it started: see `sessionKey.ts`, which moves an older database onto that
- * key.
+ * key. Notes are numbered within their review rather than globally: see
+ * `noteNumbers.ts`, which fills the column in and puts the unique index on.
  */
 
 const sqlite_schema = `
@@ -175,18 +177,28 @@ create index if not exists activity_repo on activity (repo_id, id);
  * path may require one.
  */
 const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
+  sessions: {
+    // how many note numbers this review has handed out. Defaulting to 0 on an
+    // existing review is safe: `createThread` takes whichever is higher, this
+    // or the highest number in the review, so a review that already holds
+    // notes 0..12 carries on at 13 without a migration to set it.
+    sqlite: [['notes_issued', 'notes_issued integer not null default 0']],
+    postgres: [['notes_issued', 'notes_issued integer not null default 0']],
+  },
   threads: {
     sqlite: [
       ['pending', 'pending integer not null default 0'],
       ['origin', 'origin text'],
       ['external_id', 'external_id text'],
       ['actor_id', 'actor_id integer references actors(id)'],
+      ['number', 'number integer'],
     ],
     postgres: [
       ['pending', 'pending boolean not null default false'],
       ['origin', 'origin text'],
       ['external_id', 'external_id text'],
       ['actor_id', 'actor_id integer references actors(id)'],
+      ['number', 'number integer'],
     ],
   },
   messages: {
@@ -224,6 +236,14 @@ export async function applySchema(db: Db): Promise<void> {
   // after the columns exist: the merge it may perform reads threads and writes
   // activity, so both have to be in their final shape first
   const merged = await rekeySessions(db)
+  // and after the merge, which moves notes between reviews: numbering them
+  // first would leave two note 0s in whichever review absorbed another
+  const numbered = await numberNotes(db)
+  if (numbered > 0) {
+    console.log(
+      `stickie: numbered ${String(numbered)} ${numbered === 1 ? 'note' : 'notes'} within ${numbered === 1 ? 'its' : 'their'} review`,
+    )
+  }
   if (merged.length > 0) {
     const absorbed = merged.reduce((n, plan) => n + plan.absorbed.length, 0)
     console.log(

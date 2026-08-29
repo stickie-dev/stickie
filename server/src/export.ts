@@ -103,11 +103,12 @@ export function fenceLanguage(path: string): string {
 export const default_prompt_instructions = [
   'Address each note. The line numbers were correct at capture time;',
   'verify against the current file before editing. When done with a',
-  'note, reply and resolve it:',
+  'note, reply and resolve it — <review> is the number in the heading',
+  'above, <note> the number on the note:',
   '',
   '```bash',
-  `curl -X POST {api}/api/threads/<id>/reply -H 'content-type: application/json' -d '{"author":"agent","body":"<what you did>"}'`,
-  'curl -X POST {api}/api/threads/<id>/resolve',
+  `curl -X POST {api}/api/reviews/<review>/notes/<note>/reply -H 'content-type: application/json' -d '{"author":"agent","body":"<what you did>"}'`,
+  'curl -X POST {api}/api/reviews/<review>/notes/<note>/resolve',
   '```',
 ].join('\n')
 
@@ -139,8 +140,11 @@ export async function buildPrompt(
   const lines: string[] = []
   lines.push('# Review notes (stickie)')
   lines.push('')
+  // the review's own number, because the notes below are numbered within it
+  // and the instructions at the end cannot be followed without it
   lines.push(
-    `Repo: ${session.repoPath} — reviewing ${describeSource(session)} ` +
+    `Review ${String(session.id)} — ${session.repoPath}, ` +
+      `reviewing ${describeSource(session)} ` +
       `against ${session.baseRef} (${shortSha(session.baseSha)})`,
   )
   if (threads.some((t) => t.startLine > 0 && t.blobSha !== null)) {
@@ -173,12 +177,14 @@ export async function buildPrompt(
       anchored && thread.blobSha !== null
         ? ` @ blob ${shortSha(thread.blobSha)}`
         : ''
-    // one identifier, and the one every route and MCP tool takes. An ordinal
-    // beside it was a second number for the same note, and the only number
-    // that could not be used to act on it. As a link it also opens where the
-    // note is now, since that address resolves rather than being stored.
+    // one identifier, and the one every route and MCP tool takes — a second
+    // number for the same note would be a number that cannot act on it. This
+    // one counts from 0 inside the review named in the heading above, which is
+    // what an agent can read off a review rather than hold globally. As a link
+    // it opens where the note is now, since that address resolves rather than
+    // being stored.
     const link = `${apiBase}/r/${String(session.repoId)}/t/${String(thread.id)}`
-    lines.push(`## [thread ${thread.id}](${link}) — ${where}${blob}${state}`)
+    lines.push(`## [note ${thread.number}](${link}) — ${where}${blob}${state}`)
     lines.push('')
     if (anchored) {
       const snippet_lines = thread.snippet.split('\n')

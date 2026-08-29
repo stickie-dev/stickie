@@ -68,14 +68,17 @@ describe('mcp', () => {
         jsonrpc: '2.0',
         id: 3,
         method: 'tools/call',
-        params: { name: 'reply_to_note', arguments: { threadId: 4, body: 'fixed' } },
+        params: {
+          name: 'reply_to_note',
+          arguments: { sessionId: 12, note: 4, body: 'fixed' },
+        },
       },
       fetcher,
     )
     expect(calls).toEqual([
       {
         method: 'POST',
-        path: '/api/threads/4/reply',
+        path: '/api/reviews/12/notes/4/reply',
         body: { author: 'agent', body: 'fixed' },
       },
     ])
@@ -127,15 +130,16 @@ describe('who a tool says it is', () => {
   }
 
   it('resolves as the agent, not as whoever runs the server', () => {
-    expect(call('resolve_note', { threadId: 7 }).path).toBe(
-      '/api/threads/7/resolve?author=agent',
+    expect(call('resolve_note', { sessionId: 12, note: 7 }).path).toBe(
+      '/api/reviews/12/notes/7/resolve?author=agent',
     )
   })
 
   it('names the agent when it says who it is', () => {
-    expect(call('resolve_note', { threadId: 7, actor: 'claude-code' }).path).toBe(
-      '/api/threads/7/resolve?author=agent&actor=claude-code',
-    )
+    expect(
+      call('resolve_note', { sessionId: 12, note: 7, actor: 'claude-code' })
+        .path,
+    ).toBe('/api/reviews/12/notes/7/resolve?author=agent&actor=claude-code')
   })
 
   it('reads the notes as the agent that asked for them', () => {
@@ -145,14 +149,14 @@ describe('who a tool says it is', () => {
   })
 
   it('escapes a name that would otherwise break the query', () => {
-    expect(call('resolve_note', { threadId: 1, actor: 'a&b c' }).path).toBe(
-      '/api/threads/1/resolve?author=agent&actor=a%26b%20c',
-    )
+    expect(
+      call('resolve_note', { sessionId: 1, note: 1, actor: 'a&b c' }).path,
+    ).toBe('/api/reviews/1/notes/1/resolve?author=agent&actor=a%26b%20c')
   })
 
   it('ignores a blank name rather than sending an empty one', () => {
-    expect(call('resolve_note', { threadId: 1, actor: '   ' }).path).toBe(
-      '/api/threads/1/resolve?author=agent',
-    )
+    expect(
+      call('resolve_note', { sessionId: 1, note: 1, actor: '   ' }).path,
+    ).toBe('/api/reviews/1/notes/1/resolve?author=agent')
   })
 })

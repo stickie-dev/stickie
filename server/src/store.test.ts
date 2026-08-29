@@ -511,6 +511,66 @@ describe('session identity', () => {
     expect(await store.listThreads(session.id)).toHaveLength(1)
     expect(await store.listSessions()).toHaveLength(1)
   })
+})
 
+describe('numbering notes within a review', () => {
+  const note = (store: Store, sessionId: number, body: string) =>
+    store.createThread(
+      sessionId,
+      'a.ts',
+      'source',
+      1,
+      1,
+      null,
+      'x',
+      'user',
+      body,
+    )
 
+  const twoReviews = async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const first = await store.getOrCreateSession(
+      repo.id,
+      { kind: 'worktree', value: '/tmp/repo' },
+      'master',
+      'abc123',
+    )
+    const second = await store.getOrCreateSession(
+      repo.id,
+      { kind: 'ref', value: 'feature' },
+      'master',
+      'abc123',
+    )
+    return { store, first, second }
+  }
+
+  it('counts from 0, per review', async () => {
+    const { store, first, second } = await twoReviews()
+    expect((await note(store, first.id, 'one')).number).toBe(0)
+    expect((await note(store, first.id, 'two')).number).toBe(1)
+    // a second review starts again at 0: the number says which note of this
+    // review, not which note of the database
+    expect((await note(store, second.id, 'one')).number).toBe(0)
+    expect((await note(store, first.id, 'three')).number).toBe(2)
+  })
+
+  it('never reuses a number a deleted note held', async () => {
+    const { store, first } = await twoReviews()
+    await note(store, first.id, 'one')
+    const second_note = await note(store, first.id, 'two')
+    await store.deleteThread(second_note.id)
+    // 2, not 1: an agent told to address note 1 must not find a different
+    // note there afterwards
+    expect((await note(store, first.id, 'three')).number).toBe(2)
+  })
+
+  it('finds a note by its number, and nothing at a number no note holds', async () => {
+    const { store, first, second } = await twoReviews()
+    const raised = await note(store, first.id, 'one')
+    const found = await store.getThreadByNumber(first.id, 0)
+    expect(found?.id).toBe(raised.id)
+    expect(await store.getThreadByNumber(second.id, 0)).toBeUndefined()
+    expect(await store.getThreadByNumber(first.id, 1)).toBeUndefined()
+  })
 })

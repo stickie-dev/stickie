@@ -118,6 +118,14 @@ export interface ThreadMessage {
 export interface Thread {
   id: number
   sessionId: number
+  /**
+   * Which note this is inside its review — the first one is 0. This is the
+   * handle the export and the MCP tools hand an agent, since a row id in the
+   * thousands says nothing about which review it belongs to. Assigned once and
+   * never reused, so deleting note 1 leaves 0, 2, 3 rather than moving a number
+   * an agent has already been told to act on.
+   */
+  number: number
   path: string
   side: Side
   startLine: number

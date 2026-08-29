@@ -98,8 +98,13 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
                   ? `–L${thread.endLine}`
                   : ''
               }`}
-          {' · thread '}
-          {thread.id}
+          {/*
+            The note's number inside this review, which is what the export and
+            the MCP tools take — the row id is in the link and nowhere a person
+            has to read it.
+          */}
+          {' · note '}
+          {thread.number}
         </span>
         {thread.pending && (
           <span className="rounded border border-violet-500/40 bg-violet-500/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-violet-700 dark:text-violet-300">

@@ -43,6 +43,11 @@ interface ActorRow {
 interface ThreadRow {
   id: number
   session_id: number
+  /**
+   * Never null in practice: assigned on insert, and `numberNotes` fills in
+   * anything older on every start, so a read cannot get ahead of it.
+   */
+  number: number
   path: string
   side: string
   start_line: number
@@ -245,11 +250,35 @@ export class Store {
     // the note and its first message are one act; a reader must never find a
     // thread with no message in it
     return this.db.transaction(async () => {
+      // A number is never handed out twice, so an agent told to address note 2
+      // finds note 2 there afterwards whatever has been deleted since. The
+      // review's own counter is what guarantees that — max+1 over the notes
+      // still present would hand the top number back the moment that note is
+      // deleted. The higher of the two is taken so a review from before the
+      // counter existed carries on above its notes rather than back at 0.
+      // Inside the transaction, which keeps the read and the insert together.
+      const seq = await this.db.get<{
+        top: number | null
+        issued: number | null
+      }>(
+        `select (select max(number) from threads where session_id = ?) as top,
+                (select notes_issued from sessions where id = ?) as issued`,
+        [sessionId, sessionId],
+      )
+      const number = Math.max(
+        Number(seq?.issued ?? 0),
+        seq?.top == null ? 0 : Number(seq.top) + 1,
+      )
+      await this.db.run('update sessions set notes_issued = ? where id = ?', [
+        number + 1,
+        sessionId,
+      ])
       const threadId = await this.db.insert(
-        `insert into threads (session_id, path, side, start_line, end_line, blob_sha, snippet, pending, origin, external_id, actor_id)
-         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `insert into threads (session_id, number, path, side, start_line, end_line, blob_sha, snippet, pending, origin, external_id, actor_id)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           sessionId,
+          number,
           path,
           side,
           startLine,
@@ -273,6 +302,23 @@ export class Store {
     const row = await this.db.get<ThreadRow>(
       `${thread_select} where t.id = ?`,
       [id],
+    )
+    if (row === undefined) return undefined
+    return this.threadFromRow(row)
+  }
+
+  /**
+   * A note by the number it carries inside its review. Numbers are never
+   * reused, so a number no note holds is nothing rather than the next note
+   * along — the caller's 404 has to say so.
+   */
+  async getThreadByNumber(
+    sessionId: number,
+    number: number,
+  ): Promise<Thread | undefined> {
+    const row = await this.db.get<ThreadRow>(
+      `${thread_select} where t.session_id = ? and t.number = ?`,
+      [sessionId, number],
     )
     if (row === undefined) return undefined
     return this.threadFromRow(row)
@@ -636,6 +682,7 @@ export class Store {
     return {
       id: row.id,
       sessionId: row.session_id,
+      number: Number(row.number),
       path: row.path,
       side: row.side as Side,
       startLine: row.start_line,

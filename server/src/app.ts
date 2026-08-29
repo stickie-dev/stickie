@@ -189,6 +189,11 @@ const thread_schema = z
   .object({
     id: z.number().int(),
     sessionId: z.number().int(),
+    number: z.number().int().openapi({
+      description:
+        'Which note this is inside its review, counting from 0. The handle ' +
+        'the export and the MCP tools use: /api/reviews/{id}/notes/{number}.',
+    }),
     path: z.string(),
     side: z.enum(['base', 'source']),
     startLine: z.number().int(),
@@ -325,6 +330,17 @@ const actor_query = z.object({
 })
 
 const id_param = z.object({ id: z.coerce.number().int() })
+
+/**
+ * A note addressed the way a review talks about it: which review, and which
+ * note inside it. Both ways in stay open — the row id because permalinks and
+ * older adapters carry it, the number because it is the one a person reads and
+ * the one the export and the MCP tools hand an agent.
+ */
+const note_param = z.object({
+  id: z.coerce.number().int(),
+  number: z.coerce.number().int().min(0),
+})
 
 // z.coerce.boolean() reads "0" as true, which is the opposite of what any
 // caller writing include_pending=0 means
@@ -1250,10 +1266,68 @@ export function createApp(
 
   app.openapi(
     createRoute({
+      method: 'get',
+      path: '/api/reviews/{id}/notes/{number}',
+      tags: ['threads'],
+      summary: 'One note by its number in the review, re-anchored',
+      description:
+        'What a note link resolves through: the answer says where the code is ' +
+        'now, not the lines the note was written against.',
+      request: { params: note_param },
+      responses: {
+        200: json_response(thread_schema, 'The note'),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const { id, number } = c.req.valid('param')
+      const session = await store.getSession(id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown review' }, 404)
+      }
+      const thread = await store.getThreadByNumber(id, number)
+      if (thread === undefined) {
+        return c.json(
+          { error: `no note ${String(number)} in review ${String(id)}` },
+          404,
+        )
+      }
+      const [current] = await reanchorThreads(store, session, [thread])
+      return c.json(current ?? thread, 200)
+    },
+  )
+
+  /**
+   * Both note routes end here, so the two ways of naming a note cannot come to
+   * behave differently. Returns undefined only if the note went away under it.
+   */
+  const addReply = async (
+    thread: Thread,
+    body: z.infer<typeof message_body>,
+  ): Promise<Thread | undefined> => {
+    // a reply is attributed as the reviewed repository would attribute it,
+    // so the session has to be in hand
+    const owner = await store.getSession(thread.sessionId)
+    const actorId = await actorFor(
+      body.author,
+      body.actor,
+      owner?.repoPath ?? null,
+    )
+    await store.addMessage(thread.id, body.author, body.body, actorId)
+    const updated = await store.getThread(thread.id)
+    if (updated === undefined) return undefined
+    await noteRecord('replied', owner ?? thread.sessionId, thread.id, actorId, {
+      author: body.author,
+    })
+    return updated
+  }
+
+  app.openapi(
+    createRoute({
       method: 'post',
       path: '/api/threads/{id}/reply',
       tags: ['threads'],
-      summary: 'Add a reply to a thread',
+      summary: 'Add a reply to a note, by row id',
       request: { params: id_param, body: json_body(message_body) },
       responses: {
         200: json_response(thread_schema, 'Updated thread'),
@@ -1263,25 +1337,39 @@ export function createApp(
     async (c) => {
       const thread = await store.getThread(c.req.valid('param').id)
       if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
-      const body = c.req.valid('json')
-      // a reply is attributed as the reviewed repository would attribute it,
-      // so the session has to be in hand
-      const owner = await store.getSession(thread.sessionId)
-      const actorId = await actorFor(
-        body.author,
-        body.actor,
-        owner?.repoPath ?? null,
-      )
-      await store.addMessage(thread.id, body.author, body.body, actorId)
-      const updated = await store.getThread(thread.id)
+      const updated = await addReply(thread, c.req.valid('json'))
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
-      await noteRecord(
-        'replied',
-        owner ?? thread.sessionId,
-        thread.id,
-        actorId,
-        { author: body.author },
-      )
+      return c.json(updated, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/reviews/{id}/notes/{number}/reply',
+      tags: ['threads'],
+      summary: 'Add a reply to a note, by its number in the review',
+      description:
+        'Notes are numbered from 0 within a review and numbers are never ' +
+        'reused, so a number no note holds is a 404 rather than the next note ' +
+        'along. `id` is the review — a session id, as `list_reviews` returns.',
+      request: { params: note_param, body: json_body(message_body) },
+      responses: {
+        200: json_response(thread_schema, 'Updated note'),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const { id, number } = c.req.valid('param')
+      const thread = await store.getThreadByNumber(id, number)
+      if (thread === undefined) {
+        return c.json(
+          { error: `no note ${String(number)} in review ${String(id)}` },
+          404,
+        )
+      }
+      const updated = await addReply(thread, c.req.valid('json'))
+      if (updated === undefined) return c.json({ error: 'unknown note' }, 404)
       return c.json(updated, 200)
     },
   )
@@ -1405,40 +1493,94 @@ export function createApp(
     },
   )
 
-  const status_route = (action: 'resolve' | 'reopen') =>
-    createRoute({
-      method: 'post',
-      path: `/api/threads/{id}/${action}`,
-      tags: ['threads'],
-      summary: action === 'resolve' ? 'Resolve a thread' : 'Reopen a thread',
-      description:
-        'Say who with `author` (and `actor` for an agent): an agent resolving ' +
-        'its own work and a human accepting it are different facts, and ' +
-        'without them the record says neither.',
-      request: { params: id_param, query: actor_query },
-      responses: {
-        200: json_response(thread_schema, 'Updated thread'),
-        404: not_found,
-      },
-    })
+  const status_description =
+    'Say who with `author` (and `actor` for an agent): an agent resolving ' +
+    'its own work and a human accepting it are different facts, and ' +
+    'without them the record says neither.'
+
+  /**
+   * Resolving takes a note whatever state it is in, `detached` included: a note
+   * whose code has gone still counts as unresolved everywhere it is counted,
+   * and every export carries it until somebody closes it.
+   */
+  const changeStatus = async (
+    thread: Thread,
+    action: 'resolve' | 'reopen',
+    who: z.infer<typeof actor_query>,
+  ): Promise<Thread | undefined> => {
+    await store.setThreadStatus(
+      thread.id,
+      action === 'resolve' ? 'resolved' : 'open',
+    )
+    const updated = await store.getThread(thread.id)
+    if (updated === undefined) return undefined
+    const owner = await store.getSession(thread.sessionId)
+    await noteRecord(
+      action === 'resolve' ? 'resolved' : 'reopened',
+      owner ?? thread.sessionId,
+      thread.id,
+      await claimedActor(who, owner?.repoPath ?? null),
+      { path: thread.path },
+    )
+    return updated
+  }
 
   for (const action of ['resolve', 'reopen'] as const) {
-    app.openapi(status_route(action), async (c) => {
-      const thread = await store.getThread(c.req.valid('param').id)
-      if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
-      await store.setThreadStatus(thread.id, action === 'resolve' ? 'resolved' : 'open')
-      const updated = await store.getThread(thread.id)
-      if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
-      const owner = await store.getSession(thread.sessionId)
-      await noteRecord(
-        action === 'resolve' ? 'resolved' : 'reopened',
-        owner ?? thread.sessionId,
-        thread.id,
-        await claimedActor(c.req.valid('query'), owner?.repoPath ?? null),
-        { path: thread.path },
-      )
-      return c.json(updated, 200)
-    })
+    app.openapi(
+      createRoute({
+        method: 'post',
+        path: `/api/threads/{id}/${action}`,
+        tags: ['threads'],
+        summary:
+          action === 'resolve'
+            ? 'Resolve a note, by row id'
+            : 'Reopen a note, by row id',
+        description: status_description,
+        request: { params: id_param, query: actor_query },
+        responses: {
+          200: json_response(thread_schema, 'Updated thread'),
+          404: not_found,
+        },
+      }),
+      async (c) => {
+        const thread = await store.getThread(c.req.valid('param').id)
+        if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
+        const updated = await changeStatus(thread, action, c.req.valid('query'))
+        if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
+        return c.json(updated, 200)
+      },
+    )
+
+    app.openapi(
+      createRoute({
+        method: 'post',
+        path: `/api/reviews/{id}/notes/{number}/${action}`,
+        tags: ['threads'],
+        summary:
+          action === 'resolve'
+            ? 'Resolve a note, by its number in the review'
+            : 'Reopen a note, by its number in the review',
+        description: status_description,
+        request: { params: note_param, query: actor_query },
+        responses: {
+          200: json_response(thread_schema, 'Updated note'),
+          404: not_found,
+        },
+      }),
+      async (c) => {
+        const { id, number } = c.req.valid('param')
+        const thread = await store.getThreadByNumber(id, number)
+        if (thread === undefined) {
+          return c.json(
+            { error: `no note ${String(number)} in review ${String(id)}` },
+            404,
+          )
+        }
+        const updated = await changeStatus(thread, action, c.req.valid('query'))
+        if (updated === undefined) return c.json({ error: 'unknown note' }, 404)
+        return c.json(updated, 200)
+      },
+    )
   }
 
   app.openapi(
