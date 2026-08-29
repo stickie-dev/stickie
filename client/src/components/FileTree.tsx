@@ -371,7 +371,8 @@ export function FileTree() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="min-h-0 grow overflow-y-auto py-1 text-xs">
+      {/* 11px: a path is dense detail, and the tree is twenty of them */}
+      <div className="min-h-0 grow overflow-y-auto py-1 text-[11px]">
         {repos.map((repo) => (
           <RepoNode key={repo.id} repoId={repo.id} />
         ))}

@@ -4,6 +4,7 @@ import { postsComment } from '../keys'
 import { useReview } from '../store'
 import { TimeAgo } from './TimeAgo'
 import { ask } from '../confirm'
+import { Send } from '../icons'
 import { badge, btn, field } from '../ui'
 
 const ref_pattern = /(@[\w./-]+(?::[\w./-]+)?:L\d+(?:-L?\d+)?)/g
@@ -161,10 +162,11 @@ export function ThreadCard({
         <span className="grow" />
         {thread.pending && (
           <button
-            className="mr-2 text-xs text-violet-700 hover:underline dark:text-violet-300"
+            className="mr-2 inline-flex items-center gap-1 text-xs text-violet-700 hover:underline dark:text-violet-300"
             title="make this note visible to agents without submitting the whole review"
             onClick={() => void postThread(thread.id)}
           >
+            <Send className="h-3 w-3" />
             post now
           </button>
         )}

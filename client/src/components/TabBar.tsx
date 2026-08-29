@@ -3,6 +3,7 @@ import { fileIconUrl } from '../fileIcons'
 import type { Tab } from '../store'
 import { useReview } from '../store'
 import { tabLabels } from '../tabLabels'
+import { ChevronDown, ChevronLeft, ChevronRight, Close } from '../icons'
 import { btn, button_on, icon_button, motion } from '../ui'
 import { ViewMenu } from './ViewMenu'
 
@@ -23,6 +24,10 @@ export function TabBar() {
   const activateTab = useReview((s) => s.activateTab)
   const closeTab = useReview((s) => s.closeTab)
   const repos = useReview((s) => s.repos)
+  const navBack = useReview((s) => s.navBack)
+  const navForward = useReview((s) => s.navForward)
+  const canBack = useReview((s) => s.navIndex > 0)
+  const canForward = useReview((s) => s.navIndex < s.navHistory.length - 1)
   const stripRef = useRef<HTMLDivElement>(null)
   const widths = useRef(new Map<string, number>())
   const [room, setRoom] = useState(Number.POSITIVE_INFINITY)
@@ -144,9 +149,10 @@ export function TabBar() {
           <button
             className={`shrink-0 rounded-sm px-0.5 text-faint opacity-0 group-hover:opacity-100 hover:bg-overlay hover:text-ink ${motion}`}
             title="close tab"
+            aria-label="close tab"
             onClick={() => closeTab(tab.id)}
           >
-            ×
+            <Close className="h-3 w-3" />
           </button>
         )}
       </div>
@@ -163,13 +169,37 @@ export function TabBar() {
       </div>
       {hidden.length > 0 && (
         <button
-          className={`mr-1 shrink-0 self-center ${listing ? button_on : btn()}`}
+          className={`mr-1 inline-flex shrink-0 items-center gap-1 self-center ${listing ? button_on : btn()}`}
           title={`${hidden.length} more open`}
           onClick={() => setListing(!listing)}
         >
-          ⌄ {hidden.length}
+          <ChevronDown />
+          {hidden.length}
         </button>
       )}
+      {/*
+        Where you have been is about what is open, so the arrows sit with the
+        tabs rather than in the workspace bar above: the strip they walk is
+        the strip they are on.
+      */}
+      <button
+        className={`shrink-0 self-center ${icon_button}`}
+        title="back ( [ )"
+        aria-label="back"
+        disabled={!canBack}
+        onClick={() => void navBack()}
+      >
+        <ChevronLeft />
+      </button>
+      <button
+        className={`mr-1 shrink-0 self-center ${icon_button}`}
+        title="forward ( ] )"
+        aria-label="forward"
+        disabled={!canForward}
+        onClick={() => void navForward()}
+      >
+        <ChevronRight />
+      </button>
       <ViewMenu />
       {listing && hidden.length > 0 && (
         <>
@@ -198,9 +228,10 @@ export function TabBar() {
                   <button
                     className={`shrink-0 ${icon_button}`}
                     title="close tab"
+                    aria-label="close tab"
                     onClick={() => closeTab(tab.id)}
                   >
-                    ×
+                    <Close />
                   </button>
                 )}
               </div>

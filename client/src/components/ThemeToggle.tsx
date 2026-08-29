@@ -1,5 +1,6 @@
+import { Moon, Sun } from '../icons'
 import { useReview } from '../store'
-import { btn } from '../ui'
+import { icon_button } from '../ui'
 
 /**
  * Light or dark, next to settings on every page that has a settings link.
@@ -16,12 +17,12 @@ export function ThemeToggle() {
 
   return (
     <button
-      className={`shrink-0 ${btn()}`}
+      className={`shrink-0 ${icon_button}`}
       title={dark ? 'switch to the light theme' : 'switch to the dark theme'}
       aria-label={dark ? 'switch to the light theme' : 'switch to the dark theme'}
       onClick={toggleTheme}
     >
-      {dark ? '☀' : '☾'}
+      {dark ? <Sun /> : <Moon />}
     </button>
   )
 }

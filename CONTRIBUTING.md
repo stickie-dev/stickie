@@ -154,6 +154,26 @@ not typed anything yet. A button is a radius step tighter than the surface
 holding it; a badge keeps the pill, which cannot be mistaken for something to
 press.
 
+**An icon replaces a word only where the shape is the more recognisable of the
+two.** `client/src/icons.tsx` holds them — drawn on a 24 grid, stroked in
+`currentColor`, sized for an 11–12px line, because an installed set arrives
+with its own stroke, its own grid and its own idea of how big an icon is.
+Settings, the theme, reload, close and the arrows that move you about are
+shapes. `Comments (3)`, `Activity`, `Import MR` stay words, because the word
+carries what the shape cannot; sending gets both, since the label counts what
+is about to go. A bar of pictograms is not denser than a bar of verbs, it is
+just quieter about what it does — and an icon-only button still needs its
+`aria-label`, because the picture is not the name.
+
+**All three headers wear the same bar.** `title_bar`: the overview, settings
+and the review sit on `surface` under a half-pixel rule, with the same
+controls in the same order at the right end. The review's used to be a
+panel-filled strip of its own with a full hairline under it, a few pixels
+above the tab strip's own — two lines, and moving between the three pages read
+as moving between three applications. Half a pixel is one device pixel on a 2×
+screen and lighter than a hairline on a 1× one, which is the whole intent: it
+should say "the chrome ends here", not "this is the edge of a box".
+
 **Depth comes from surface and shadow, not outlines.** `edge` survives where a
 real division belongs — a table header, a pane split — and not as a box round
 every control. A fill on hover says "pressable" at the moment that matters.

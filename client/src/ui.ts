@@ -109,5 +109,16 @@ export const eyebrow =
  */
 export const page = 'mx-auto w-full max-w-[100rem] px-6'
 
+/**
+ * The bar across the top of a page, and the line under it.
+ *
+ * Half a pixel, not one: on a 2× screen that is a single device pixel and on a
+ * 1× one it is lighter than a hairline. Enough to make the chrome read as a
+ * title bar over the page, not enough to read as the edge of a box — which is
+ * what a full `border-edge` did here, especially on the review, where the tab
+ * strip's own rule sits a few pixels below it.
+ */
+export const title_bar = 'border-b-[0.5px] border-edge bg-surface'
+
 /** Content arriving: a short rise, once, rather than a fade on every render. */
 export const enter = 'animate-rise'

@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import type { NavHit } from '../api'
 import { useReview } from '../store'
-import { btn } from '../ui'
+import { Close } from '../icons'
+import { btn, icon_button } from '../ui'
 
 export function UsagesPanel() {
   const usages = useReview((s) => s.usages)
@@ -50,10 +51,12 @@ export function UsagesPanel() {
           {usages.scope === 'repo' ? 'search all repos' : 'this repo only'}
         </button>
         <button
-          className="text-soft hover:text-ink"
+          className={icon_button}
+          title="close the panel"
+          aria-label="close the panel"
           onClick={closeUsages}
         >
-          close
+          <Close />
         </button>
       </div>
       <div className="min-h-0 grow overflow-y-auto py-1 text-xs">

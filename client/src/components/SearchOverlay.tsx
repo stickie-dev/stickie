@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import type { NavHit } from '../api'
 import { useReview } from '../store'
-import { btn } from '../ui'
+import { badge, btn, enter, field_flush, motion } from '../ui'
 
 /**
  * Workspace-wide text search (cmd+F / cmd+shift+F). Results open in the
@@ -62,12 +62,12 @@ export function SearchOverlay() {
       onClick={close}
     >
       <div
-        className="flex max-h-[70vh] w-[42rem] flex-col rounded-lg border border-edge bg-panel shadow-2xl"
+        className={`flex max-h-[70vh] w-[42rem] flex-col rounded-lg bg-panel shadow-lifted ${enter}`}
         onClick={(e) => e.stopPropagation()}
       >
         <input
           autoFocus
-          className="rounded-t-lg border-b border-edge bg-panel px-4 py-3 font-mono text-sm text-ink outline-none"
+          className={`rounded-t-lg rounded-b-none px-4 py-3 font-mono text-sm ${field_flush}`}
           placeholder="search all repos… (Enter opens the first hit beside the diff)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -88,7 +88,7 @@ export function SearchOverlay() {
             hits?.map((hit, index) => (
               <div
                 key={`${hit.repoPath}:${hit.path}:${hit.line}:${index}`}
-                className="group flex w-full items-center gap-2 px-4 py-1 hover:bg-overlay"
+                className={`group flex w-full items-center gap-2 px-4 py-1 hover:bg-overlay ${motion}`}
               >
                 <button
                   className="flex min-w-0 grow items-center gap-2 text-left"
@@ -98,7 +98,7 @@ export function SearchOverlay() {
                     close()
                   }}
                 >
-                  <span className="shrink-0 rounded bg-overlay px-1 text-[10px] text-faint">
+                  <span className={`shrink-0 bg-overlay text-soft ${badge}`}>
                     {repoLabel(hit)}
                   </span>
                   <span className="shrink-0 font-mono text-soft">

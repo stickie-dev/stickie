@@ -12,7 +12,8 @@ import { StorageSection } from './StorageSection'
 import { ThemeToggle } from '../ThemeToggle'
 import { useSettings } from './useSettings'
 import { Loading, Skeleton, SkeletonLines } from '../Skeleton'
-import { btn, enter, motion, page } from '../../ui'
+import { ArrowLeft } from '../../icons'
+import { enter, icon_button, motion, page, title_bar } from '../../ui'
 import { lastPlace } from '../../lastPlace'
 
 const titles: Record<SettingsSection, string> = {
@@ -46,7 +47,7 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
 
   return (
     <div className="min-h-full">
-      <header className="sticky top-0 z-10 bg-surface py-2.5 text-xs">
+      <header className={`sticky top-0 z-10 py-2.5 text-xs ${title_bar}`}>
         <div className={`flex items-center gap-2.5 ${page}`}>
         <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
         <span className="font-semibold tracking-tight text-ink">stickie</span>
@@ -60,8 +61,13 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
           settings was loaded directly.
         */}
         <ThemeToggle />
-        <button className={btn()} onClick={() => void navigate(lastPlace())}>
-          back
+        <button
+          className={icon_button}
+          title="back to what you were looking at"
+          aria-label="back to what you were looking at"
+          onClick={() => void navigate(lastPlace())}
+        >
+          <ArrowLeft />
         </button>
         </div>
       </header>

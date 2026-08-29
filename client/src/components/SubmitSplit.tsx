@@ -1,5 +1,6 @@
 import type { NoteDefault } from '../api'
 import { useReview } from '../store'
+import { ChevronDown, Send } from '../icons'
 import { btn, motion } from '../ui'
 
 const note_actions: { value: NoteDefault; label: string; why: string }[] = [
@@ -79,12 +80,18 @@ export function SubmitSplit({
         </span>
       )}
       <span className="inline-flex overflow-hidden rounded-xs">
+        {/*
+          The plane is on Comment and not on Draft, because it means one thing:
+          this leaves the building now. A draft joins the batch and waits, and
+          marking both the same way would make the icon decoration.
+        */}
         <button
-          className={`rounded-none text-xs ${btn('primary', 'shadow-none')}`}
+          className={`inline-flex items-center gap-1.5 rounded-none text-xs ${btn('primary', 'shadow-none')}`}
           disabled={disabled}
           title={current.why}
           onClick={() => onSubmit(current.value)}
         >
+          {current.value === 'comment' && <Send />}
           {current.label}
         </button>
         {/* the seam, so the two halves read as one control with two parts */}
@@ -100,7 +107,7 @@ export function SubmitSplit({
             if (e.key === 'Escape') setListing(false)
           }}
         >
-          ⌄
+          <ChevronDown />
         </button>
       </span>
     </span>

@@ -3,7 +3,8 @@ import type { ReviewSource } from '@stickie/shared'
 import { api } from '../api'
 import { ask } from '../confirm'
 import { formatRoute } from '../routes'
-import { btn, button_on, field, icon_button } from '../ui'
+import { Search, Send, Sliders } from '../icons'
+import { btn, button_on, field, icon_button, title_bar } from '../ui'
 import { ThemeToggle } from './ThemeToggle'
 import { useReview } from '../store'
 
@@ -25,13 +26,6 @@ export function TopBar() {
   const importMr = useReview((s) => s.importMr)
   const connected = useReview((s) => s.connected)
   const threads = useReview((s) => s.threads)
-  const navBack = useReview((s) => s.navBack)
-  const navForward = useReview((s) => s.navForward)
-  const canBack = useReview((s) => s.navIndex > 0)
-  const canForward = useReview(
-    (s) => s.navIndex < s.navHistory.length - 1,
-  )
-
   const submitReview = useReview((s) => s.submitReview)
   const toggleComments = useReview((s) => s.toggleComments)
   const setSearchOpen = useReview((s) => s.setSearchOpen)
@@ -138,8 +132,14 @@ export function TopBar() {
 
   const select_classes = `${field} py-0.5`
 
+  // the overview's and settings' bar, on the review: the same surface, the same
+  // rhythm and the same buttons, so moving between the three pages does not
+  // feel like moving between three applications. The one division under the
+  // chrome is the tab strip's, below this.
   return (
-    <header className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 border-b border-edge bg-panel px-3 py-1.5 text-xs">
+    <header
+      className={`flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-3 py-2 text-xs ${title_bar}`}
+    >
       <Link
         to="/"
         className="flex items-center gap-2"
@@ -152,23 +152,6 @@ export function TopBar() {
         className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-faint'}`}
         title={connected ? 'live updates on' : 'not connected'}
       />
-
-      <button
-        className={`${icon_button} px-1.5`}
-        title="back ( [ )"
-        disabled={!canBack}
-        onClick={() => void navBack()}
-      >
-        ‹
-      </button>
-      <button
-        className={`${icon_button} px-1.5`}
-        title="forward ( ] )"
-        disabled={!canForward}
-        onClick={() => void navForward()}
-      >
-        ›
-      </button>
 
       <span
         className="max-w-40 truncate font-medium text-ink"
@@ -236,10 +219,11 @@ export function TopBar() {
 
       <span className="grow" />
       <button
-        className={`shrink-0 ${btn()}`}
+        className={`shrink-0 inline-flex items-center gap-1.5 ${btn()}`}
         title="search all repos (⌘F / ⌘⇧F)"
         onClick={() => setSearchOpen(true)}
       >
+        <Search />
         Search
       </button>
       <button
@@ -258,10 +242,11 @@ export function TopBar() {
       </button>
       {pending_count > 0 && (
         <button
-          className={`shrink-0 ${btn('secondary', 'px-2.5')}`}
+          className={`shrink-0 inline-flex items-center gap-1.5 ${btn('secondary', 'px-2.5')}`}
           title="send every draft note so agents can see them"
           onClick={() => void submitReview()}
         >
+          <Send />
           Submit review ({pending_count})
         </button>
       )}
@@ -278,11 +263,12 @@ export function TopBar() {
       </button>
       <ThemeToggle />
       <Link
-        className={`shrink-0 ${btn()}`}
+        className={`shrink-0 ${icon_button}`}
         title="settings"
+        aria-label="settings"
         to={formatRoute({ kind: 'settings', section: 'identity' })}
       >
-        settings
+        <Sliders />
       </Link>
     </header>
   )

@@ -6,7 +6,7 @@ import type { CommitBetween } from '../api'
 import { languageFor } from '../languages'
 import { useReview, wrapFor } from '../store'
 import { Loading, Skeleton, SkeletonCode } from './Skeleton'
-import { btn } from '../ui'
+import { badge, btn } from '../ui'
 
 interface Step {
   /** the commit this column arrives at */
@@ -228,7 +228,7 @@ function FileTimeline({
     <section ref={containerRef} className="border-b border-edge">
       <div className="sticky top-0 z-20 flex items-center gap-3 border-y border-edge bg-panel px-3 py-1.5 text-xs">
         <span className="truncate font-mono text-ink">{file.path}</span>
-        <span className="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-soft">
+        <span className={`shrink-0 bg-overlay text-soft ${badge}`}>
           {file.shas.length} of {shas.length} commit
           {shas.length === 1 ? '' : 's'}
         </span>

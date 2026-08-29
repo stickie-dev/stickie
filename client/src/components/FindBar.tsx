@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { fileCount } from '../find'
 import { useReview } from '../store'
+import { ChevronDown, ChevronUp, Close } from '../icons'
 import { btn, field, icon_button } from '../ui'
 
 /**
@@ -82,25 +83,28 @@ export function FindBar() {
       <button
         className={icon_button}
         title="previous match (⇧↵)"
+        aria-label="previous match"
         disabled={matches.length === 0}
         onClick={() => void step(-1)}
       >
-        ↑
+        <ChevronUp />
       </button>
       <button
         className={icon_button}
         title="next match (↵)"
+        aria-label="next match"
         disabled={matches.length === 0}
         onClick={() => void step(1)}
       >
-        ↓
+        <ChevronDown />
       </button>
       <button
         className={icon_button}
         title="close (esc)"
+        aria-label="close find"
         onClick={() => openFind(false)}
       >
-        ✕
+        <Close />
       </button>
     </div>
   )

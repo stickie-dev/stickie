@@ -14,7 +14,19 @@ import { TimeAgo } from './TimeAgo'
 import { useReview } from '../store'
 import { Loading, Skeleton, SkeletonRows } from './Skeleton'
 import { ask } from '../confirm'
-import { badge, btn, card, enter, field, page, row, th } from '../ui'
+import { Refresh, Sliders } from '../icons'
+import {
+  badge,
+  btn,
+  card,
+  enter,
+  field,
+  icon_button,
+  page,
+  row,
+  th,
+  title_bar,
+} from '../ui'
 
 /**
  * The landing page: every review across every registered repository, and what
@@ -532,22 +544,28 @@ export function OverviewPage() {
         a table pinned to the left edge leaves the reader's eyes travelling
         across empty space to reach the numbers on the right.
       */}
-      <header className="sticky top-0 z-10 bg-surface py-2.5 text-xs">
+      <header className={`sticky top-0 z-10 py-2.5 text-xs ${title_bar}`}>
         <div className={`flex items-center gap-2.5 ${page}`}>
         <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
         <span className="font-semibold tracking-tight text-ink">stickie</span>
         <span className="text-faint">overview</span>
         <span className="grow" />
-        <button className={btn()} onClick={() => void load()}>
-          reload
+        <button
+          className={icon_button}
+          title="reload"
+          aria-label="reload"
+          onClick={() => void load()}
+        >
+          <Refresh />
         </button>
         <ThemeToggle />
         <Link
-          className={btn()}
+          className={icon_button}
           to={formatRoute({ kind: 'settings', section: 'identity' })}
           title="settings"
+          aria-label="settings"
         >
-          settings
+          <Sliders />
         </Link>
         </div>
       </header>

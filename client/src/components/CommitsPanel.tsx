@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useReview } from '../store'
+import { eyebrow, motion } from '../ui'
 
 /**
  * Commits between base and source for the active repo. A click opens that
@@ -59,21 +60,21 @@ export function CommitsPanel() {
   return (
     <div className="border-t border-edge text-xs">
       <button
-        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-overlay"
+        className={`flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-overlay ${motion}`}
         onClick={() => setExpanded(!expanded)}
       >
         <span className="w-2 text-faint">{expanded ? '▾' : '▸'}</span>
         <span className="font-semibold text-soft">Commits</span>
         <span className="text-faint">{commits.length}</span>
         <span className="grow" />
-        <span className="text-[10px] text-faint">click · ⌘ · shift</span>
+        <span className={eyebrow}>click · ⌘ · shift</span>
       </button>
       {expanded && (
         <div className="max-h-56 overflow-y-auto pb-1">
           {commits.map((commit, index) => (
             <button
               key={commit.sha}
-              className={`flex w-full items-center gap-2 px-3 py-1 text-left font-mono hover:bg-overlay ${selected.has(commit.sha) ? 'bg-accent/10 text-ink' : 'text-soft'}`}
+              className={`flex w-full items-center gap-2 px-3 py-1 text-left font-mono hover:bg-overlay ${motion} ${selected.has(commit.sha) ? 'bg-accent-soft text-accent' : 'text-soft'}`}
               title={`${commit.subject}\nclick: this commit · ⌘+click: add it · shift+click: add the span`}
               onClick={(e) => pick(index, e)}
             >

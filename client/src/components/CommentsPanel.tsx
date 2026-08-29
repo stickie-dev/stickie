@@ -5,7 +5,8 @@ import { SubmitSplit } from './SubmitSplit'
 import { postsComment } from '../keys'
 import { orderedThreadIds, useReview } from '../store'
 import { ThreadCard } from './ThreadCard'
-import { btn, field, field_flush } from '../ui'
+import { Close } from '../icons'
+import { btn, field, field_flush, icon_button } from '../ui'
 
 /** A composer for notes that carry no code anchor. */
 function NoteComposer({ onDone }: { onDone: () => void }) {
@@ -145,11 +146,12 @@ export function CommentsPanel() {
         <h2 className="text-sm font-semibold text-ink">Comments</h2>
         <span className="grow" />
         <button
-          className={`text-xs ${btn('text', 'px-1.5 py-0.5')}`}
+          className={icon_button}
           title="close the panel"
+          aria-label="close the panel"
           onClick={toggleComments}
         >
-          ✕
+          <Close />
         </button>
       </div>
       <div className="flex items-center gap-1 border-b border-edge px-3 py-1.5 text-xs">
@@ -263,11 +265,11 @@ export function CommentsPanel() {
           <NoteComposer onDone={() => setComposing(false)} />
         ) : (
           <button
-            className={`w-full border border-dashed border-edge text-xs ${btn('text', 'py-1.5 hover:border-accent')}`}
+            className={`w-full text-xs ${btn('outline', 'py-1.5')}`}
             title="a note on the whole file or the whole review, with no line behind it"
             onClick={() => setComposing(true)}
           >
-            + note without a line
+            + note
           </button>
         )}
       </div>
