@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useReview } from '../store'
 import { ActivityPanel } from './ActivityPanel'
 import { CommentsPanel } from './CommentsPanel'
@@ -73,6 +73,35 @@ function DraftPill() {
 }
 
 /**
+ * Moves the base pin when it goes stale, if the setting says stickie should.
+ *
+ * The server reports staleness and never acts on it: a GET that quietly writes
+ * is worse than a policy living where the reviewer is. Tried once per stale
+ * base, so a re-pin that fails leaves the banner rather than retrying forever.
+ */
+function useAutoRepin(): void {
+  const session = useReview((s) => s.session)
+  const threads = useReview((s) => s.threads)
+  const mode = useReview((s) => s.repinMode)
+  const repin = useReview((s) => s.repin)
+  const tried = useRef('')
+
+  const stale = session?.baseStale === true
+  // notes still with an agent, or still being written, are the reason to wait
+  const busy = threads.some((t) => t.status !== 'resolved')
+
+  useEffect(() => {
+    // null means the setting has not been read yet, which is not permission
+    if (!stale || session === null || mode === null || mode === 'never') return
+    if (mode === 'when-clear' && busy) return
+    const attempt = `${String(session.id)}:${session.baseSha}`
+    if (tried.current === attempt) return
+    tried.current = attempt
+    void repin(true)
+  }, [stale, busy, mode, session, repin])
+}
+
+/**
  * The review surface: everything whose state is expensive to rebuild —
  * mounted Monaco editors, the flow's scroll position and section heights, the
  * tab set. It is mounted on the first visit to a review address and then
@@ -87,6 +116,7 @@ export function Workspace({ active }: { active: boolean }) {
   const setSearchOpen = useReview((s) => s.setSearchOpen)
   const commentsOpen = useReview((s) => s.commentsOpen)
   const activityOpen = useReview((s) => s.activityOpen)
+  useAutoRepin()
 
   // cmd+shift+F always opens workspace search; plain cmd+F only outside
   // editors and inputs so Monaco's in-file find keeps working

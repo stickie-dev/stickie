@@ -12,6 +12,9 @@ import type {
   Thread,
 } from '@stickie/shared'
 
+/** Who moves a review's base pin when it goes stale. */
+export type RepinMode = 'always' | 'when-clear' | 'never'
+
 export interface SettingsState {
   gitlabUrl: string | null
   gitlabTokenEnv: string | null
@@ -24,6 +27,7 @@ export interface SettingsState {
   wrapExtensions: string
   /** the command that points an MCP client at this server */
   mcpCommand: string
+  repinMode: RepinMode
   identity: {
     chosenName: string
     perRepo: {
@@ -89,8 +93,11 @@ export const api = {
   session: (sessionId: number) =>
     fetch(`/api/sessions/${sessionId}`).then(toJson<Session>),
 
-  repin: (sessionId: number) =>
-    post(`/api/sessions/${sessionId}/repin`, {}).then(toJson<Session>),
+  repin: (sessionId: number, automatic = false) =>
+    post(
+      `/api/sessions/${sessionId}/repin${automatic ? '?automatic=1' : ''}`,
+      {},
+    ).then(toJson<Session>),
 
   commits: (sessionId: number) =>
     fetch(`/api/sessions/${sessionId}/commits`).then(toJson<CommitBetween[]>),
@@ -184,6 +191,7 @@ export const api = {
     wrapExtensions?: string
     databaseUrl?: string
     actorName?: string
+    repinMode?: RepinMode
   }) =>
     fetch('/api/settings', {
       method: 'PUT',

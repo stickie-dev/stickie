@@ -82,8 +82,10 @@ the only output.
   own tab, and ⌘/shift+click adds commits as further columns, so one file
   reads left to right through the commits that touched it
 - **Session continuity** — when the base moves past the pinned commit (the
-  agent committed), one click re-pins in place: the review keeps every note,
-  resolved history included, and the commit it moved from stays in the record
+  agent committed), the pin follows it: the review keeps every note, resolved
+  history included, and both commits stay in the record. Automatic by default,
+  because an agent committing mid-review is the normal case; Settings → Reviews
+  can hold off while notes are open, or leave the pin to you entirely
 - **A record of what happened** — every note raised, answered, resolved or
   deleted, every file marked read, every submission, re-pin and export, with
   who and when, in an *Activity* panel beside the diff. It is append-only:
@@ -108,8 +110,9 @@ the only output.
 - **Reading comfort** — light and dark themes built for diffs, soft wrap by
   file type (settings) or per file (header button, right-click menu), and
   width rulers at 80/100/120 on anything unwrapped
-- **Settings** — a page at `/settings` with a section each for storage, GitLab
-  instance and token resolution, the instruction block *Copy prompt* appends,
+- **Settings** — a page at `/settings` with a section each for identity, review
+  behaviour (who moves a stale base pin), storage, GitLab instance and token
+  resolution, the instruction block *Copy prompt* appends,
   appearance (theme and which file types wrap), and agents (this server's API
   address, the MCP command with your own path filled in, and the tool table)
 

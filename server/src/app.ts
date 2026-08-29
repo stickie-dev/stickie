@@ -358,8 +358,22 @@ function mcpCommand(): string {
     : 'claude mcp add stickie -- npx -y stickie stickie-mcp'
 }
 
+/**
+ * When a review's base moves on, who moves the pin. Automatic by default: an
+ * agent committing mid-review is the normal case, and stopping to press a
+ * button for it is friction. `when-clear` is the cautious reading — moving the
+ * base can leave a note without its code, so hold off while notes are open.
+ */
+const repin_modes = ['always', 'when-clear', 'never'] as const
+const default_repin_mode = 'always'
+
 // extensions whose files open soft-wrapped; prose and data, not code
 const default_wrap_extensions = 'md,markdown,txt,rst,csv,log,json'
+
+/** An unknown or unset stored value falls back to the default. */
+function repinMode(stored: string | null): (typeof repin_modes)[number] {
+  return repin_modes.find((mode) => mode === stored) ?? default_repin_mode
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -638,7 +652,13 @@ export function createApp(
       hub.ensureWatch(
         body.source.kind === 'worktree' ? body.source.value : repo.path,
       )
-      return c.json(session, 200)
+      // an existing review comes back with the base it is pinned to, which may
+      // have been left behind since; saying so here is what lets a fresh load
+      // offer the re-pin rather than waiting for the next file change
+      return c.json(
+        { ...session, baseStale: await isBaseStale(session) },
+        200,
+      )
     },
   )
 
@@ -673,7 +693,10 @@ export function createApp(
         'Re-pins this review in place, so its notes and its history stay ' +
         'together; the base it moved from is kept in the activity record. ' +
         'Notes re-anchor against the new base on the next read.',
-      request: { params: id_param },
+      request: {
+        params: id_param,
+        query: z.object({ automatic: flag_query }),
+      },
       responses: {
         200: json_response(session_schema, 'The re-pinned session'),
         400: bad_request,
@@ -702,7 +725,13 @@ export function createApp(
         actorId: (await identity.human(session.repoPath)).actor.id,
         repoId: session.repoId,
         sessionId: session.id,
-        detail: { fromBaseSha: session.baseSha, toBaseSha: current },
+        detail: {
+          fromBaseSha: session.baseSha,
+          toBaseSha: current,
+          // a pin the reviewer moved and one the setting moved for them are
+          // different facts about who was watching
+          automatic: c.req.valid('query').automatic === true,
+        },
       })
       return c.json(
         { ...session, baseSha: current, baseStale: false },
@@ -1615,6 +1644,8 @@ export function createApp(
             wrapExtensions: z.string(),
             /** the command that points an MCP client at this server */
             mcpCommand: z.string(),
+            /** who moves a review's base pin when it goes stale */
+            repinMode: z.enum(repin_modes),
             identity: z.object({
               /** '' when nothing was set by hand and git config decides */
               chosenName: z.string(),
@@ -1670,6 +1701,7 @@ export function createApp(
             (await store.getSetting('wrap_extensions')) ??
             default_wrap_extensions,
           mcpCommand: mcpCommand(),
+          repinMode: repinMode(await store.getSetting('repin_mode')),
           identity: {
             chosenName: (await store.getSetting('actor_name')) ?? '',
             perRepo: await Promise.all(
@@ -1714,6 +1746,7 @@ export function createApp(
             databaseUrl: z.string().optional(),
             /** '' falls back to git config */
             actorName: z.string().max(64).optional(),
+            repinMode: z.enum(repin_modes).optional(),
           }),
         ),
       },
@@ -1741,6 +1774,9 @@ export function createApp(
       }
       if (body.wrapExtensions !== undefined) {
         await store.setSetting('wrap_extensions', body.wrapExtensions.trim())
+      }
+      if (body.repinMode !== undefined) {
+        await store.setSetting('repin_mode', body.repinMode)
       }
       if (body.actorName !== undefined) {
         await store.setSetting('actor_name', body.actorName.trim())

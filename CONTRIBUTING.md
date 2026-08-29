@@ -80,6 +80,13 @@ is a one-off re-key rather than a runtime path, and it writes a
 Looking at one commit against its parent is a *view*, not a review: the commits
 list opens it in its own tab and creates nothing.
 
+When a base goes stale the server only *reports* it — `baseStale`, from both
+`GET /api/sessions/:id` and the get-or-create `POST`. Acting on it is the
+client's, under the `repin_mode` setting, because a GET that quietly writes is
+worse than a policy living where the reviewer is. Anything in the client that
+decides whether to act on a setting must treat "not read yet" as its own state:
+a default that acts is a default that acts before the stored answer arrives.
+
 ## The record
 
 `activity` is append-only by convention: nothing in `Store` updates or deletes

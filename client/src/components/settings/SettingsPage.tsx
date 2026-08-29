@@ -6,11 +6,13 @@ import { AppearanceSection } from './AppearanceSection'
 import { GitLabSection } from './GitLabSection'
 import { IdentitySection } from './IdentitySection'
 import { PromptSection } from './PromptSection'
+import { ReviewsSection } from './ReviewsSection'
 import { StorageSection } from './StorageSection'
 import { useSettings } from './useSettings'
 
 const titles: Record<SettingsSection, string> = {
   identity: 'Identity',
+  reviews: 'Reviews',
   storage: 'Storage',
   gitlab: 'GitLab',
   prompt: 'Copy prompt',
@@ -23,6 +25,7 @@ const sections: Record<
   (access: ReturnType<typeof useSettings>) => React.ReactElement
 > = {
   identity: (access) => <IdentitySection {...access} />,
+  reviews: (access) => <ReviewsSection {...access} />,
   storage: (access) => <StorageSection {...access} />,
   gitlab: (access) => <GitLabSection {...access} />,
   prompt: (access) => <PromptSection {...access} />,

@@ -10,7 +10,7 @@ import type {
   Thread,
 } from '@stickie/shared'
 import { api } from './api'
-import type { CommitBetween, NavHit } from './api'
+import type { CommitBetween, NavHit, RepinMode } from './api'
 import { cachedFile, prefetchFile } from './fileCache'
 import type { TabRef } from './routes'
 import {
@@ -207,7 +207,7 @@ interface ReviewState {
   updateReplyDraft: (threadId: number, body: string) => void
   cancelDraft: (id: number) => void
   submitDraft: (id: number) => Promise<void>
-  repin: () => Promise<void>
+  repin: (automatic?: boolean) => Promise<void>
   importMr: (mr: string) => Promise<void>
   submitReview: () => Promise<void>
   postThread: (threadId: number) => Promise<void>
@@ -231,6 +231,13 @@ interface ReviewState {
   /** comma-separated extensions that open soft-wrapped, from settings */
   wrapExtensions: string
   setWrapExtensions: (extensions: string) => void
+  /**
+   * Who moves a review's base pin when it goes stale. Null until the settings
+   * have been read: this one decides whether to act, so it must not carry a
+   * default that acts before the stored answer has arrived.
+   */
+  repinMode: RepinMode | null
+  setRepinMode: (mode: RepinMode) => void
   /** per-file wrap decisions taken from the editor's context menu */
   wrapOverrides: Record<string, boolean>
   toggleWrap: (path: string) => void
@@ -565,6 +572,7 @@ export const useReview = create<ReviewState>((set, get) => {
     contentEpoch: 0,
     revealDir: null,
     wrapExtensions: default_wrap_extensions,
+    repinMode: null,
     wrapOverrides: {},
     repoSessions: {},
     perRepo: {},
@@ -653,6 +661,7 @@ export const useReview = create<ReviewState>((set, get) => {
 
     setSearchOpen: (open) => set({ searchOpen: open }),
     setWrapExtensions: (extensions) => set({ wrapExtensions: extensions }),
+    setRepinMode: (mode) => set({ repinMode: mode }),
     setReviewActive: (active) => set({ reviewActive: active }),
 
     navBack: async () => {
@@ -679,7 +688,12 @@ export const useReview = create<ReviewState>((set, get) => {
       try {
         void api
           .settings()
-          .then((settings) => set({ wrapExtensions: settings.wrapExtensions }))
+          .then((settings) =>
+            set({
+              wrapExtensions: settings.wrapExtensions,
+              repinMode: settings.repinMode,
+            }),
+          )
           .catch(() => undefined)
         const repos = await api.repos()
         set({ repos })
@@ -1313,18 +1327,29 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
 
-    repin: async () => {
-      const { session, selectedPath } = get()
+    repin: async (automatic = false) => {
+      const { session, selectedPath, threads: before } = get()
       if (session === null) return
       try {
-        const next = await api.repin(session.id)
+        const next = await api.repin(session.id, automatic)
         const [files, threads, viewed] = await Promise.all([
           api.diff(next.id),
           api.threads(next.id, true),
           api.viewed(next.id),
         ])
         set({ session: next, files, threads, viewed: new Set(viewed) })
-        get().pushToast('info', `base re-pinned to ${next.baseSha.slice(0, 8)}`)
+        // moving the base can leave a note without the code it was written
+        // against, and a pin that moved on its own must not do that quietly
+        const detached = (list: Thread[]) =>
+          list.filter((t) => t.status === 'detached').length
+        const lost = detached(threads) - detached(before)
+        const sha = next.baseSha.slice(0, 8)
+        get().pushToast(
+          lost > 0 ? 'error' : 'info',
+          lost > 0
+            ? `base ${automatic ? 'moved to' : 're-pinned to'} ${sha} — ${String(lost)} ${lost === 1 ? 'note' : 'notes'} lost its anchor`
+            : `base ${automatic ? 'moved to' : 're-pinned to'} ${sha}`,
+        )
         if (selectedPath !== null) {
           await get().openFile(selectedPath)
         }

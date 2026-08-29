@@ -309,6 +309,44 @@ export function ContinuousDiff({
     setFlowScroller(scrollerRef.current)
     return () => setFlowScroller(null)
   }, [])
+
+  /**
+   * A click never moves this scroller.
+   *
+   * The browser scrolls a newly focused element into view, and clicking into an
+   * editor focuses a hidden element Monaco keeps for keyboard input — which is
+   * not where the click landed. Deep inside a file taller than the viewport
+   * that threw the reader back to the file's top: measured 3000 to 0 with no
+   * scroll event and no height change, the offset already gone by the time
+   * `focusin` fired.
+   *
+   * So the offset is put back in the same task the focus moved in, before any
+   * paint, and only for a focus the click itself caused — a jump to a change
+   * focuses an editor too, and that one is allowed to scroll.
+   */
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (el === null) return
+    let clicked = false
+    let offset = 0
+    const remember = () => {
+      clicked = true
+      offset = el.scrollTop
+      // focus from a click arrives in this task; anything later is not a click
+      setTimeout(() => {
+        clicked = false
+      }, 0)
+    }
+    const restore = () => {
+      if (clicked && el.scrollTop !== offset) el.scrollTop = offset
+    }
+    el.addEventListener('mousedown', remember, true)
+    el.addEventListener('focusin', restore, true)
+    return () => {
+      el.removeEventListener('mousedown', remember, true)
+      el.removeEventListener('focusin', restore, true)
+    }
+  }, [])
   useEffect(() => {
     const el = scrollerRef.current
     if (el === null) return

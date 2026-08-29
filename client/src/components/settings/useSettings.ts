@@ -19,6 +19,7 @@ export interface SettingsAccess {
 export function useSettings(): SettingsAccess {
   const pushToast = useReview((s) => s.pushToast)
   const setWrapExtensions = useReview((s) => s.setWrapExtensions)
+  const setRepinMode = useReview((s) => s.setRepinMode)
   const [state, setState] = useState<SettingsState | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -44,6 +45,7 @@ export function useSettings(): SettingsAccess {
         const fresh = await api.settings()
         setState(fresh)
         setWrapExtensions(fresh.wrapExtensions)
+        setRepinMode(fresh.repinMode)
         pushToast(
           'info',
           result.restartRequired
@@ -59,7 +61,7 @@ export function useSettings(): SettingsAccess {
         setSaving(false)
       }
     },
-    [pushToast, setWrapExtensions],
+    [pushToast, setWrapExtensions, setRepinMode],
   )
 
   return { state, save, saving }

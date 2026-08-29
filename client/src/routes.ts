@@ -13,6 +13,7 @@ import type { Side } from '@stickie/shared'
 
 export const settings_sections = [
   'identity',
+  'reviews',
   'storage',
   'gitlab',
   'prompt',
