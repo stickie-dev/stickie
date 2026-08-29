@@ -25,6 +25,8 @@ import type {
 } from './activity.js'
 import { buildPrompt, default_prompt_instructions } from './export.js'
 import { Identity } from './identity.js'
+import type { Fetcher } from './mcp.js'
+import { handleMessage } from './mcp.js'
 import {
   changedFiles,
   commitFiles,
@@ -192,6 +194,7 @@ const thread_schema = z
     startLine: z.number().int(),
     endLine: z.number().int(),
     snippet: z.string(),
+    blobSha: z.string().nullable(),
     status: z.enum(['open', 'resolved', 'detached']),
     pending: z.boolean(),
     origin: z.string().nullable(),
@@ -364,6 +367,9 @@ function mcpCommand(): string {
  * button for it is friction. `when-clear` is the cautious reading — moving the
  * base can leave a note without its code, so hold off while notes are open.
  */
+/** Reported to MCP clients as the server's own version. */
+const mcp_version = '0.1.0'
+
 const repin_modes = ['always', 'when-clear', 'never'] as const
 const default_repin_mode = 'always'
 
@@ -1629,6 +1635,52 @@ export function createApp(
         200,
       )
     },
+  )
+
+  /**
+   * MCP over HTTP, at /mcp — the same tools the stdio bridge exposes, without
+   * a bridge process. Clients that speak streamable HTTP point straight at a
+   * running stickie; `stickie-mcp` stays for the ones that only speak stdio.
+   *
+   * The calls the tools make are dispatched against this app rather than sent
+   * back over the loopback, so serving MCP costs no second request and works
+   * whatever host or port the server was given.
+   */
+  const localFetcher: Fetcher = async (call) => {
+    const response = await app.request(call.path, {
+      method: call.method,
+      ...(call.body === undefined
+        ? {}
+        : {
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(call.body),
+          }),
+    })
+    return {
+      ok: response.ok,
+      status: response.status,
+      body: await response.text(),
+    }
+  }
+
+  app.post('/mcp', async (c) => {
+    const answer = await handleMessage(
+      await c.req.text(),
+      localFetcher,
+      mcp_version,
+    )
+    // a notification carries no id and expects no answer
+    if (answer === null) return c.body(null, 202)
+    return c.body(answer, 200, { 'content-type': 'application/json' })
+  })
+
+  // the spec's other half is a server-initiated SSE stream; stickie has no
+  // unsolicited messages to send, and saying so is better than a dead socket
+  app.get('/mcp', (c) =>
+    c.json(
+      { error: 'stickie serves MCP over POST only; it sends nothing unprompted' },
+      405,
+    ),
   )
 
   const gitlabSettings = async () => ({

@@ -641,6 +641,7 @@ export class Store {
       startLine: row.start_line,
       endLine: row.end_line,
       snippet: row.snippet,
+      blobSha: row.blob_sha,
       status: row.status as ThreadStatus,
       pending: toBool(row.pending),
       origin: row.origin,

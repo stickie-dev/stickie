@@ -123,6 +123,8 @@ export interface Thread {
   startLine: number
   endLine: number
   snippet: string
+  /** the git blob the snippet was read from; null for an unanchored note */
+  blobSha: string | null
   status: ThreadStatus
   /** pending notes are drafts of a review batch, invisible to agents */
   pending: boolean

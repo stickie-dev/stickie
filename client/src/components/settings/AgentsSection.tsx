@@ -50,8 +50,14 @@ export function AgentsSection({ state }: SettingsAccess) {
           MCP
         </h3>
         <p className="text-xs text-faint">
-          The bridge speaks stdio JSON-RPC to a <em>running</em> stickie — it
-          starts nothing itself.
+          This server speaks MCP itself, so a client that speaks streamable HTTP
+          needs no bridge at all:
+        </p>
+        <Command text={`claude mcp add --transport http stickie ${origin}/mcp`} />
+        <p className="pt-1 text-xs text-faint">
+          For a client that only speaks stdio, <Mono>stickie-mcp</Mono> bridges to
+          the same tools against a <em>running</em> stickie — it starts nothing
+          itself.
         </p>
         <Command text={state?.mcpCommand ?? '…'} />
         <table className="mt-2 w-full text-xs">

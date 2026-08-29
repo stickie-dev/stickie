@@ -178,8 +178,12 @@ state, GitLab import).
 
 ## MCP
 
-`stickie-mcp` bridges stdio JSON-RPC to a running stickie server, exposing the
-agent routes as five tools:
+The running server speaks MCP itself, at **`POST /mcp`** — no bridge process,
+no second port. Point any client that speaks streamable HTTP at
+`http://localhost:4870/mcp`. (`GET /mcp` answers 405: stickie has no unsolicited
+messages to stream.)
+
+For clients that only speak stdio, `stickie-mcp` bridges to the same five tools:
 
 | Tool | Route | |
 | --- | --- | --- |
@@ -190,8 +194,9 @@ agent routes as five tools:
 | `resolve_note` | `POST /api/threads/:id/resolve` | writes |
 
 ```sh
-claude mcp add stickie -- node /path/to/stickie/bin/stickie-mcp.js
-claude mcp add stickie -- npx -y stickie stickie-mcp          # once published
+claude mcp add --transport http stickie http://localhost:4870/mcp
+claude mcp add stickie -- node /path/to/stickie/bin/stickie-mcp.js   # stdio instead
+claude mcp add stickie -- npx -y stickie stickie-mcp                 # once published
 ```
 
 Point it elsewhere with `--url http://host:port` or `STICKIE_URL`; it defaults

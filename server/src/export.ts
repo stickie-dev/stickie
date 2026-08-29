@@ -142,6 +142,14 @@ export async function buildPrompt(
     `Repo: ${session.repoPath} — reviewing ${describeSource(session)} ` +
       `against ${session.baseRef} (${session.baseSha.slice(0, 10)})`,
   )
+  if (threads.some((t) => t.startLine > 0 && t.blobSha !== null)) {
+    lines.push('')
+    lines.push(
+      'A heading\'s `@ blob <sha>` is git\'s hash of the file the code under ' +
+        'it was read from: `git hash-object <path>` still matching means that ' +
+        'file has not changed since the note was written.',
+    )
+  }
   lines.push('')
   for (const [index, thread] of threads.entries()) {
     const anchored = thread.startLine > 0
@@ -156,12 +164,21 @@ export async function buildPrompt(
         : `${thread.path} (whole file)`
       : `${thread.path}:${range}${side}`
     const state = thread.pending ? ' [not yet submitted]' : ''
-    lines.push(`## ${index + 1}. ${where} [thread ${thread.id}]${state}`)
+    // what the fence below actually came from, named in a way a reader can
+    // check. It is git's own hash of that content, but `hash-object` without
+    // `-w` never wrote the object, so it identifies the file rather than
+    // retrieving it — the claim below says exactly that and no more.
+    const blob =
+      anchored && thread.blobSha !== null
+        ? ` @ blob ${thread.blobSha.slice(0, 12)}`
+        : ''
+    lines.push(
+      `## ${index + 1}. ${where}${blob} [thread ${thread.id}]${state}`,
+    )
     lines.push('')
     if (anchored) {
       const snippet_lines = thread.snippet.split('\n')
       if (snippet_lines.length <= 40) {
-        lines.push('Code at capture time:')
         lines.push(...fenced(thread.snippet, fenceLanguage(thread.path)))
       } else {
         lines.push(

@@ -73,6 +73,7 @@ function thread(over: Partial<Thread>): Thread {
     startLine: 4,
     endLine: 4,
     snippet: 'x = 1',
+    blobSha: 'ab12cd34ef56ab78cd90',
     status: 'open',
     pending: false,
     origin: null,
@@ -126,5 +127,24 @@ describe('buildPrompt', () => {
       'reply at {api}/api/threads/<id>/reply',
     )
     expect(text).toContain('reply at http://localhost:4899/api/threads/<id>/reply')
+  })
+})
+
+describe('the heading of a note', () => {
+  it('names the blob the code came from, so it can be read back', async () => {
+    const text = await buildPrompt(session, [thread({})], 'http://x', noSource)
+    expect(text).toContain('app/main.py:L4 @ blob ab12cd34ef56 [thread 1]')
+  })
+
+  it('says nothing about a blob for a note with no code', async () => {
+    const whole_file = thread({ startLine: 0, endLine: 0, snippet: '' })
+    const text = await buildPrompt(session, [whole_file], 'http://x', noSource)
+    expect(text).toContain('app/main.py (whole file) [thread 1]')
+    expect(text).not.toContain('blob')
+  })
+
+  it('no longer claims a capture time it cannot substantiate', async () => {
+    const text = await buildPrompt(session, [thread({})], 'http://x', noSource)
+    expect(text).not.toContain('Code at capture time')
   })
 })
