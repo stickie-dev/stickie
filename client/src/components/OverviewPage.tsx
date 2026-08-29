@@ -207,7 +207,7 @@ function Comparing({ row }: { row: ReviewRow }) {
       <div className="truncate">
         <span className="font-mono text-ink">{source.name}</span>
         {source.subject !== null && (
-          <span className="ml-2 text-[11px] text-faint">{source.subject}</span>
+          <span className="ml-2 text-dense text-faint">{source.subject}</span>
         )}
       </div>
       <div className="truncate text-faint">
@@ -587,7 +587,7 @@ export function OverviewPage() {
           </Loading>
         ) : (
           <>
-            <p className="mb-1 text-[15px] leading-snug font-medium text-ink">
+            <p className="mb-1 text-lede leading-snug font-medium text-ink">
               {headline}
             </p>
             <p className="mb-6 text-xs text-faint">
@@ -600,11 +600,11 @@ export function OverviewPage() {
 
         {(listed.length > 0 || loading) && (
           <section className="mb-10">
-            <h2 className="mb-2 text-[13px] font-semibold text-ink">Reviews</h2>
+            <h2 className="mb-2 text-note font-semibold text-ink">Reviews</h2>
             <div className={`overflow-x-auto ${card}`}>
               <ReviewsTable reviews={listed} loading={loading} />
             </div>
-            <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-faint">
+            <p className="mt-2 max-w-3xl text-dense leading-relaxed text-faint">
               A row is one thing being reviewed — a repository&rsquo;s working
               tree, a branch, or a single commit — and its counts cover every
               base it has been pinned to, so re-pinning after the branch moves
@@ -630,7 +630,7 @@ export function OverviewPage() {
         )}
 
         <section className="mb-10">
-          <h2 className="mb-2 text-[13px] font-semibold text-ink">
+          <h2 className="mb-2 text-note font-semibold text-ink">
             Repositories
           </h2>
           <div className={`overflow-x-auto ${card}`}>
@@ -682,7 +682,7 @@ export function OverviewPage() {
                         </span>
                         {!on_default(repo) && (
                           <button
-                            className={`text-[11px] ${btn()}`}
+                            className={`text-dense ${btn()}`}
                             title="the working tree against the last commit — what is not committed yet, on its own"
                             onClick={(e) => {
                               e.stopPropagation()
@@ -756,7 +756,7 @@ export function OverviewPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-[13px] font-semibold text-ink">Activity</h2>
+          <h2 className="mb-2 text-note font-semibold text-ink">Activity</h2>
           <div className={`overflow-x-auto ${card}`}>
             <table className="w-full border-collapse text-xs">
               <thead>
@@ -805,7 +805,7 @@ export function OverviewPage() {
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-[11px] text-faint">
+          <p className="mt-2 text-dense text-faint">
             From the append-only record, across every repository, newest first.
           </p>
         </section>

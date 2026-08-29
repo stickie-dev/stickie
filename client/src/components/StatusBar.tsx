@@ -142,7 +142,7 @@ export function StatusBar() {
   }
 
   return (
-    <div className="relative flex shrink-0 items-center gap-1 border-t border-edge bg-panel px-3 py-1 text-[11px]">
+    <div className="relative flex shrink-0 items-center gap-1 border-t border-edge bg-panel px-3 py-1 text-dense">
       <button
         className={`shrink-0 ${btn()}`}
         title="make this repository active"

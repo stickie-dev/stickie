@@ -287,13 +287,13 @@ function RepoNode({ repoId }: { repoId: number }) {
             {repo.name}
           </span>
           <span
-            className="min-w-0 truncate text-[10px] text-faint"
+            className="min-w-0 truncate text-meta text-faint"
             title={`on ${repo.branch}`}
           >
             {repo.branch}
           </span>
         </button>
-        <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[10px]">
+        <span className="ml-auto flex shrink-0 items-center gap-1.5 text-meta">
           {(entry?.openCount ?? 0) > 0 && (
             <span
               className="rounded-full bg-amber-500/20 px-1.5 text-amber-700 dark:text-amber-300"
@@ -372,7 +372,7 @@ export function FileTree() {
   return (
     <div className="flex h-full flex-col">
       {/* 11px: a path is dense detail, and the tree is twenty of them */}
-      <div className="min-h-0 grow overflow-y-auto py-1 text-[11px]">
+      <div className="min-h-0 grow overflow-y-auto py-1 text-dense">
         {repos.map((repo) => (
           <RepoNode key={repo.id} repoId={repo.id} />
         ))}

@@ -273,6 +273,7 @@ export function App() {
   const setConnected = useReview((s) => s.setConnected)
   const setReviewActive = useReview((s) => s.setReviewActive)
   const theme = useReview((s) => s.theme)
+  const fontScale = useReview((s) => s.fontScale)
 
   // a fresh object every render would re-run the sync effect every render
   const page = useMemo(
@@ -305,6 +306,10 @@ export function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
+
+  useEffect(() => {
+    document.documentElement.dataset.font = fontScale
+  }, [fontScale])
 
   // the address is part of the starting state: `init` gets what it asked for
   // so restoring tabs does not settle somewhere else first

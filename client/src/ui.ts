@@ -83,18 +83,18 @@ export const field_flush = `rounded-md border-0 bg-overlay px-2 py-1 text-ink ou
 
 /** A badge: a state, not an action. Pill-shaped so it cannot read as a button. */
 export const badge =
-  'rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase'
+  'rounded-full px-2 py-0.5 text-meta font-medium tracking-wide uppercase'
 
 /** A column heading: quiet, small, and out of the way of the data. */
 export const th =
-  'px-2 py-1.5 text-[10px] font-medium tracking-[0.08em] text-faint uppercase'
+  'px-2 py-1.5 text-meta font-medium tracking-[0.08em] text-faint uppercase'
 
 /** A row that can be opened. The tint on hover is the only affordance it needs. */
 export const row = `border-b border-edge/50 last:border-b-0 hover:bg-overlay/60 ${motion}`
 
 /** A section label above a group. */
 export const eyebrow =
-  'text-[10px] font-medium tracking-[0.08em] text-faint uppercase'
+  'text-meta font-medium tracking-[0.08em] text-faint uppercase'
 
 /**
  * The frame every full page is laid out in: fluid, so a laptop has no gutters

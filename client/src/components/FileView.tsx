@@ -916,7 +916,7 @@ function DefinitionPicker({
               onDone()
             }}
           >
-            <span className="shrink-0 rounded bg-overlay px-1 text-[10px] text-faint">
+            <span className="shrink-0 rounded bg-overlay px-1 text-meta text-faint">
               {repoLabel(hit)}
             </span>
             <span className="shrink-0 text-soft">

@@ -1,12 +1,33 @@
 import { useEffect, useState } from 'react'
+import type { FontScale } from '../../store'
 import { useReview } from '../../store'
 import { Field, SaveRow, Section, field_classes } from './parts'
 import type { SettingsAccess } from './useSettings'
 import { btn } from '../../ui'
 
+/**
+ * Comfort is what stickie is drawn at; compact takes a pixel off each of those
+ * numbers and leaves everything else alone. The two are listed with the sizes
+ * they mean, because "compact" on its own is a promise about nothing.
+ */
+const font_choices: { value: FontScale; label: string; why: string }[] = [
+  {
+    value: 'comfort',
+    label: 'Comfort',
+    why: '12px for what is read, 11 for the tree and the status bar, 10 for badges',
+  },
+  {
+    value: 'compact',
+    label: 'Compact',
+    why: 'one pixel off each of those, for a laptop screen — same spacing, same icons, more rows',
+  },
+]
+
 export function AppearanceSection({ state, save, saving }: SettingsAccess) {
   const theme = useReview((s) => s.theme)
   const toggleTheme = useReview((s) => s.toggleTheme)
+  const fontScale = useReview((s) => s.fontScale)
+  const setFontScale = useReview((s) => s.setFontScale)
   const [wrapExtensions, setWrapExtensions] = useState('')
   useEffect(() => {
     if (state !== null) setWrapExtensions(state.wrapExtensions)
@@ -24,6 +45,34 @@ export function AppearanceSection({ state, save, saving }: SettingsAccess) {
         >
           {theme === 'dark' ? 'switch to light' : 'switch to dark'}
         </button>
+      </Field>
+
+      {/* takes effect as it is chosen, like the theme: a size you cannot see
+          until you save is a size you cannot choose */}
+      <Field
+        label="Font"
+        hint="The code in a diff keeps its own size, which follows the width of the window."
+      >
+        <div className="space-y-2">
+          {font_choices.map((choice) => (
+            <label
+              key={choice.value}
+              className="flex cursor-pointer gap-2 text-xs"
+            >
+              <input
+                type="radio"
+                name="font-scale"
+                className="mt-0.5 shrink-0"
+                checked={fontScale === choice.value}
+                onChange={() => setFontScale(choice.value)}
+              />
+              <span>
+                <span className="text-ink">{choice.label}</span>
+                <span className="block text-faint">{choice.why}</span>
+              </span>
+            </label>
+          ))}
+        </div>
       </Field>
 
       <Field

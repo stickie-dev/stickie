@@ -29,6 +29,21 @@
   --color-accent-strong: var(--accent-strong);
   --color-accent-soft: var(--accent-soft);
 
+  /*
+   * The type scale, in px because this is what the look is written in — 10 for
+   * a badge, 11 where density is the point, 12 for what is read, 13 for a note
+   * and 14 for a heading. Each is that number plus `--font-shift`, which is
+   * how Settings → Appearance makes the whole interface one pixel smaller
+   * without a component knowing that happened. Spacing, radii and icons do not
+   * move: compact is a smaller face on the same frame, not a smaller frame.
+   */
+  --text-meta: calc(10px + var(--font-shift));
+  --text-dense: calc(11px + var(--font-shift));
+  --text-xs: calc(12px + var(--font-shift));
+  --text-note: calc(13px + var(--font-shift));
+  --text-sm: calc(14px + var(--font-shift));
+  --text-lede: calc(15px + var(--font-shift));
+
   /* the standard scale, moved up: every existing rounded-* gets the new look */
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -51,6 +66,8 @@
    than the OS one, which the .dark class alone does not reach */
 :root {
   color-scheme: light;
+  /* comfort; `compact` below is the other answer, and the only other one */
+  --font-shift: 0px;
   --surface: #f7f7f6;
   --panel: #ffffff;
   --overlay: #f0f0ef;
@@ -85,6 +102,17 @@
   --elevation-1: 0 1px 2px rgb(0 0 0 / 40%), inset 0 0 0 1px rgb(255 255 255 / 4%);
   --elevation-2: 0 8px 24px rgb(0 0 0 / 45%), inset 0 0 0 1px rgb(255 255 255 / 6%);
   --sheen: rgb(255 255 255 / 8%);
+}
+
+/*
+ * One pixel off every size in the scale. Not a zoom: the padding, the radii and
+ * the icons stay where they are, so a compact screen fits more rows rather than
+ * the same rows drawn smaller.
+ */
+/* an attribute rather than a class: `compact` is a common enough name that a
+   vendored stylesheet could own it, and monaco already has one */
+:root[data-font='compact'] {
+  --font-shift: -1px;
 }
 
 /* monaco view zones default to pointer-events none; comment widgets need input */

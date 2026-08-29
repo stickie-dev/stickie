@@ -48,7 +48,7 @@ export function ConfirmDialog() {
         className={`w-[26rem] rounded-lg bg-panel p-4 shadow-lifted ${enter}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-[13px] font-semibold text-ink">{request.title}</p>
+        <p className="text-note font-semibold text-ink">{request.title}</p>
         {request.detail !== undefined && (
           <p className="mt-1.5 text-xs leading-relaxed text-soft">
             {request.detail}

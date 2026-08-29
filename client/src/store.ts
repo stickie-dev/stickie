@@ -71,6 +71,17 @@ let draft_seq = 0
 
 export type Theme = 'dark' | 'light'
 
+/**
+ * How big the interface is drawn. `compact` is one pixel off every size in the
+ * type scale and nothing else — the reader who wants more rows on a laptop is
+ * not asking for smaller buttons.
+ *
+ * It lives here rather than in the server's settings for the reason the theme
+ * does: it is about this screen, it has to apply the moment it is chosen, and
+ * a round trip to say so would be a round trip to see it.
+ */
+export type FontScale = 'comfort' | 'compact'
+
 export interface Toast {
   id: number
   kind: 'error' | 'info'
@@ -78,6 +89,10 @@ export interface Toast {
 }
 
 let toast_seq = 0
+
+function initialFontScale(): FontScale {
+  return localStorage.getItem('stickie-font') === 'compact' ? 'compact' : 'comfort'
+}
 
 function initialTheme(): Theme {
   const stored = localStorage.getItem('stickie-theme')
@@ -121,6 +136,7 @@ interface ReviewState {
   connected: boolean
   promptCopied: boolean
   theme: Theme
+  fontScale: FontScale
   /**
    * Where the next editor to mount should go. `column` and `length` come from
    * a find match, so the match itself is selected rather than the line being
@@ -231,6 +247,7 @@ interface ReviewState {
   setReviewActive: (active: boolean) => void
   clearReveal: () => void
   toggleTheme: () => void
+  setFontScale: (scale: FontScale) => void
   /**
    * `start` is what the address asked for, so restoring tabs settles there
    * instead of fighting the router for it.
@@ -799,6 +816,7 @@ export const useReview = create<ReviewState>((set, get) => {
     connected: false,
     promptCopied: false,
     theme: initialTheme(),
+    fontScale: initialFontScale(),
     reveal: null,
     noteHighlight: null,
     splitMenuFor: null,
@@ -952,6 +970,11 @@ export const useReview = create<ReviewState>((set, get) => {
       const theme = get().theme === 'dark' ? 'light' : 'dark'
       localStorage.setItem('stickie-theme', theme)
       set({ theme })
+    },
+
+    setFontScale: (fontScale) => {
+      localStorage.setItem('stickie-font', fontScale)
+      set({ fontScale })
     },
 
     init: async (start) => {

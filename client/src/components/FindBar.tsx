@@ -69,11 +69,11 @@ export function FindBar() {
           }
         }}
       />
-      <span className="w-32 shrink-0 px-1 text-[11px] text-faint tabular-nums">
+      <span className="w-32 shrink-0 px-1 text-dense text-faint tabular-nums">
         {count}
       </span>
       <button
-        className={`text-[11px] ${caseSensitive ? 'text-accent' : ''} ${btn('outline')}`}
+        className={`text-dense ${caseSensitive ? 'text-accent' : ''} ${btn('outline')}`}
         title="match case"
         aria-pressed={caseSensitive}
         onClick={() => void setCase(!caseSensitive)}

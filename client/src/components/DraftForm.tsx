@@ -156,7 +156,7 @@ export function DraftForm({
 
   return (
     <div
-      className={`min-w-0 rounded-lg bg-panel p-2 text-[13px] shadow-lifted ${active ? 'ring-1 ring-accent' : ''}`}
+      className={`min-w-0 rounded-lg bg-panel p-2 text-note shadow-lifted ${active ? 'ring-1 ring-accent' : ''}`}
       onFocusCapture={() => setActiveDraft(draft.id)}
       onMouseDownCapture={() => setActiveDraft(draft.id)}
     >

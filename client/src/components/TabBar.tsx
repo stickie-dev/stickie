@@ -135,9 +135,9 @@ export function TabBar() {
           onClick={() => void activateTab(tab.id)}
         >
           {tab.kind === 'flow' ? (
-            <span className="shrink-0 text-[10px] text-faint">⇄</span>
+            <span className="shrink-0 text-meta text-faint">⇄</span>
           ) : tab.kind === 'commits' ? (
-            <span className="shrink-0 text-[10px] text-faint">◷</span>
+            <span className="shrink-0 text-meta text-faint">◷</span>
           ) : (
             icon !== null && (
               <img src={icon} alt="" className="h-3.5 w-3.5 shrink-0" />
@@ -218,7 +218,7 @@ export function TabBar() {
                   }}
                 >
                   <span className="truncate text-ink">{labelOf(tab)}</span>
-                  <span className="truncate font-mono text-[10px] text-faint">
+                  <span className="truncate font-mono text-meta text-faint">
                     {tab.kind === 'file'
                       ? (tab.path ?? '')
                       : repoName(tab.repoId)}

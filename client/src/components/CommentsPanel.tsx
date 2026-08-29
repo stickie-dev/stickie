@@ -31,7 +31,7 @@ function NoteComposer({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="rounded-lg bg-panel p-2 text-[13px] ring-1 ring-accent">
+    <div className="rounded-lg bg-panel p-2 text-note ring-1 ring-accent">
       <div className="mb-1 flex items-center gap-2 text-xs text-soft">
         <span>note on</span>
         {/*

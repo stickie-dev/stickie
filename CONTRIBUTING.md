@@ -183,6 +183,15 @@ detail, 12–14px for what is read, weight 400–500 rather than bold. The
 references this look came from are 16px marketing pages; a surface showing
 twenty files is not one, and lines of code per screen is the job.
 
+The scale has names — `text-meta` (10), `text-dense` (11), `text-xs` (12),
+`text-note` (13), `text-sm` (14), `text-lede` (15) — and each is that number
+plus `--font-shift`, which Settings → Appearance sets to −1px for *Compact*.
+So no component writes `text-[11px]` any more, and one radio button makes the
+whole interface a pixel smaller. Only the type moves: spacing, radii and icons
+stay, because a reader asking for more rows on a laptop is not asking for
+smaller buttons. The diff's own font is not in the scale — Monaco picks it
+from the width of the window.
+
 **One frame per page.** `page` is fluid with a ceiling: no gutters on a laptop,
 and a nine-column table does not stretch across a 34-inch screen. Prose keeps
 its own measure inside it (`Section` is 2xl). Both full pages use it for their

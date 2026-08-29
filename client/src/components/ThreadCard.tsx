@@ -114,7 +114,7 @@ export function ThreadCard({
 
   return (
     <div
-      className={`min-w-0 rounded-lg bg-panel text-[13px] shadow-lifted ${
+      className={`min-w-0 rounded-lg bg-panel text-note shadow-lifted ${
         linked ? 'ring-1 ring-accent' : ''
       }`}
     >
