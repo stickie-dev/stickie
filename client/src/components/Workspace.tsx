@@ -159,7 +159,14 @@ export function Workspace({ active }: { active: boolean }) {
             <div className="min-h-0 grow">
               <FileView />
             </div>
-            <FindBar />
+            {/*
+              Gated like the others: the find bar is `absolute z-40` and the
+              page layer drawn over the workspace is z-30, so an open find bar
+              stayed on top of settings — visible, and unclickable, because
+              `inert` had taken the whole covered tree out. Its state lives in
+              the store, so it comes back exactly as it was.
+            */}
+            {active && <FindBar />}
           </main>
           <SidePane />
           {commentsOpen && <CommentsPanel />}

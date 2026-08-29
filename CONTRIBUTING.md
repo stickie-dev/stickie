@@ -225,6 +225,14 @@ that centres its content shifts by half a scrollbar the moment it overflows.
 So: `scrollbar-gutter: stable` (`.stickie-scroll`) on the one scroller, the header
 sticky inside it.
 
+**Anything the workspace floats belongs behind `active`.** The review stays
+mounted under the pages drawn over it, and is `inert` while covered. A
+floating child that is not gated on `active` — the find bar, the search
+overlay, the draft pill — keeps painting over the page on top of it and cannot
+be clicked, because `inert` has taken it out of the tree it is drawn above:
+visible and dead, which is the worst of the two. Their state lives in the
+store, so gating the mount costs nothing.
+
 **Waiting looks like the thing that is coming.** `Skeleton.tsx` holds the
 silhouettes and `Loading` announces "loading <what>" once for a screen reader.
 A silhouette stands where its content will stand and is roughly its size.
