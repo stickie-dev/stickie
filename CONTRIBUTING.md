@@ -136,8 +136,78 @@ half of one. Anything that opens a descriptor per file in a repository is
 therefore a performance decision about every git call stickie makes, not a local
 one.
 
+## Look and feel
+
+`client/src/ui.ts` is the language: `card`, `sunken`, `field`, `field_flush`,
+`badge`, `th`, `row`, `eyebrow`, `page`, `motion`, `enter`, and `btn()`. No
+component spells its own look. Fifteen of them used to, which is how one panel
+came to have 4px corners and hairlines while the next had 6px and neither, and
+why changing the language meant finding all fifteen.
+
+**Buttons are one of four kinds and nothing else.** `btn('primary')` is the
+accent, `secondary` is emerald and belongs to sending a review, `outline` needs
+an edge to be found in a crowded row, `text` is the default. Disabled is the
+same colour lighter — never a grey ghost of a different shape, and never a
+`not-allowed` cursor: the colour says the button is not ready, a crossed-out
+pointer says the reader is doing something wrong, and usually they have simply
+not typed anything yet. A button is a radius step tighter than the surface
+holding it; a badge keeps the pill, which cannot be mistaken for something to
+press.
+
+**Depth comes from surface and shadow, not outlines.** `edge` survives where a
+real division belongs — a table header, a pane split — and not as a box round
+every control. A fill on hover says "pressable" at the moment that matters.
+
+**Density is the point where code is the content.** 11px for code and dense
+detail, 12–14px for what is read, weight 400–500 rather than bold. The
+references this look came from are 16px marketing pages; a surface showing
+twenty files is not one, and lines of code per screen is the job.
+
+**One frame per page.** `page` is fluid with a ceiling: no gutters on a laptop,
+and a nine-column table does not stretch across a 34-inch screen. Prose keeps
+its own measure inside it (`Section` is 2xl). Both full pages use it for their
+header *and* their content, so the left edge does not move when a reader goes
+from one to the other.
+
+**A page has one scroller.** Two nested ones both reserve a scrollbar gutter,
+which puts a header back out of step with the content under it — and a page
+that centres its content shifts by half a scrollbar the moment it overflows.
+So: `scrollbar-gutter: stable` (`.stickie-scroll`) on the one scroller, the header
+sticky inside it.
+
+**Waiting looks like the thing that is coming.** `Skeleton.tsx` holds the
+silhouettes and `Loading` announces "loading <what>" once for a screen reader.
+A silhouette stands where its content will stand and is roughly its size.
+Anything that decides from data it has not read yet needs a third state:
+"no repositories" and "no changes to review" are answers, and both were being
+given before anyone had looked.
+
+**Where a control lives says what it acts on.** The top bar is the workspace
+and the review — source, base, search, the panels, the theme, settings. The
+menu at the end of the tabs is the diff: how it is drawn, and what can be done
+with it. The status bar carries counts, so nothing else should.
+
+### Monaco, and two things it will do to you
+
+**A selection is painted under the diff's colours.** Monaco renders one line's
+overlays as siblings in DOM order at `z-index: auto`: the selection first, then
+the inserted/removed line background, which is opaque. No colour can fix that —
+the selection is there, buried — so `.view-overlays .selected-text` is raised a
+step in `index.css`. Anything else that must show through a diff line has the
+same problem and the same answer.
+
+**A form inside a view zone keeps no state of its own.** `useState` for an open
+menu read back false on the very next click. Zone-local state goes in the store
+— which is where the draft body and the reply text already live, for this
+reason. A zone also clips whatever leaves its box, so a menu grows the card
+instead of floating over it, and the `ResizeObserver` re-measures.
+
 ## Conventions
 
 - comments state constraints the code cannot, nothing else
-- no external network calls at runtime except the opt-in GitLab import
+- no external network calls at runtime except the opt-in GitLab import, which
+  also rules out a webfont from a CDN: a face has to be vendored or it is the
+  system stack
 - the server never writes to a reviewed working tree
+- prettier is not this project's formatter and `npx prettier --write` will
+  reformat a whole file; match the surrounding style by hand
