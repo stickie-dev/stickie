@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { Thread } from '@stickie/shared'
+import { postsComment } from '../keys'
 import { useReview } from '../store'
+import { TimeAgo } from './TimeAgo'
 
 const ref_pattern = /(@[\w./-]+(?::[\w./-]+)?:L\d+(?:-L?\d+)?)/g
 
@@ -51,6 +53,7 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
   const postThread = useReview((s) => s.postThread)
   const resolveThread = useReview((s) => s.resolveThread)
   const reopenThread = useReview((s) => s.reopenThread)
+  const submitKey = useReview((s) => s.submitKey)
   const setActiveReply = useReview((s) => s.setActiveReply)
   const updateReplyDraft = useReview((s) => s.updateReplyDraft)
   const editMessage = useReview((s) => s.editMessage)
@@ -156,7 +159,8 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  if (postsComment(e, submitKey)) {
+                    e.preventDefault()
                     void editMessage(thread.id, message.id, editText.trim())
                     setEditingId(null)
                   }
@@ -195,6 +199,7 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
               >
                 {message.actorName ?? message.author}
               </span>
+              <TimeAgo at={message.createdAt} className="ml-1.5 text-faint" />
               <MessageBody body={message.body} />
               {message.author === 'user' && (
                 <>
@@ -222,15 +227,23 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
         )}
         {showReply ? (
           <div className="flex gap-2 border-t border-edge pt-2">
-            <input
+            <textarea
               autoFocus
-              className="grow rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
-              placeholder="reply… (select code anywhere to insert a reference)"
+              rows={2}
+              className="grow resize-y rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
+              placeholder={
+                submitKey === 'enter'
+                  ? 'reply… (↵ to send, ⇧↵ for a new line)'
+                  : 'reply… (⌘↵ to send)'
+              }
               value={replyText}
               onChange={(e) => updateReplyDraft(thread.id, e.target.value)}
               onFocus={() => setActiveReply(thread.id)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void submitReply()
+                if (postsComment(e, submitKey)) {
+                  e.preventDefault()
+                  void submitReply()
+                }
                 if (e.key === 'Escape') closeReply()
               }}
             />

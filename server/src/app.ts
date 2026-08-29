@@ -367,12 +367,24 @@ function mcpCommand(): string {
 const repin_modes = ['always', 'when-clear', 'never'] as const
 const default_repin_mode = 'always'
 
+/**
+ * Which keystroke posts a comment. Enter by default — a note is usually one
+ * sentence, and reaching for a modifier to send it is friction on the thing
+ * this tool exists to do.
+ */
+const submit_keys = ['enter', 'mod-enter'] as const
+const default_submit_key = 'enter'
+
 // extensions whose files open soft-wrapped; prose and data, not code
 const default_wrap_extensions = 'md,markdown,txt,rst,csv,log,json'
 
 /** An unknown or unset stored value falls back to the default. */
 function repinMode(stored: string | null): (typeof repin_modes)[number] {
   return repin_modes.find((mode) => mode === stored) ?? default_repin_mode
+}
+
+function submitKey(stored: string | null): (typeof submit_keys)[number] {
+  return submit_keys.find((key) => key === stored) ?? default_submit_key
 }
 
 function errorMessage(error: unknown): string {
@@ -1646,6 +1658,8 @@ export function createApp(
             mcpCommand: z.string(),
             /** who moves a review's base pin when it goes stale */
             repinMode: z.enum(repin_modes),
+            /** which keystroke posts a comment */
+            submitKey: z.enum(submit_keys),
             identity: z.object({
               /** '' when nothing was set by hand and git config decides */
               chosenName: z.string(),
@@ -1702,6 +1716,7 @@ export function createApp(
             default_wrap_extensions,
           mcpCommand: mcpCommand(),
           repinMode: repinMode(await store.getSetting('repin_mode')),
+          submitKey: submitKey(await store.getSetting('submit_key')),
           identity: {
             chosenName: (await store.getSetting('actor_name')) ?? '',
             perRepo: await Promise.all(
@@ -1747,6 +1762,7 @@ export function createApp(
             /** '' falls back to git config */
             actorName: z.string().max(64).optional(),
             repinMode: z.enum(repin_modes).optional(),
+            submitKey: z.enum(submit_keys).optional(),
           }),
         ),
       },
@@ -1777,6 +1793,9 @@ export function createApp(
       }
       if (body.repinMode !== undefined) {
         await store.setSetting('repin_mode', body.repinMode)
+      }
+      if (body.submitKey !== undefined) {
+        await store.setSetting('submit_key', body.submitKey)
       }
       if (body.actorName !== undefined) {
         await store.setSetting('actor_name', body.actorName.trim())

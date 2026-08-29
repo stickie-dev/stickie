@@ -15,6 +15,9 @@ import type {
 /** Who moves a review's base pin when it goes stale. */
 export type RepinMode = 'always' | 'when-clear' | 'never'
 
+/** Which keystroke posts a comment; the other one makes a new line. */
+export type SubmitKey = 'enter' | 'mod-enter'
+
 export interface SettingsState {
   gitlabUrl: string | null
   gitlabTokenEnv: string | null
@@ -28,6 +31,7 @@ export interface SettingsState {
   /** the command that points an MCP client at this server */
   mcpCommand: string
   repinMode: RepinMode
+  submitKey: SubmitKey
   identity: {
     chosenName: string
     perRepo: {
@@ -192,6 +196,7 @@ export const api = {
     databaseUrl?: string
     actorName?: string
     repinMode?: RepinMode
+    submitKey?: SubmitKey
   }) =>
     fetch('/api/settings', {
       method: 'PUT',

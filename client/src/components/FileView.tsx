@@ -15,6 +15,9 @@ import { ContinuousDiff } from './ContinuousDiff'
 
 const side_by_side_min_width = 1440
 
+/** Anything a click is aimed at rather than aimed through. */
+const interactive = 'input, textarea, select, button, a, [role="button"]'
+
 function useWindowWidth(): number {
   const [width, setWidth] = useState(window.innerWidth)
   useEffect(() => {
@@ -265,6 +268,17 @@ function makeCaptureAttacher(
       },
     })
     instance.onMouseUp((event) => {
+      // a mouse-up on a form inside a view zone is someone using that form,
+      // not selecting the code behind it
+      if (
+        (event.event.browserEvent.target as HTMLElement | null)?.closest(
+          interactive,
+        ) != null
+      ) {
+        gutter_armed = false
+        setTarget(null)
+        return
+      }
       const was_gutter = gutter_armed
       gutter_armed = false
       const lines = selectionLines(instance.getSelection())
@@ -323,6 +337,7 @@ function CaptureActions({
 
   return (
     <div
+      data-stickie-capture=""
       className="fixed z-50 grid -translate-x-1/2 grid-flow-col auto-cols-fr overflow-hidden rounded-md border border-edge bg-panel shadow-xl"
       style={{
         left: Math.min(Math.max(target.x, 120), window.innerWidth - 120),
@@ -563,6 +578,24 @@ export function FileView() {
     setCaptureTarget(null)
     setDefinitionPick(null)
   }, [selectedPath])
+
+  // Monaco says when a selection is cleared inside an editor and nothing says
+  // when the reader simply went elsewhere, so the note/ref bar used to sit over
+  // whatever was clicked next — including a note's own form, which lives in a
+  // view zone and is therefore inside the editor. Any press outside the bar
+  // takes it down; one that turns out to be a selection puts it back on
+  // mouse-up, so nothing is lost by being blunt here.
+  useEffect(() => {
+    const dismiss = (event: MouseEvent) => {
+      if ((event.target as HTMLElement | null)?.closest('[data-stickie-capture]')) {
+        return
+      }
+      setCaptureTarget(null)
+      setDefinitionPick(null)
+    }
+    window.addEventListener('mousedown', dismiss, true)
+    return () => window.removeEventListener('mousedown', dismiss, true)
+  }, [])
 
   // the editor instance outlives a file switch, so its scroll offset has to
   // be reset by hand — once per file, and never because a reveal just ended

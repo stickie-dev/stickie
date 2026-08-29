@@ -311,6 +311,69 @@ export function ContinuousDiff({
   }, [])
 
   /**
+   * Dragging a selection past the edge scrolls the flow.
+   *
+   * Each file is its own content-sized editor, so Monaco has no scrollbar of
+   * its own to run and nothing carries the drag past the viewport — a
+   * selection could only ever be as long as what was already on screen. While
+   * a drag is live, being near an edge scrolls towards it, faster the closer
+   * it gets, and Monaco extends the selection as the content moves under the
+   * pointer.
+   */
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (el === null) return
+    const edge = 60
+    const top_speed = 18
+    let dragging = false
+    let pointer = 0
+    let frame: number | null = null
+
+    const step = () => {
+      frame = null
+      if (!dragging) return
+      const box = el.getBoundingClientRect()
+      const above = edge - (pointer - box.top)
+      const below = edge - (box.bottom - pointer)
+      const push =
+        above > 0 ? -above : below > 0 ? below : 0
+      if (push !== 0) {
+        el.scrollTop += Math.sign(push) * Math.min(top_speed, Math.abs(push) / 2)
+      }
+      frame = requestAnimationFrame(step)
+    }
+
+    const start = (event: MouseEvent) => {
+      // only a left-button drag that began inside the code
+      if (event.button !== 0) return
+      if ((event.target as HTMLElement | null)?.closest('.monaco-editor') == null) {
+        return
+      }
+      dragging = true
+      pointer = event.clientY
+      frame ??= requestAnimationFrame(step)
+    }
+    const move = (event: MouseEvent) => {
+      pointer = event.clientY
+    }
+    const stop = () => {
+      dragging = false
+      if (frame !== null) cancelAnimationFrame(frame)
+      frame = null
+    }
+
+    el.addEventListener('mousedown', start)
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', stop)
+    return () => {
+      el.removeEventListener('mousedown', start)
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', stop)
+      stop()
+    }
+  }, [])
+
+  /**
    * A click never moves this scroller.
    *
    * The browser scrolls a newly focused element into view, and clicking into an

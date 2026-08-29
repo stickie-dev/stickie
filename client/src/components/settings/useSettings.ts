@@ -20,6 +20,7 @@ export function useSettings(): SettingsAccess {
   const pushToast = useReview((s) => s.pushToast)
   const setWrapExtensions = useReview((s) => s.setWrapExtensions)
   const setRepinMode = useReview((s) => s.setRepinMode)
+  const setSubmitKey = useReview((s) => s.setSubmitKey)
   const [state, setState] = useState<SettingsState | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -46,6 +47,7 @@ export function useSettings(): SettingsAccess {
         setState(fresh)
         setWrapExtensions(fresh.wrapExtensions)
         setRepinMode(fresh.repinMode)
+        setSubmitKey(fresh.submitKey)
         pushToast(
           'info',
           result.restartRequired
@@ -61,7 +63,7 @@ export function useSettings(): SettingsAccess {
         setSaving(false)
       }
     },
-    [pushToast, setWrapExtensions, setRepinMode],
+    [pushToast, setWrapExtensions, setRepinMode, setSubmitKey],
   )
 
   return { state, save, saving }

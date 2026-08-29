@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DraftForm } from './DraftForm'
+import { postsComment } from '../keys'
 import { orderedThreadIds, useReview } from '../store'
 import { ThreadCard } from './ThreadCard'
+import { TimeAgo } from './TimeAgo'
 
 /** A composer for notes that carry no code anchor. */
 function NoteComposer({ onDone }: { onDone: () => void }) {
   const addNote = useReview((s) => s.addNote)
+  const submitKey = useReview((s) => s.submitKey)
   const selectedPath = useReview((s) => s.selectedPath)
   const [scope, setScope] = useState<'review' | 'file'>(
     selectedPath === null ? 'review' : 'file',
@@ -42,7 +45,10 @@ function NoteComposer({ onDone }: { onDone: () => void }) {
         value={body}
         onChange={(e) => setBody(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
+          if (postsComment(e, submitKey)) {
+            e.preventDefault()
+            submit()
+          }
           if (e.key === 'Escape') onDone()
         }}
       />
@@ -117,90 +123,61 @@ export function CommentsPanel() {
 
   return (
     <aside className="flex w-96 shrink-0 flex-col border-l border-edge bg-surface">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-edge px-3 py-1.5 text-xs">
-        <span className="font-semibold text-ink">Comments</span>
-        <span className="text-faint">{total}</span>
+      <div className="flex items-center gap-2 border-b border-edge px-3 py-2">
+        <h2 className="text-sm font-semibold text-ink">Comments</h2>
+        <span className="rounded-full bg-overlay px-1.5 py-0.5 text-[11px] text-soft tabular-nums">
+          {total}
+        </span>
         <span className="grow" />
         <button
-          className="text-soft hover:text-ink"
-          title="add a note that is not tied to a line"
-          onClick={() => setComposing(true)}
+          className="rounded px-1.5 py-0.5 text-xs text-soft hover:bg-overlay hover:text-ink"
+          title="close the panel"
+          onClick={toggleComments}
         >
-          + note
+          ✕
         </button>
+      </div>
+      <div className="flex items-center gap-1 border-b border-edge px-3 py-1.5 text-xs">
+        <div className="flex overflow-hidden rounded border border-edge">
+          {([true, false] as const).map((only) => (
+            <button
+              key={String(only)}
+              className={`px-2 py-0.5 ${openOnly === only ? 'bg-accent text-white' : 'text-soft hover:bg-overlay hover:text-ink'}`}
+              onClick={() => setOpenOnly(only)}
+            >
+              {only ? 'Unresolved' : 'All'}
+            </button>
+          ))}
+        </div>
+        <span className="grow" />
         <button
-          className={arranging ? 'text-accent' : 'text-soft hover:text-ink'}
+          className={`rounded px-1.5 py-0.5 ${arranging ? 'bg-accent/15 text-accent' : 'text-soft hover:bg-overlay hover:text-ink'}`}
           title="show the order Copy prompt uses, and rearrange it"
           onClick={() => setArranging(!arranging)}
         >
           prompt order
         </button>
-        <label className="flex items-center gap-1 text-soft">
-          <input
-            type="checkbox"
-            checked={openOnly}
-            onChange={(e) => setOpenOnly(e.target.checked)}
-          />
-          unresolved only
-        </label>
-        <button className="text-soft hover:text-ink" onClick={toggleComments}>
-          close
-        </button>
       </div>
-      <div
-        ref={listRef}
-        className="min-h-0 grow space-y-3 overflow-y-auto p-3"
-      >
-        {composing && <NoteComposer onDone={() => setComposing(false)} />}
-        {drafts.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-faint">
-              in progress
-            </p>
-            {drafts.map((draft) => {
-              const repo_name = repos.find((r) => r.id === draft.repoId)?.name
-              const cross_repo = draft.repoId !== activeRepoId
-              return (
-                <div key={draft.id}>
-                  <button
-                    className="mb-0.5 max-w-full truncate font-mono text-xs text-accent hover:underline"
-                    title={`back to ${draft.path}:L${draft.startLine}`}
-                    onClick={() => {
-                      void (async () => {
-                        if (cross_repo) await selectRepo(draft.repoId)
-                        await openRef(draft.path, draft.startLine)
-                      })()
-                    }}
-                  >
-                    {cross_repo && repo_name !== undefined
-                      ? `${repo_name}:`
-                      : ''}
-                    {draft.path}:L{draft.startLine}
-                  </button>
-                  <DraftForm draft={draft} surface="panel" />
-                </div>
-              )
-            })}
-          </div>
-        )}
+      <div ref={listRef} className="min-h-0 grow space-y-3 overflow-y-auto p-3">
         {visible.map((thread, index) => (
           <div key={thread.id} data-thread={thread.id}>
-            <div className="mb-0.5 flex items-center gap-2">
+            <div className="mb-1 flex items-center gap-2">
               {thread.startLine === 0 ? (
-                <span className="max-w-full truncate font-mono text-xs text-soft">
+                <span className="min-w-0 truncate font-mono text-xs text-soft">
                   {thread.path === '' ? 'whole review' : `${thread.path} · file`}
                 </span>
               ) : (
                 <button
-                  className="max-w-full truncate font-mono text-xs text-accent hover:underline"
+                  className="min-w-0 truncate font-mono text-xs text-accent hover:underline"
                   title={`jump to ${thread.path}:L${thread.startLine}`}
                   onClick={() => void openRef(thread.path, thread.startLine)}
                 >
                   {thread.path}:L{thread.startLine}
                 </button>
               )}
-              {arranging && (
-                <span className="ml-auto flex shrink-0 items-center gap-0.5 text-xs text-soft">
+              <span className="grow" />
+              {arranging ? (
+                <span className="flex shrink-0 items-center gap-0.5 text-xs text-soft">
                   <span className="mr-1 text-faint">{index + 1}</span>
                   <button
                     className="rounded px-1.5 py-0.5 hover:bg-overlay hover:text-ink disabled:opacity-30"
@@ -219,15 +196,60 @@ export function CommentsPanel() {
                     ↓
                   </button>
                 </span>
+              ) : (
+                <TimeAgo
+                  at={thread.createdAt}
+                  className="shrink-0 text-xs text-faint"
+                />
               )}
             </div>
             <ThreadCard thread={thread} />
           </div>
         ))}
+
+        {/* notes still being written sit last, where they were just made */}
+        {drafts.map((draft) => {
+          const repo_name = repos.find((r) => r.id === draft.repoId)?.name
+          const cross_repo = draft.repoId !== activeRepoId
+          return (
+            <div key={draft.id}>
+              <button
+                className="mb-1 max-w-full truncate font-mono text-xs text-accent hover:underline"
+                title={`back to ${draft.path}:L${draft.startLine}`}
+                onClick={() => {
+                  void (async () => {
+                    if (cross_repo) await selectRepo(draft.repoId)
+                    await openRef(draft.path, draft.startLine)
+                  })()
+                }}
+              >
+                {cross_repo && repo_name !== undefined ? `${repo_name}:` : ''}
+                {draft.path}:L{draft.startLine}
+              </button>
+              <DraftForm draft={draft} surface="panel" />
+            </div>
+          )
+        })}
+
         {total === 0 && drafts.length === 0 && !composing && (
           <p className="text-xs text-faint">
             {openOnly ? 'No unresolved comments.' : 'No comments yet.'}
           </p>
+        )}
+      </div>
+
+      {/* the composer sits where what it makes will appear, not opposite it */}
+      <div className="border-t border-edge p-3">
+        {composing ? (
+          <NoteComposer onDone={() => setComposing(false)} />
+        ) : (
+          <button
+            className="w-full rounded border border-dashed border-edge px-2 py-1.5 text-xs text-soft hover:border-accent hover:text-ink"
+            title="a note on the whole file or the whole review, with no line behind it"
+            onClick={() => setComposing(true)}
+          >
+            + note without a line
+          </button>
         )}
       </div>
     </aside>

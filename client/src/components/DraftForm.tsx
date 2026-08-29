@@ -1,9 +1,45 @@
 import { useEffect, useRef } from 'react'
+import { postsComment } from '../keys'
 import type { Draft } from '../store'
 import { useReview } from '../store'
 
 /** Where a form for the same note is rendered; each surface focuses alone. */
 type Surface = 'zone' | 'panel'
+
+/**
+ * The line a note is anchored to, correctable in place: a selection is a rough
+ * gesture, and re-dragging it to move an anchor by one line is worse than
+ * typing the number.
+ */
+function LineBox({
+  value,
+  label,
+  onChange,
+}: {
+  value: number
+  label: string
+  onChange: (line: number) => void
+}) {
+  return (
+    <span className="inline-flex items-baseline">
+      <span className="text-faint">L</span>
+      <input
+        type="number"
+        min={1}
+        aria-label={label}
+        title={`${label} — click to change`}
+        value={value}
+        onChange={(e) => {
+          const line = Number(e.target.value)
+          if (Number.isFinite(line) && line > 0) onChange(line)
+        }}
+        // sized to its digits so it reads as text until someone clicks it
+        style={{ width: `${String(Math.max(2, String(value).length + 1))}ch` }}
+        className="rounded border border-transparent bg-transparent px-0.5 text-center font-mono text-ink tabular-nums hover:border-edge focus:border-accent focus:outline-none [&::-webkit-inner-spin-button]:appearance-none"
+      />
+    </span>
+  )
+}
 
 // a form can remount without the user asking — the editor around it reloads,
 // or its zone moves — so it must know whether a mount is its first (claim the
@@ -39,6 +75,8 @@ export function DraftForm({
   surface?: Surface
 }) {
   const updateDraftBody = useReview((s) => s.updateDraftBody)
+  const setDraftRange = useReview((s) => s.setDraftRange)
+  const submitKey = useReview((s) => s.submitKey)
   const submitDraft = useReview((s) => s.submitDraft)
   const cancelDraft = useReview((s) => s.cancelDraft)
   const setActiveDraft = useReview((s) => s.setActiveDraft)
@@ -117,20 +155,36 @@ export function DraftForm({
       onFocusCapture={() => setActiveDraft(draft.id)}
       onMouseDownCapture={() => setActiveDraft(draft.id)}
     >
-      <div className="mb-1 text-xs text-soft">
-        New note on L{draft.startLine}
-        {draft.endLine !== draft.startLine ? `–L${draft.endLine}` : ''} (
-        {draft.side} side)
-        {active
-          ? ' — active: selections elsewhere add references here'
-          : ' — click to make active'}
+      <div className="mb-1 flex flex-wrap items-center gap-x-1 text-xs text-soft">
+        <span>note on</span>
+        <LineBox
+          value={draft.startLine}
+          label="first line"
+          onChange={(line) => setDraftRange(draft.id, line, draft.endLine)}
+        />
+        <span>–</span>
+        <LineBox
+          value={draft.endLine}
+          label="last line"
+          onChange={(line) => setDraftRange(draft.id, draft.startLine, line)}
+        />
+        <span>({draft.side} side)</span>
+        <span className="text-faint">
+          {active
+            ? '— active: selections elsewhere add references here'
+            : '— click to make active'}
+        </span>
       </div>
       <textarea
         ref={textareaRef}
         data-stickie-draft={key}
         rows={2}
         className="w-full resize-y rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
-        placeholder="What should change here? (⌘↵ to submit, Esc to discard)"
+        placeholder={
+          submitKey === 'enter'
+            ? 'What should change here? (↵ to comment, ⇧↵ for a new line)'
+            : 'What should change here? (⌘↵ to comment, ↵ for a new line)'
+        }
         value={draft.body}
         onChange={(e) => {
           updateDraftBody(draft.id, e.target.value)
@@ -139,7 +193,8 @@ export function DraftForm({
         onSelect={(e) => remember(e.currentTarget)}
         onFocus={(e) => remember(e.currentTarget)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          if (postsComment(e, submitKey)) {
+            e.preventDefault()
             void submitDraft(draft.id)
           }
           if (e.key === 'Escape') cancelDraft(draft.id)

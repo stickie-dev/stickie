@@ -31,11 +31,11 @@ describe('row helpers', () => {
     ])
   })
 
-  it('formats postgres timestamps like sqlite ones', () => {
+  it('formats both dialects as the same ISO instant, zone included', () => {
     expect(toText(new Date('2026-08-23T10:11:12.500Z'))).toBe(
-      '2026-08-23 10:11:12',
+      '2026-08-23T10:11:12.500Z',
     )
-    expect(toText('2026-08-23 10:11:12')).toBe('2026-08-23 10:11:12')
+    expect(toText('2026-08-23 10:11:12')).toBe('2026-08-23T10:11:12Z')
   })
 })
 
@@ -61,5 +61,26 @@ describe('Lock', () => {
       lock.run(() => Promise.reject(new Error('nope'))),
     ).rejects.toThrow('nope')
     await expect(lock.run(() => Promise.resolve('fine'))).resolves.toBe('fine')
+  })
+})
+
+describe('toText', () => {
+  it('says which zone a sqlite timestamp is in, because it never did', () => {
+    expect(toText('2026-08-24 09:11:44')).toBe('2026-08-24T09:11:44Z')
+  })
+
+  it('keeps sub-second precision when the row has it', () => {
+    expect(toText('2026-08-24 09:11:44.125')).toBe('2026-08-24T09:11:44.125Z')
+  })
+
+  it('passes a Date through as ISO', () => {
+    expect(toText(new Date('2026-08-24T09:11:44.125Z'))).toBe(
+      '2026-08-24T09:11:44.125Z',
+    )
+  })
+
+  it('leaves anything that is not a timestamp alone', () => {
+    expect(toText('open')).toBe('open')
+    expect(toText(null)).toBe('')
   })
 })

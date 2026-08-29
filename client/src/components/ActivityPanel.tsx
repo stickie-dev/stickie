@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ActivityEntry } from '@stickie/shared'
 import { api } from '../api'
 import { useReview } from '../store'
+import { TimeAgo } from './TimeAgo'
 
 /**
  * What happened in this review, newest first. Reading the record back is what
@@ -46,12 +47,6 @@ function detailText(entry: ActivityEntry): string | null {
   }
   if (typeof d.toBaseSha === 'string') parts.push(d.toBaseSha.slice(0, 8))
   return parts.length === 0 ? null : parts.join(' · ')
-}
-
-/** "2026-08-24 00:31:02" as a bare clock, since every row is from this session. */
-function clock(at: string): string {
-  const time = at.slice(11, 16)
-  return time === '' ? at : time
 }
 
 export function ActivityPanel() {
@@ -111,9 +106,10 @@ export function ActivityPanel() {
               className="border-b border-edge py-1.5 text-xs last:border-b-0"
             >
               <div className="flex items-baseline gap-1.5">
-                <span className="shrink-0 font-mono text-faint">
-                  {clock(entry.at)}
-                </span>
+                <TimeAgo
+                  at={entry.at}
+                  className="w-16 shrink-0 text-right text-faint"
+                />
                 <span className="text-ink">
                   <span className="font-medium">
                     {entry.actorName ?? 'someone'}

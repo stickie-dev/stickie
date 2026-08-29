@@ -12,6 +12,7 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@stickie/shared": "workspace:*",
+    "dayjs": "^1.11.23",
     "material-icon-theme": "^5.37.0",
     "monaco-editor": "^0.56.0",
     "react": "^19.0.0",

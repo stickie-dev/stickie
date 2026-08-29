@@ -10,7 +10,7 @@ import type {
   Thread,
 } from '@stickie/shared'
 import { api } from './api'
-import type { CommitBetween, NavHit, RepinMode } from './api'
+import type { CommitBetween, NavHit, RepinMode, SubmitKey } from './api'
 import { cachedFile, prefetchFile } from './fileCache'
 import type { TabRef } from './routes'
 import {
@@ -196,6 +196,8 @@ interface ReviewState {
   setShowAll: (showAll: boolean) => Promise<void>
   startDraft: (side: Side, startLine: number, endLine: number) => void
   updateDraftBody: (id: number, body: string) => void
+  /** the lines a note is anchored to, corrected by hand after a selection */
+  setDraftRange: (id: number, startLine: number, endLine: number) => void
   insertDraftRef: (
     path: string,
     startLine: number,
@@ -238,6 +240,9 @@ interface ReviewState {
    */
   repinMode: RepinMode | null
   setRepinMode: (mode: RepinMode) => void
+  /** whether Enter posts a comment or only ⌘/ctrl+Enter does, from settings */
+  submitKey: SubmitKey
+  setSubmitKey: (key: SubmitKey) => void
   /** per-file wrap decisions taken from the editor's context menu */
   wrapOverrides: Record<string, boolean>
   toggleWrap: (path: string) => void
@@ -573,6 +578,7 @@ export const useReview = create<ReviewState>((set, get) => {
     revealDir: null,
     wrapExtensions: default_wrap_extensions,
     repinMode: null,
+    submitKey: 'enter',
     wrapOverrides: {},
     repoSessions: {},
     perRepo: {},
@@ -662,6 +668,7 @@ export const useReview = create<ReviewState>((set, get) => {
     setSearchOpen: (open) => set({ searchOpen: open }),
     setWrapExtensions: (extensions) => set({ wrapExtensions: extensions }),
     setRepinMode: (mode) => set({ repinMode: mode }),
+    setSubmitKey: (key) => set({ submitKey: key }),
     setReviewActive: (active) => set({ reviewActive: active }),
 
     navBack: async () => {
@@ -692,6 +699,7 @@ export const useReview = create<ReviewState>((set, get) => {
             set({
               wrapExtensions: settings.wrapExtensions,
               repinMode: settings.repinMode,
+              submitKey: settings.submitKey,
             }),
           )
           .catch(() => undefined)
@@ -1029,6 +1037,18 @@ export const useReview = create<ReviewState>((set, get) => {
     updateDraftBody: (id, body) => {
       set({
         drafts: get().drafts.map((d) => (d.id === id ? { ...d, body } : d)),
+      })
+    },
+
+    setDraftRange: (id, startLine, endLine) => {
+      // a range typed by hand can arrive half-finished; the server extracts the
+      // snippet from these lines at submit, so only sane ones are worth keeping
+      const start = Math.max(1, Math.trunc(startLine))
+      const end = Math.max(start, Math.trunc(endLine))
+      set({
+        drafts: get().drafts.map((d) =>
+          d.id === id ? { ...d, startLine: start, endLine: end } : d,
+        ),
       })
     },
 

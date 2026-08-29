@@ -3,6 +3,8 @@ import { Link } from 'react-router'
 import type { NoteCounts, Overview, ReviewOverview } from '@stickie/shared'
 import { api } from '../api'
 import { formatRoute } from '../routes'
+import { timeValue } from '../time'
+import { TimeAgo } from './TimeAgo'
 import { useReview } from '../store'
 
 /**
@@ -117,7 +119,7 @@ function rows(reviews: ReviewOverview[]): ReviewRow[] {
     // adding a note there is the most recent thing that happened
     const latest = sessions.reduce(
       (best, r) =>
-        (r.lastActivityAt ?? '') > (best.lastActivityAt ?? '') ? r : best,
+        timeValue(r.lastActivityAt) > timeValue(best.lastActivityAt) ? r : best,
       current,
     )
     return [
@@ -211,21 +213,6 @@ function where(detail: Record<string, unknown> | null): string {
   return ''
 }
 
-/** Today is the common case, so only an older row spends space on its date. */
-function when(at: string | null, today: string): string {
-  if (at === null) return '—'
-  const [date, time] = at.split(' ')
-  if (date === undefined) return at
-  const clock = (time ?? '').slice(0, 5)
-  return date === today ? clock : `${date.slice(5)} ${clock}`
-}
-
-function todayStamp(): string {
-  const now = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-}
-
 /** A zero is a dash, so a column of numbers can be read down. */
 function Num({ value }: { value: number }) {
   return (
@@ -258,17 +245,11 @@ function Th({
   )
 }
 
-function ReviewsTable({
-  reviews,
-  today,
-}: {
-  reviews: ReviewRow[]
-  today: string
-}) {
+function ReviewsTable({ reviews }: { reviews: ReviewRow[] }) {
   const sorted = [...reviews].sort((a, b) => {
     const by_status = status_rank[statusOf(a)] - status_rank[statusOf(b)]
     if (by_status !== 0) return by_status
-    return (b.lastActivityAt ?? '').localeCompare(a.lastActivityAt ?? '')
+    return timeValue(b.lastActivityAt) - timeValue(a.lastActivityAt)
   })
 
   return (
@@ -333,7 +314,7 @@ function ReviewsTable({
                   '—'
                 ) : (
                   <>
-                    {when(review.lastActivityAt, today)} ·{' '}
+                    <TimeAgo at={review.lastActivityAt} /> ·{' '}
                     {review.lastActorName ?? 'someone'}{' '}
                     {actions[review.lastAction] ?? review.lastAction}
                   </>
@@ -352,7 +333,6 @@ export function OverviewPage() {
   const [overview, setOverview] = useState<Overview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showIdle, setShowIdle] = useState(false)
-  const today = todayStamp()
 
   const load = useCallback(async () => {
     try {
@@ -421,7 +401,7 @@ export function OverviewPage() {
           <section className="mb-8">
             <h2 className="mb-2 text-sm font-semibold text-ink">Reviews</h2>
             <div className="overflow-x-auto rounded border border-edge">
-              <ReviewsTable reviews={listed} today={today} />
+              <ReviewsTable reviews={listed} />
             </div>
             <p className="mt-2 text-xs text-faint">
               A row is one thing being reviewed — a repository&rsquo;s working
@@ -524,8 +504,8 @@ export function OverviewPage() {
               <tbody>
                 {(overview?.recent ?? []).map((entry) => (
                   <tr key={entry.id} className="border-b border-edge last:border-b-0">
-                    <td className="px-2 py-1.5 whitespace-nowrap text-faint tabular-nums">
-                      {when(entry.at, today)}
+                    <td className="px-2 py-1.5 whitespace-nowrap text-faint">
+                      <TimeAgo at={entry.at} />
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-soft">
                       {repo_names.get(entry.repoId ?? -1) ?? ''}

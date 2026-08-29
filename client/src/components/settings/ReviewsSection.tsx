@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { RepinMode } from '../../api'
+import type { RepinMode, SubmitKey } from '../../api'
 import { Field, Mono, SaveRow, Section } from './parts'
 import type { SettingsAccess } from './useSettings'
 
@@ -21,10 +21,27 @@ const choices: { value: RepinMode; label: string; why: string }[] = [
   },
 ]
 
+const submit_choices: { value: SubmitKey; label: string; why: string }[] = [
+  {
+    value: 'enter',
+    label: 'Enter posts, Shift+Enter makes a new line',
+    why: 'A note is usually one sentence.',
+  },
+  {
+    value: 'mod-enter',
+    label: '⌘/Ctrl+Enter posts, Enter makes a new line',
+    why: 'For notes that are usually several lines.',
+  },
+]
+
 export function ReviewsSection({ state, save, saving }: SettingsAccess) {
   const [mode, setMode] = useState<RepinMode>('always')
+  const [submit, setSubmit] = useState<SubmitKey>('enter')
   useEffect(() => {
-    if (state !== null) setMode(state.repinMode)
+    if (state !== null) {
+      setMode(state.repinMode)
+      setSubmit(state.submitKey)
+    }
   }, [state])
 
   return (
@@ -63,7 +80,41 @@ export function ReviewsSection({ state, save, saving }: SettingsAccess) {
           ))}
         </div>
       </Field>
-      <SaveRow saving={saving} onSave={() => void save({ repinMode: mode })} />
+      <Field
+        label="Posting a comment"
+        hint={
+          <>
+            Applies to notes, replies and edits alike. <Mono>⌘/Ctrl+Enter</Mono>{' '}
+            posts either way — it has never meant a new line.
+          </>
+        }
+      >
+        <div className="space-y-2">
+          {submit_choices.map((choice) => (
+            <label
+              key={choice.value}
+              className="flex cursor-pointer gap-2 text-xs"
+            >
+              <input
+                type="radio"
+                name="submit-key"
+                className="mt-0.5 shrink-0"
+                checked={submit === choice.value}
+                onChange={() => setSubmit(choice.value)}
+              />
+              <span>
+                <span className="text-ink">{choice.label}</span>
+                <span className="block text-faint">{choice.why}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </Field>
+
+      <SaveRow
+        saving={saving}
+        onSave={() => void save({ repinMode: mode, submitKey: submit })}
+      />
     </Section>
   )
 }

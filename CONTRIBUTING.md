@@ -105,6 +105,16 @@ stickie did not record is not a change it should report as done.
 `subject` and `action` are separate columns; the pairs that make sense are
 declared in `activity.ts` and the types make an invalid one unwritable.
 
+## Time
+
+Every timestamp shown anywhere goes through `client/src/time.ts` — never a
+hand-rolled diff, never `toLocaleString` at a call site. Recent times read as an
+age and older ones as a date, and `TimeAgo` puts the exact stamp on hover.
+
+The boundary carries ISO-8601 with the zone in it. SQLite stores UTC and says so
+nowhere, so `toText` spells it out: a reader that takes "2026-08-24 09:11:44"
+for local time is wrong by its own offset.
+
 ## Conventions
 
 - comments state constraints the code cannot, nothing else

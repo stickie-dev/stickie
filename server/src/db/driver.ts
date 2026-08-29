@@ -66,12 +66,18 @@ export function toBool(value: unknown): boolean {
   return value === true || value === 1 || value === '1'
 }
 
-/** SQLite answers text timestamps where Postgres answers Date objects. */
+/**
+ * SQLite answers text timestamps where Postgres answers Date objects, and both
+ * are UTC — but SQLite's say so nowhere, and a reader that takes
+ * "2026-08-24 09:11:44" for local time is wrong by its own offset. Everything
+ * crossing the boundary is ISO-8601 with the zone spelled out.
+ */
 export function toText(value: unknown): string {
-  if (value instanceof Date) {
-    return value.toISOString().replace('T', ' ').slice(0, 19)
-  }
-  return value === null || value === undefined ? '' : String(value)
+  if (value instanceof Date) return value.toISOString()
+  if (value === null || value === undefined) return ''
+  const text = String(value)
+  const stamp = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(\.\d+)?$/.exec(text)
+  return stamp === null ? text : `${stamp[1]}T${stamp[2]}${stamp[3] ?? ''}Z`
 }
 
 /** Serialises work so no two transactions interleave. */

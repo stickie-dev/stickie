@@ -61,7 +61,7 @@ export function TopBar() {
     'rounded border border-edge bg-overlay px-1.5 py-1 text-ink'
 
   return (
-    <header className="flex items-center gap-3 border-b border-edge px-3 py-2 text-xs">
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-edge px-3 py-2 text-xs">
       <Link
         to="/"
         className="flex items-center gap-2"
@@ -101,7 +101,7 @@ export function TopBar() {
 
       <label className="text-faint">source</label>
       <select
-        className={`max-w-72 ${select_classes}`}
+        className={`min-w-24 max-w-72 shrink ${select_classes}`}
         value={source === null ? '' : source_key(source)}
         onChange={(e) => changeSource(e.target.value)}
       >
@@ -128,7 +128,7 @@ export function TopBar() {
 
       <label className="text-faint">base</label>
       <select
-        className={`max-w-52 ${select_classes}`}
+        className={`min-w-20 max-w-52 shrink ${select_classes}`}
         value={baseRef ?? 'auto'}
         onChange={(e) =>
           void setBase(e.target.value === 'auto' ? undefined : e.target.value)
@@ -160,21 +160,21 @@ export function TopBar() {
 
       <span className="grow" />
       <button
-        className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
+        className="shrink-0 rounded border border-edge px-2 py-1 text-soft hover:text-ink"
         title="search all repos (⌘F / ⌘⇧F)"
         onClick={() => setSearchOpen(true)}
       >
         Search
       </button>
       <button
-        className={`rounded border px-2 py-1 ${commentsOpen ? 'border-accent text-accent' : 'border-edge text-soft hover:text-ink'}`}
+        className={`shrink-0 rounded border px-2 py-1 ${commentsOpen ? 'border-accent text-accent' : 'border-edge text-soft hover:text-ink'}`}
         title="toggle the all-comments panel"
         onClick={toggleComments}
       >
         Comments ({open_threads})
       </button>
       <button
-        className={`rounded border px-2 py-1 ${activityOpen ? 'border-accent text-accent' : 'border-edge text-soft hover:text-ink'}`}
+        className={`shrink-0 rounded border px-2 py-1 ${activityOpen ? 'border-accent text-accent' : 'border-edge text-soft hover:text-ink'}`}
         title="what has happened in this review, and who did it"
         onClick={toggleActivity}
       >
@@ -182,7 +182,7 @@ export function TopBar() {
       </button>
       {pending_count > 0 && (
         <button
-          className="rounded bg-emerald-600 px-2.5 py-1 font-medium text-white hover:bg-emerald-500"
+          className="shrink-0 rounded bg-emerald-600 px-2.5 py-1 font-medium text-white hover:bg-emerald-500"
           title="send every draft note so agents can see them"
           onClick={() => void submitReview()}
         >
@@ -190,7 +190,7 @@ export function TopBar() {
         </button>
       )}
       <button
-        className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
+        className="shrink-0 rounded border border-edge px-2 py-1 text-soft hover:text-ink"
         title="import unresolved GitLab MR discussions (needs GITLAB_TOKEN on the server)"
         disabled={session === null}
         onClick={() => {
@@ -201,14 +201,14 @@ export function TopBar() {
         Import MR
       </button>
       <Link
-        className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
+        className="shrink-0 rounded border border-edge px-2 py-1 text-soft hover:text-ink"
         title="settings"
         to={formatRoute({ kind: 'settings', section: 'identity' })}
       >
         ⚙
       </Link>
       <button
-        className="rounded bg-accent px-2.5 py-1 font-medium text-white hover:bg-accent-strong disabled:opacity-50"
+        className="shrink-0 rounded bg-accent px-2.5 py-1 font-medium text-white hover:bg-accent-strong disabled:opacity-50"
         disabled={session === null}
         onClick={() => void copyPrompt()}
       >
