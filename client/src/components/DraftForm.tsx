@@ -3,6 +3,7 @@ import type { NoteDefault } from '../api'
 import { postsComment } from '../keys'
 import type { Draft } from '../store'
 import { useReview } from '../store'
+import { GrowingTextarea } from './GrowingTextarea'
 import { btn, field_flush } from '../ui'
 import { SubmitSplit } from './SubmitSplit'
 
@@ -180,11 +181,10 @@ export function DraftForm({
             : '— click to make active'}
         </span>
       </div>
-      <textarea
-        ref={textareaRef}
+      <GrowingTextarea
+        inputRef={textareaRef}
         data-stickie-draft={key}
-        rows={2}
-        className={`w-full resize-y ${field_flush}`}
+        className={`w-full ${field_flush}`}
         placeholder={`What should change here? (${
           submitKey === 'enter' ? '↵' : '⌘↵'
         } to ${noteDefault === 'comment' ? 'comment' : 'draft'}, ${

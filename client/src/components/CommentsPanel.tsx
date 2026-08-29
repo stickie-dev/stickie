@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { NoteDefault } from '../api'
+import { GrowingTextarea } from './GrowingTextarea'
 import { DraftForm } from './DraftForm'
 import { SubmitSplit } from './SubmitSplit'
 import { postsComment } from '../keys'
@@ -56,10 +57,10 @@ function NoteComposer({ onDone }: { onDone: () => void }) {
           </option>
         </select>
       </div>
-      <textarea
+      <GrowingTextarea
         autoFocus
         rows={3}
-        className={`w-full resize-y ${field_flush}`}
+        className={`w-full ${field_flush}`}
         placeholder="Anything not tied to a line — approach, missing tests, naming… (⌘↵ to add)"
         value={body}
         onChange={(e) => setBody(e.target.value)}

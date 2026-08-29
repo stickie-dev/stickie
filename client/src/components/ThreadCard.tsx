@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Thread } from '@stickie/shared'
 import { postsComment } from '../keys'
 import { useReview } from '../store'
+import { GrowingTextarea } from './GrowingTextarea'
 import { TimeAgo } from './TimeAgo'
 import { ask } from '../confirm'
 import { Send } from '../icons'
@@ -256,11 +257,10 @@ export function ThreadCard({
         {open &&
           thread.messages.map((message) =>
           editingId === message.id ? (
-            <div key={message.id} className="flex gap-2">
-              <textarea
+            <div key={message.id} className="flex items-end gap-2">
+              <GrowingTextarea
                 autoFocus
-                rows={2}
-                className={`grow resize-y ${field}`}
+                className={`grow ${field}`}
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 onKeyDown={(e) => {
@@ -331,11 +331,10 @@ export function ThreadCard({
           ),
         )}
         {showReply ? (
-          <div className="flex gap-2 border-t border-edge/60 pt-2">
-            <textarea
+          <div className="flex items-end gap-2 border-t border-edge/60 pt-2">
+            <GrowingTextarea
               autoFocus
-              rows={2}
-              className={`grow resize-y ${field}`}
+              className={`grow ${field}`}
               placeholder={
                 submitKey === 'enter'
                   ? 'reply… (↵ to send, ⇧↵ for a new line)'

@@ -248,6 +248,13 @@ be clicked, because `inert` has taken it out of the tree it is drawn above:
 visible and dead, which is the worst of the two. Their state lives in the
 store, so gating the mount costs nothing.
 
+**A box you write a note in is `GrowingTextarea`.** All four of them — the
+draft in the diff, the panel's composer, a reply, an edit — start at two rows,
+grow with the text to eight, and only then scroll, with the caret followed
+rather than left behind. A fixed two-row box makes the common note fine and
+the long one a keyhole; eight lines in is where a comment has stopped being a
+comment and the diff underneath still matters.
+
 **Waiting looks like the thing that is coming.** `Skeleton.tsx` holds the
 silhouettes and `Loading` announces "loading <what>" once for a screen reader.
 A silhouette stands where its content will stand and is roughly its size.
