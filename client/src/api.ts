@@ -19,6 +19,12 @@ export type RepinMode = 'always' | 'when-clear' | 'never'
 export type SubmitKey = 'enter' | 'mod-enter'
 
 /**
+ * What a new note is by default. A draft joins the review batch and no agent
+ * sees it until the review is sent; a comment goes to the agent at once.
+ */
+export type NoteDefault = 'draft' | 'comment'
+
+/**
  * Everything this client does, a person did. The routes that change something
  * cannot tell an agent from a reviewer, and now record no actor rather than
  * guessing at one — so every call from the UI says which it is.
@@ -39,6 +45,7 @@ export interface SettingsState {
   mcpCommand: string
   repinMode: RepinMode
   submitKey: SubmitKey
+  noteDefault: NoteDefault
   identity: {
     chosenName: string
     perRepo: {
@@ -157,6 +164,8 @@ export const api = {
       endLine: number
       body: string
       author?: Author
+      /** false sends it to the agent at once; true keeps it in the batch */
+      pending?: boolean
     },
   ) => post(`/api/sessions/${sessionId}/threads`, input).then(toJson<Thread>),
 
@@ -211,6 +220,7 @@ export const api = {
     actorName?: string
     repinMode?: RepinMode
     submitKey?: SubmitKey
+    noteDefault?: NoteDefault
   }) =>
     fetch('/api/settings', {
       method: 'PUT',

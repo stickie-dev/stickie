@@ -10,7 +10,13 @@ import type {
   Thread,
 } from '@stickie/shared'
 import { api } from './api'
-import type { CommitBetween, NavHit, RepinMode, SubmitKey } from './api'
+import type {
+  CommitBetween,
+  NavHit,
+  NoteDefault,
+  RepinMode,
+  SubmitKey,
+} from './api'
 import { cachedFile, prefetchFile } from './fileCache'
 import type { TabRef } from './routes'
 import {
@@ -208,7 +214,7 @@ interface ReviewState {
   setActiveReply: (threadId: number | null) => void
   updateReplyDraft: (threadId: number, body: string) => void
   cancelDraft: (id: number) => void
-  submitDraft: (id: number) => Promise<void>
+  submitDraft: (id: number, as?: NoteDefault) => Promise<void>
   repin: (automatic?: boolean) => Promise<void>
   importMr: (mr: string) => Promise<void>
   submitReview: () => Promise<void>
@@ -243,6 +249,15 @@ interface ReviewState {
   /** whether Enter posts a comment or only ⌘/ctrl+Enter does, from settings */
   submitKey: SubmitKey
   setSubmitKey: (key: SubmitKey) => void
+  /**
+   * Whether a new note is a draft or goes to the agent at once. Draft unless
+   * told otherwise: a draft can still be posted, where a posted note cannot be
+   * taken back.
+   */
+  noteDefault: NoteDefault
+  setNoteDefault: (value: NoteDefault) => void
+  /** takes the choice and stores it, so the button keeps saying it */
+  rememberNoteDefault: (value: NoteDefault) => Promise<void>
   /** per-file wrap decisions taken from the editor's context menu */
   wrapOverrides: Record<string, boolean>
   toggleWrap: (path: string) => void
@@ -579,6 +594,7 @@ export const useReview = create<ReviewState>((set, get) => {
     wrapExtensions: default_wrap_extensions,
     repinMode: null,
     submitKey: 'enter',
+    noteDefault: 'draft',
     wrapOverrides: {},
     repoSessions: {},
     perRepo: {},
@@ -669,6 +685,17 @@ export const useReview = create<ReviewState>((set, get) => {
     setWrapExtensions: (extensions) => set({ wrapExtensions: extensions }),
     setRepinMode: (mode) => set({ repinMode: mode }),
     setSubmitKey: (key) => set({ submitKey: key }),
+    setNoteDefault: (value) => set({ noteDefault: value }),
+
+    rememberNoteDefault: async (value) => {
+      set({ noteDefault: value })
+      try {
+        await api.saveSettings({ noteDefault: value })
+      } catch (error) {
+        // the choice still applies to this note; only the memory of it failed
+        get().pushToast('error', `settings: ${message(error)}`)
+      }
+    },
     setReviewActive: (active) => set({ reviewActive: active }),
 
     navBack: async () => {
@@ -700,6 +727,7 @@ export const useReview = create<ReviewState>((set, get) => {
               wrapExtensions: settings.wrapExtensions,
               repinMode: settings.repinMode,
               submitKey: settings.submitKey,
+              noteDefault: settings.noteDefault,
             }),
           )
           .catch(() => undefined)
@@ -1129,8 +1157,9 @@ export const useReview = create<ReviewState>((set, get) => {
       })
     },
 
-    submitDraft: async (id) => {
-      const { session, drafts, activeRepoId, repos } = get()
+    submitDraft: async (id, as) => {
+      const { session, drafts, activeRepoId, repos, noteDefault } = get()
+      const posting = (as ?? noteDefault) === 'comment'
       const draft = drafts.find((d) => d.id === id)
       if (session === null || draft === undefined) return
       const body = draft.body.trim()
@@ -1145,6 +1174,9 @@ export const useReview = create<ReviewState>((set, get) => {
           startLine: draft.startLine,
           endLine: draft.endLine,
           body,
+          // the server defaults a user's note to the batch; say it either way
+          // so the button and the note agree
+          pending: !posting,
         })
       } catch (error) {
         get().pushToast('error', `note: ${message(error)}`)

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { NoteDefault } from '../api'
 import { postsComment } from '../keys'
 import type { Draft } from '../store'
 import { useReview } from '../store'
@@ -67,6 +68,60 @@ function watchFocus(): void {
   )
 }
 
+const note_actions: { value: NoteDefault; label: string; why: string }[] = [
+  {
+    value: 'draft',
+    label: 'Draft',
+    why: 'joins the review; no agent sees it until you send',
+  },
+  { value: 'comment', label: 'Comment', why: 'goes to the agent at once' },
+]
+
+/**
+ * Submit, and the choice of what submitting means.
+ *
+ * The button used to say "comment" and produce a draft, because a reviewer's
+ * note joins the batch by default — which is the point of the batch, but not
+ * something a label should misreport.
+ *
+ * Both choices are shown rather than one behind a menu. A form in a Monaco view
+ * zone is rebuilt whenever the zone is, which loses any state local to it — a
+ * menu opened here closed itself immediately — and a popup would be clipped by
+ * the zone besides. Two buttons need no state at all, and reach either choice
+ * in one click instead of two. The emphasised one is what Enter does.
+ */
+function SubmitSplit({
+  disabled,
+  onSubmit,
+}: {
+  disabled: boolean
+  onSubmit: (as: NoteDefault, remember: boolean) => void
+}) {
+  const noteDefault = useReview((s) => s.noteDefault)
+  return (
+    <span className="inline-flex overflow-hidden rounded border border-accent">
+      {note_actions.map((action) => {
+        const current = action.value === noteDefault
+        return (
+          <button
+            key={action.value}
+            className={`px-2 py-1 text-xs disabled:opacity-50 ${
+              current
+                ? 'bg-accent text-white hover:bg-accent-strong'
+                : 'text-accent hover:bg-accent/10'
+            }`}
+            disabled={disabled}
+            title={`${action.why}${current ? '' : ' — and remembered for next time'}`}
+            onClick={() => onSubmit(action.value, !current)}
+          >
+            {action.label}
+          </button>
+        )
+      })}
+    </span>
+  )
+}
+
 export function DraftForm({
   draft,
   surface = 'zone',
@@ -77,6 +132,8 @@ export function DraftForm({
   const updateDraftBody = useReview((s) => s.updateDraftBody)
   const setDraftRange = useReview((s) => s.setDraftRange)
   const submitKey = useReview((s) => s.submitKey)
+  const noteDefault = useReview((s) => s.noteDefault)
+  const rememberNoteDefault = useReview((s) => s.rememberNoteDefault)
   const submitDraft = useReview((s) => s.submitDraft)
   const cancelDraft = useReview((s) => s.cancelDraft)
   const setActiveDraft = useReview((s) => s.setActiveDraft)
@@ -180,11 +237,11 @@ export function DraftForm({
         data-stickie-draft={key}
         rows={2}
         className="w-full resize-y rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
-        placeholder={
-          submitKey === 'enter'
-            ? 'What should change here? (↵ to comment, ⇧↵ for a new line)'
-            : 'What should change here? (⌘↵ to comment, ↵ for a new line)'
-        }
+        placeholder={`What should change here? (${
+          submitKey === 'enter' ? '↵' : '⌘↵'
+        } to ${noteDefault === 'comment' ? 'comment' : 'draft'}, ${
+          submitKey === 'enter' ? '⇧↵' : '↵'
+        } for a new line)`}
         value={draft.body}
         onChange={(e) => {
           updateDraftBody(draft.id, e.target.value)
@@ -195,25 +252,26 @@ export function DraftForm({
         onKeyDown={(e) => {
           if (postsComment(e, submitKey)) {
             e.preventDefault()
+            // the key does whatever the button says it does
             void submitDraft(draft.id)
           }
           if (e.key === 'Escape') cancelDraft(draft.id)
         }}
       />
-      <div className="mt-1 flex justify-end gap-2">
+      <div className="mt-1 flex items-center justify-end gap-2">
         <button
           className="rounded px-2 py-1 text-xs text-soft hover:text-ink"
           onClick={() => cancelDraft(draft.id)}
         >
           cancel
         </button>
-        <button
-          className="rounded bg-accent px-2 py-1 text-xs text-white hover:bg-accent-strong disabled:opacity-50"
+        <SubmitSplit
           disabled={draft.body.trim() === ''}
-          onClick={() => void submitDraft(draft.id)}
-        >
-          comment
-        </button>
+          onSubmit={(as, remember) => {
+            if (remember) void rememberNoteDefault(as)
+            void submitDraft(draft.id, as)
+          }}
+        />
       </div>
     </div>
   )

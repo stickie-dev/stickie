@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { RepinMode, SubmitKey } from '../../api'
+import type { NoteDefault, RepinMode, SubmitKey } from '../../api'
 import { Field, Mono, SaveRow, Section } from './parts'
 import type { SettingsAccess } from './useSettings'
 
@@ -34,13 +34,28 @@ const submit_choices: { value: SubmitKey; label: string; why: string }[] = [
   },
 ]
 
+const note_choices: { value: NoteDefault; label: string; why: string }[] = [
+  {
+    value: 'draft',
+    label: 'A draft, held back until you send the review',
+    why: 'An agent gets a finished review rather than a note at a time. Submit review sends the batch, and a single note can still be posted on its own.',
+  },
+  {
+    value: 'comment',
+    label: 'A comment, sent to the agent at once',
+    why: 'For working alongside an agent a note at a time.',
+  },
+]
+
 export function ReviewsSection({ state, save, saving }: SettingsAccess) {
   const [mode, setMode] = useState<RepinMode>('always')
   const [submit, setSubmit] = useState<SubmitKey>('enter')
+  const [note, setNote] = useState<NoteDefault>('draft')
   useEffect(() => {
     if (state !== null) {
       setMode(state.repinMode)
       setSubmit(state.submitKey)
+      setNote(state.noteDefault)
     }
   }, [state])
 
@@ -111,9 +126,41 @@ export function ReviewsSection({ state, save, saving }: SettingsAccess) {
         </div>
       </Field>
 
+      <Field
+        label="A new note starts as"
+        hint="The submit button says which, and the arrow beside it changes this without coming here."
+      >
+        <div className="space-y-2">
+          {note_choices.map((choice) => (
+            <label
+              key={choice.value}
+              className="flex cursor-pointer gap-2 text-xs"
+            >
+              <input
+                type="radio"
+                name="note-default"
+                className="mt-0.5 shrink-0"
+                checked={note === choice.value}
+                onChange={() => setNote(choice.value)}
+              />
+              <span>
+                <span className="text-ink">{choice.label}</span>
+                <span className="block text-faint">{choice.why}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </Field>
+
       <SaveRow
         saving={saving}
-        onSave={() => void save({ repinMode: mode, submitKey: submit })}
+        onSave={() =>
+          void save({
+            repinMode: mode,
+            submitKey: submit,
+            noteDefault: note,
+          })
+        }
       />
     </Section>
   )

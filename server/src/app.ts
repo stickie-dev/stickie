@@ -392,6 +392,14 @@ const default_repin_mode = 'always'
 const submit_keys = ['enter', 'mod-enter'] as const
 const default_submit_key = 'enter'
 
+/**
+ * Whether a new note joins the review batch or goes to the agent at once.
+ * Draft by default, which is what stickie has always done and the reason the
+ * batch exists — an agent should get a finished review, not a stream.
+ */
+const note_defaults = ['draft', 'comment'] as const
+const default_note_default = 'draft'
+
 // extensions whose files open soft-wrapped; prose and data, not code
 const default_wrap_extensions = 'md,markdown,txt,rst,csv,log,json'
 
@@ -1781,6 +1789,8 @@ export function createApp(
             repinMode: z.enum(repin_modes),
             /** which keystroke posts a comment */
             submitKey: z.enum(submit_keys),
+            /** whether a new note is a draft or goes straight to the agent */
+            noteDefault: z.enum(note_defaults),
             identity: z.object({
               /** '' when nothing was set by hand and git config decides */
               chosenName: z.string(),
@@ -1821,6 +1831,7 @@ export function createApp(
     async (c) => {
       const settings = await gitlabSettings()
       const config = gitlabConfig(settings)
+      const stored_note_default = await store.getSetting('note_default')
       return c.json(
         {
           gitlabUrl: settings.url,
@@ -1838,6 +1849,10 @@ export function createApp(
           mcpCommand: mcpCommand(),
           repinMode: repinMode(await store.getSetting('repin_mode')),
           submitKey: submitKey(await store.getSetting('submit_key')),
+          noteDefault:
+            note_defaults.find(
+              (value) => value === stored_note_default,
+            ) ?? default_note_default,
           identity: {
             chosenName: (await store.getSetting('actor_name')) ?? '',
             perRepo: await Promise.all(
@@ -1884,6 +1899,7 @@ export function createApp(
             actorName: z.string().max(64).optional(),
             repinMode: z.enum(repin_modes).optional(),
             submitKey: z.enum(submit_keys).optional(),
+            noteDefault: z.enum(note_defaults).optional(),
           }),
         ),
       },
@@ -1917,6 +1933,9 @@ export function createApp(
       }
       if (body.submitKey !== undefined) {
         await store.setSetting('submit_key', body.submitKey)
+      }
+      if (body.noteDefault !== undefined) {
+        await store.setSetting('note_default', body.noteDefault)
       }
       if (body.actorName !== undefined) {
         await store.setSetting('actor_name', body.actorName.trim())

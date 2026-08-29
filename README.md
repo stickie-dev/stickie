@@ -76,9 +76,11 @@ the only output.
   right-click *Find usages* opens a hit panel, optionally sweeping every
   registered repo at once for cross-repo blast-radius checks
 - **Review batches** — a note is a *draft* until you hit Submit review, so
-  agents receive a finished review, not a stream; per-note *post now* when
-  you want immediacy. (The API field is still `pending`, so no adapter breaks
-  over a word.)
+  agents receive a finished review, not a stream. The submit control shows both
+  choices — *Draft* or *Comment*, the emphasised one being what Enter does —
+  and picking the other one remembers it, so the button always says what it
+  will do. Per-note *post now* for one draft; Settings → Reviews for the
+  default. (The API field is still `pending`, so no adapter breaks over a word.)
 - **Commit timeline** — the commits list never moves the review target
   (the pickers do that): a click opens that commit against its parent in its
   own tab, and ⌘/shift+click adds commits as further columns, so one file
