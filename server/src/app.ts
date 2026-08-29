@@ -29,6 +29,7 @@ import {
   changedFiles,
   commitFiles,
   defaultBranch,
+  describeRevs,
   expandUserPath,
   listCommitsBetween,
   fileAtRef,
@@ -44,6 +45,7 @@ import {
   mergeBase,
   repoRoot,
   resolveRef,
+  shortenRev,
 } from './git.js'
 import {
   fetchMrDiscussions,
@@ -52,7 +54,7 @@ import {
   projectFromRemote,
 } from './gitlab.js'
 import { findDefinitions, findReferences, searchText } from './nav.js'
-import type { Store } from './store.js'
+import type { SessionRollup, Store } from './store.js'
 import type { WatchHub } from './watcher.js'
 
 const error_schema = z.object({ error: z.string() }).openapi('Error')
@@ -68,8 +70,19 @@ const repo_info_schema = z
     name: z.string(),
     branch: z.string(),
     clean: z.boolean(),
+    changedFiles: z.number().int(),
   })
   .openapi('RepoInfo')
+
+const note_counts_schema = z
+  .object({
+    total: z.number().int(),
+    open: z.number().int(),
+    pending: z.number().int(),
+    resolved: z.number().int(),
+    detached: z.number().int(),
+  })
+  .openapi('NoteCounts')
 
 const source_schema = z
   .object({
@@ -188,6 +201,35 @@ const thread_schema = z
   })
   .openapi('Thread')
 
+const rev_label_schema = z
+  .object({ name: z.string(), subject: z.string().nullable() })
+  .openapi('RevLabel')
+
+/**
+ * A worktree source has no single commit to name, so it is named by what it is.
+ * A ref source is a branch (named, with its tip's subject) or a raw sha (shown
+ * short, since forty characters of hex tells a reader nothing).
+ */
+function sourceLabel(
+  session: Session,
+  repoPath: string | undefined,
+  subjects: Map<string, string>,
+): { name: string; subject: string | null } {
+  const { source } = session
+  if (source.kind === 'worktree') {
+    const own = repoPath !== undefined && repoPath === source.value
+    const name = source.value.split('/').at(-1) ?? source.value
+    return {
+      name: own ? 'working tree' : `worktree ${name}`,
+      subject: null,
+    }
+  }
+  return {
+    name: shortenRev(source.value) ?? source.value,
+    subject: subjects.get(source.value) ?? null,
+  }
+}
+
 const activity_schema = z
   .object({
     id: z.number().int(),
@@ -202,6 +244,37 @@ const activity_schema = z
     detail: z.record(z.string(), z.unknown()).nullable(),
   })
   .openapi('ActivityEntry')
+
+const review_overview_schema = z
+  .object({
+    sessionId: z.number().int(),
+    repoId: z.number().int(),
+    repoName: z.string(),
+    source: source_schema,
+    baseRef: z.string(),
+    baseSha: z.string(),
+    comparing: z.object({ source: rev_label_schema, base: rev_label_schema }),
+    notes: note_counts_schema,
+    filesRead: z.number().int(),
+    agentReplies: z.number().int(),
+    lastActivityAt: z.string().nullable(),
+    lastAction: z.string().nullable(),
+    lastActorName: z.string().nullable(),
+    awaiting: z.enum(['you', 'agent']).nullable(),
+  })
+  .openapi('ReviewOverview')
+
+const overview_schema = z
+  .object({
+    repos: z.array(
+      repo_info_schema.extend({
+        latestSessionId: z.number().int().nullable(),
+      }),
+    ),
+    reviews: z.array(review_overview_schema),
+    recent: z.array(activity_schema),
+  })
+  .openapi('Overview')
 
 const session_body = z.object({
   repoId: z.number().int(),
@@ -404,6 +477,7 @@ export function createApp(
             name: repo.path.split('/').at(-1) ?? repo.path,
             branch: status.branch,
             clean: status.clean,
+            changedFiles: status.changedFiles,
           }
         }),
       )
@@ -836,6 +910,118 @@ export function createApp(
         })
       }
       return c.json(listed, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/overview',
+      tags: ['sessions'],
+      summary: 'Every review in the workspace, with what is waiting on whom',
+      description:
+        'One request for the landing page. Everything about a review comes ' +
+        'from the database — nothing shells out to git per review, or listing ' +
+        'thirty of them would run thirty git commands; changed-file counts ' +
+        'and base staleness stay on the review itself, which knows them.',
+      responses: {
+        200: json_response(overview_schema, 'The workspace at a glance'),
+      },
+    }),
+    async (c) => {
+      const [repos, sessions, rollups, recent] = await Promise.all([
+        store.listRepos(),
+        store.listSessions(),
+        store.summarizeSessions(),
+        store.listActivity({}, 40),
+      ])
+
+      // a sha means nothing to read; its subject does. Gathered per repository
+      // over the distinct revisions its reviews name, so the number of git
+      // lookups follows the repositories and not the reviews
+      const wanted = new Map<number, string[]>()
+      for (const session of sessions) {
+        const revs = wanted.get(session.repoId) ?? []
+        revs.push(session.baseSha)
+        if (session.source.kind === 'ref') revs.push(session.source.value)
+        wanted.set(session.repoId, revs)
+      }
+      const subjects = new Map<number, Map<string, string>>()
+      await Promise.all(
+        repos.map(async (repo) => {
+          subjects.set(
+            repo.id,
+            await describeRevs(repo.path, wanted.get(repo.id) ?? []),
+          )
+        }),
+      )
+
+      const names = new Map(
+        repos.map((repo) => [
+          repo.id,
+          repo.path.split('/').at(-1) ?? repo.path,
+        ]),
+      )
+      // listSessions is newest first, so the first hit per repo is the newest
+      const latest = new Map<number, number>()
+      for (const session of sessions) {
+        if (!latest.has(session.repoId)) latest.set(session.repoId, session.id)
+      }
+
+      const empty: SessionRollup = {
+        notes: { total: 0, open: 0, pending: 0, resolved: 0, detached: 0 },
+        filesRead: 0,
+        agentReplies: 0,
+        lastActivityAt: null,
+        lastAction: null,
+        lastActorName: null,
+        awaiting: null,
+      }
+
+      return c.json(
+        {
+          repos: await Promise.all(
+            repos.map(async (repo) => {
+              const status = await gitStatus(repo.path)
+              return {
+                id: repo.id,
+                name: names.get(repo.id) ?? repo.path,
+                path: repo.path,
+                branch: status.branch,
+                clean: status.clean,
+                changedFiles: status.changedFiles,
+                latestSessionId: latest.get(repo.id) ?? null,
+              }
+            }),
+          ),
+          reviews: sessions.map((session) => {
+            const rollup = rollups.get(session.id) ?? empty
+            const known = subjects.get(session.repoId) ?? new Map()
+            const repo = repos.find((entry) => entry.id === session.repoId)
+            return {
+              sessionId: session.id,
+              repoId: session.repoId,
+              repoName: names.get(session.repoId) ?? session.repoPath,
+              source: session.source,
+              baseRef: session.baseRef,
+              baseSha: session.baseSha,
+              comparing: {
+                source: sourceLabel(session, repo?.path, known),
+                // the base's subject comes from the pinned sha, which is
+                // always resolvable, rather than from baseRef, which may be a
+                // symbolic name that has since moved
+                base: {
+                  name: shortenRev(session.baseRef) ?? session.baseRef,
+                  subject: known.get(session.baseSha) ?? null,
+                },
+              },
+              ...rollup,
+            }
+          }),
+          recent,
+        },
+        200,
+      )
     },
   )
 

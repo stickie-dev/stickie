@@ -11,6 +11,7 @@ export interface RepoInfo {
   name: string
   branch: string
   clean: boolean
+  changedFiles: number
 }
 
 export type SourceKind = 'worktree' | 'ref'
@@ -151,6 +152,75 @@ export interface ActivityEntry {
   threadId: number | null
   messageId: number | null
   detail: Record<string, unknown> | null
+}
+
+export interface NoteCounts {
+  total: number
+  /** unresolved and submitted: the pile that is actually waiting on somebody */
+  open: number
+  /** written but not submitted, so no agent can see them yet */
+  pending: number
+  resolved: number
+  /** the code the note was written against is gone */
+  detached: number
+}
+
+/**
+ * One review, as the overview needs it. Everything here comes from the
+ * database: nothing runs git per review, or a page listing thirty reviews
+ * would shell out thirty times. Changed-file counts and base staleness stay on
+ * the review itself, which already knows them.
+ */
+export interface RevLabel {
+  /** what to show: a branch name, "working tree", or a short sha */
+  name: string
+  /** the commit subject, truncated; null when there is no single commit to name */
+  subject: string | null
+}
+
+export interface ReviewOverview {
+  sessionId: number
+  repoId: number
+  repoName: string
+  source: ReviewSource
+  baseRef: string
+  baseSha: string
+  /** what this review compares, already in the words to show */
+  comparing: { source: RevLabel; base: RevLabel }
+  notes: NoteCounts
+  /** how many files were opened and marked read */
+  filesRead: number
+  /** replies from an agent — the round-trip count */
+  agentReplies: number
+  lastActivityAt: string | null
+  /** e.g. "note.replied", so a reader can see what moved last */
+  lastAction: string | null
+  lastActorName: string | null
+  /**
+   * Who the open notes are sitting with: 'you' when an agent has answered and
+   * nobody has looked, 'agent' when the ball is in its court, null when there
+   * is nothing open.
+   */
+  awaiting: 'you' | 'agent' | null
+}
+
+export interface RepoOverview {
+  id: number
+  name: string
+  path: string
+  branch: string
+  clean: boolean
+  changedFiles: number
+  /** the newest review of this repo, if it has one */
+  latestSessionId: number | null
+}
+
+export interface Overview {
+  repos: RepoOverview[]
+  /** newest review first */
+  reviews: ReviewOverview[]
+  /** the most recent entries across every repository */
+  recent: ActivityEntry[]
 }
 
 export interface FsEvent {

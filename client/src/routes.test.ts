@@ -24,16 +24,16 @@ describe('parseRoute', () => {
     expect(parseRoute('/settings/gitlab/extra')).toBeNull()
   })
 
-  it('reads the flow and commits tabs', () => {
-    expect(parseRoute('/r/3/flow')).toEqual({
+  it('reads the diff and commits tabs', () => {
+    expect(parseRoute('/r/3/diff')).toEqual({
       kind: 'review',
       repoId: 3,
-      tab: { kind: 'flow' },
+      tab: { kind: 'diff' },
     })
     expect(parseRoute('/r/3')).toEqual({
       kind: 'review',
       repoId: 3,
-      tab: { kind: 'flow' },
+      tab: { kind: 'diff' },
     })
     expect(parseRoute('/r/3/commits')).toEqual({
       kind: 'review',
@@ -74,9 +74,9 @@ describe('parseRoute', () => {
   })
 
   it('rejects a repo id that is not a positive integer', () => {
-    expect(parseRoute('/r/0/flow')).toBeNull()
-    expect(parseRoute('/r/3x/flow')).toBeNull()
-    expect(parseRoute('/r/-1/flow')).toBeNull()
+    expect(parseRoute('/r/0/diff')).toBeNull()
+    expect(parseRoute('/r/3x/diff')).toBeNull()
+    expect(parseRoute('/r/-1/diff')).toBeNull()
   })
 
   it('rejects an unknown page', () => {
@@ -89,7 +89,7 @@ describe('formatRoute', () => {
   const cases: [Page, string][] = [
     [{ kind: 'home' }, '/'],
     [{ kind: 'settings', section: 'agents' }, '/settings/agents'],
-    [{ kind: 'review', repoId: 3, tab: { kind: 'flow' } }, '/r/3/flow'],
+    [{ kind: 'review', repoId: 3, tab: { kind: 'diff' } }, '/r/3/diff'],
     [{ kind: 'review', repoId: 3, tab: { kind: 'commits' } }, '/r/3/commits'],
     [
       { kind: 'review', repoId: 3, tab: { kind: 'file', path: 'src/a.ts' } },
@@ -121,7 +121,7 @@ describe('formatRoute', () => {
 
 describe('isReviewRoute', () => {
   it('is true only for the review workspace', () => {
-    expect(isReviewRoute({ kind: 'review', repoId: 1, tab: { kind: 'flow' } })).toBe(
+    expect(isReviewRoute({ kind: 'review', repoId: 1, tab: { kind: 'diff' } })).toBe(
       true,
     )
     expect(isReviewRoute({ kind: 'home' })).toBe(false)
@@ -131,8 +131,8 @@ describe('isReviewRoute', () => {
 
 describe('sameTab', () => {
   it('matches by kind', () => {
-    expect(sameTab({ kind: 'flow' }, { kind: 'flow' })).toBe(true)
-    expect(sameTab({ kind: 'flow' }, { kind: 'commits' })).toBe(false)
+    expect(sameTab({ kind: 'diff' }, { kind: 'diff' })).toBe(true)
+    expect(sameTab({ kind: 'diff' }, { kind: 'commits' })).toBe(false)
   })
 
   it('matches file tabs by path, ignoring line and side', () => {

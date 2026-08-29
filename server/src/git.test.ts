@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseNameStatus, parseWorktrees } from './git.js'
+import { parseNameStatus, parseWorktrees, shortenRev } from './git.js'
 
 describe('parseNameStatus', () => {
   it('maps status letters', () => {
@@ -53,5 +53,25 @@ describe('parseWorktrees', () => {
         isMain: false,
       },
     ])
+  })
+})
+
+describe('shortenRev', () => {
+  const sha = 'b5d063d60fc4cd1a2cc1e52732570e71f61ebcca'
+
+  it('shortens a full sha to eight characters', () => {
+    expect(shortenRev(sha)).toBe('b5d063d6')
+  })
+
+  it('keeps git parent suffixes', () => {
+    expect(shortenRev(`${sha}^`)).toBe('b5d063d6^')
+    expect(shortenRev(`${sha}^^`)).toBe('b5d063d6^^')
+  })
+
+  it('leaves anything that is not a full sha alone', () => {
+    expect(shortenRev('main')).toBeNull()
+    expect(shortenRev('HEAD')).toBeNull()
+    expect(shortenRev('feature/b5d063d6')).toBeNull()
+    expect(shortenRev(sha.slice(0, 12))).toBeNull()
   })
 })

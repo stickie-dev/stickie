@@ -63,8 +63,14 @@ export function TopBar() {
 
   return (
     <header className="flex items-center gap-3 border-b border-edge px-3 py-2 text-xs">
-      <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
-      <span className="font-bold tracking-wide text-ink">stickie</span>
+      <Link
+        to="/"
+        className="flex items-center gap-2"
+        title="every review, across every repository"
+      >
+        <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
+        <span className="font-bold tracking-wide text-ink">stickie</span>
+      </Link>
       <span
         className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-faint'}`}
         title={connected ? 'live updates on' : 'not connected'}
@@ -185,7 +191,7 @@ export function TopBar() {
       {pending_count > 0 && (
         <button
           className="rounded bg-emerald-600 px-2.5 py-1 font-medium text-white hover:bg-emerald-500"
-          title="post all pending notes so agents can see them"
+          title="send every draft note so agents can see them"
           onClick={() => void submitReview()}
         >
           Submit review ({pending_count})

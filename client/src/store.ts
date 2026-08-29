@@ -701,7 +701,7 @@ export const useReview = create<ReviewState>((set, get) => {
 
     openAddress: async (repoId, tab) => {
       if (repoId !== get().activeRepoId) await get().selectRepo(repoId)
-      if (tab.kind === 'flow') {
+      if (tab.kind === 'diff') {
         set({ viewMode: 'flow', activeTabId: ensureFlowTab(repoId).id })
         return
       }

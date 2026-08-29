@@ -22,8 +22,14 @@ export const settings_sections = [
 
 export type SettingsSection = (typeof settings_sections)[number]
 
+/**
+ * `diff` is the continuous scroll of every changed file — the tab bar has
+ * always called it "diff", so the address says diff too. The store still calls
+ * that view mode `flow` internally; renaming it there is a wide mechanical
+ * change with nothing user-visible in it.
+ */
 export type TabRef =
-  | { kind: 'flow' }
+  | { kind: 'diff' }
   | { kind: 'commits' }
   | { kind: 'file'; path: string; line?: number; side?: Side }
 
@@ -80,9 +86,9 @@ export function parseRoute(pathname: string, search = ''): Page | null {
     const id = repoId(segments[1] ?? '')
     if (id === null) return null
     const kind = segments[2]
-    if (kind === undefined || kind === 'flow') {
+    if (kind === undefined || kind === 'diff') {
       return segments.length <= 3
-        ? { kind: 'review', repoId: id, tab: { kind: 'flow' } }
+        ? { kind: 'review', repoId: id, tab: { kind: 'diff' } }
         : null
     }
     if (kind === 'commits') {
@@ -124,7 +130,7 @@ export function formatRoute(page: Page): string {
   if (page.kind === 'settings') return `/settings/${page.section}`
   const base = `/r/${page.repoId}`
   const { tab } = page
-  if (tab.kind === 'flow') return `${base}/flow`
+  if (tab.kind === 'diff') return `${base}/diff`
   if (tab.kind === 'commits') return `${base}/commits`
   const params = new URLSearchParams()
   if (tab.line !== undefined) params.set('line', String(tab.line))

@@ -25,6 +25,65 @@ async function gitOrNull(repo: string, args: string[]): Promise<string | null> {
   }
 }
 
+export interface RevLabel {
+  /** what to show: a branch name, "working tree", or a short sha */
+  name: string
+  /** the commit subject, truncated; null when git could not say */
+  subject: string | null
+}
+
+const subject_max = 60
+
+/** How many revisions one overview will look up; a bound, not a tuning knob. */
+const rev_lookup_cap = 60
+
+/**
+ * Subjects for a set of revisions, one lookup each, run together. This is the
+ * only place the overview touches git per review, which is why it is deduped
+ * and capped: a page listing every review in the workspace must not turn into
+ * an unbounded number of processes. A revision git cannot resolve simply has
+ * no subject — a stale sha must not fail the page.
+ */
+export async function describeRevs(
+  repo: string,
+  revs: string[],
+): Promise<Map<string, string>> {
+  const wanted = [...new Set(revs.filter((rev) => rev !== ''))].slice(
+    0,
+    rev_lookup_cap,
+  )
+  const found = await Promise.all(
+    wanted.map(async (rev) => {
+      const out = await gitOrNull(repo, [
+        'log',
+        '-1',
+        '--format=%s',
+        rev,
+        '--',
+      ])
+      return [rev, out === null ? null : truncate(out.trim())] as const
+    }),
+  )
+  const map = new Map<string, string>()
+  for (const [rev, subject] of found) {
+    if (subject !== null && subject !== '') map.set(rev, subject)
+  }
+  return map
+}
+
+function truncate(subject: string): string {
+  return subject.length <= subject_max
+    ? subject
+    : `${subject.slice(0, subject_max - 1).trimEnd()}…`
+}
+
+/** A 40-hex sha, optionally with git's parent suffix. */
+export function shortenRev(rev: string): string | null {
+  const match = /^([0-9a-f]{40})(\^*)$/.exec(rev)
+  if (match === null) return null
+  return `${(match[1] ?? '').slice(0, 8)}${match[2] ?? ''}`
+}
+
 /**
  * A git config value, or null. With no repo it reads the global config, which
  * is where a person's own name and email normally live.

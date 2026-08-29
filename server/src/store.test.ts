@@ -309,3 +309,124 @@ describe('Store activity', () => {
     expect(await store.listActivity({ sessionId: session.id }, 2)).toHaveLength(2)
   })
 })
+
+describe('Store.summarizeSessions', () => {
+  const seed = async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const session = await store.getOrCreateSession(
+      repo.id,
+      { kind: 'worktree', value: '/tmp/repo' },
+      'master',
+      'abc123',
+    )
+    return { store, repo, session }
+  }
+
+  const note = (
+    store: Awaited<ReturnType<typeof freshStore>>,
+    sessionId: number,
+    path: string,
+    options: { pending?: boolean } = {},
+  ) =>
+    store.createThread(
+      sessionId,
+      path,
+      'source',
+      1,
+      1,
+      null,
+      'x',
+      'user',
+      'look at this',
+      options,
+    )
+
+  it('counts notes by status and pending', async () => {
+    const { store, session } = await seed()
+    const open = await note(store, session.id, 'a.ts')
+    await note(store, session.id, 'b.ts', { pending: true })
+    const done = await note(store, session.id, 'c.ts')
+    await store.setThreadStatus(done.id, 'resolved')
+
+    const summary = (await store.summarizeSessions()).get(session.id)
+    expect(summary?.notes).toEqual({
+      total: 3,
+      open: 2,
+      pending: 1,
+      resolved: 1,
+      detached: 0,
+    })
+    expect(open.status).toBe('open')
+  })
+
+  it('says a review is waiting on you once an agent has answered', async () => {
+    const { store, session } = await seed()
+    const thread = await note(store, session.id, 'a.ts')
+    expect((await store.summarizeSessions()).get(session.id)?.awaiting).toBe(
+      'agent',
+    )
+    await store.addMessage(thread.id, 'agent', 'done')
+    expect((await store.summarizeSessions()).get(session.id)?.awaiting).toBe(
+      'you',
+    )
+  })
+
+  it('waits on nobody when every note is resolved', async () => {
+    const { store, session } = await seed()
+    const thread = await note(store, session.id, 'a.ts')
+    await store.setThreadStatus(thread.id, 'resolved')
+    expect(
+      (await store.summarizeSessions()).get(session.id)?.awaiting,
+    ).toBeNull()
+  })
+
+  it('ignores pending notes when deciding who is waiting', async () => {
+    const { store, session } = await seed()
+    await note(store, session.id, 'a.ts', { pending: true })
+    expect(
+      (await store.summarizeSessions()).get(session.id)?.awaiting,
+    ).toBeNull()
+  })
+
+  it('counts files read and agent replies, and reports the last action', async () => {
+    const { store, repo, session } = await seed()
+    const agent = await store.getOrCreateActor('agent', 'claude-code')
+    await store.setViewed(session.id, 'a.ts', true)
+    await store.setViewed(session.id, 'b.ts', true)
+    await store.recordActivity({
+      subject: 'note',
+      action: 'replied',
+      actorId: agent.id,
+      repoId: repo.id,
+      sessionId: session.id,
+    })
+    await store.recordActivity({
+      subject: 'review',
+      action: 'submitted',
+      repoId: repo.id,
+      sessionId: session.id,
+    })
+
+    const summary = (await store.summarizeSessions()).get(session.id)
+    expect(summary?.filesRead).toBe(2)
+    expect(summary?.agentReplies).toBe(1)
+    expect(summary?.lastAction).toBe('review.submitted')
+  })
+
+  it('keeps two sessions apart', async () => {
+    const { store, repo, session } = await seed()
+    const other = await store.getOrCreateSession(
+      repo.id,
+      { kind: 'worktree', value: '/tmp/repo' },
+      'master',
+      'def456',
+    )
+    await note(store, session.id, 'a.ts')
+    await note(store, other.id, 'b.ts')
+    await note(store, other.id, 'c.ts')
+    const summary = await store.summarizeSessions()
+    expect(summary.get(session.id)?.notes.total).toBe(1)
+    expect(summary.get(other.id)?.notes.total).toBe(2)
+  })
+})

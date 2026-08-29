@@ -9,6 +9,7 @@ import type {
   Actor,
   ActorKind,
   Author,
+  NoteCounts,
   ReviewSource,
   Session,
   Side,
@@ -352,6 +353,131 @@ export class Store {
   }
 
   /**
+   * Per-session rollups for the overview, in a few grouped queries rather than
+   * a handful per review: a landing page listing every review in the workspace
+   * cannot afford to be N+1, which `listSessions` plus `countOpenThreads` in a
+   * loop already was.
+   */
+  async summarizeSessions(): Promise<Map<number, SessionRollup>> {
+    const out = new Map<number, SessionRollup>()
+    const at = (id: number): SessionRollup => {
+      const found = out.get(id)
+      if (found !== undefined) return found
+      const fresh: SessionRollup = {
+        notes: { total: 0, open: 0, pending: 0, resolved: 0, detached: 0 },
+        filesRead: 0,
+        agentReplies: 0,
+        lastActivityAt: null,
+        lastAction: null,
+        lastActorName: null,
+        awaiting: null,
+      }
+      out.set(id, fresh)
+      return fresh
+    }
+
+    const counts = await this.db.all<{
+      session_id: number
+      total: number
+      open: number
+      pending: number
+      resolved: number
+      detached: number
+    }>(
+      `select session_id,
+              count(*) as total,
+              sum(case when status = 'open' then 1 else 0 end) as open,
+              sum(case when pending = ? then 1 else 0 end) as pending,
+              sum(case when status = 'resolved' then 1 else 0 end) as resolved,
+              sum(case when status = 'detached' then 1 else 0 end) as detached
+       from threads group by session_id`,
+      [this.trueValue],
+    )
+    for (const row of counts) {
+      at(row.session_id).notes = {
+        total: Number(row.total),
+        open: Number(row.open),
+        pending: Number(row.pending),
+        resolved: Number(row.resolved),
+        detached: Number(row.detached),
+      }
+    }
+
+    const read = await this.db.all<{ session_id: number; n: number }>(
+      'select session_id, count(*) as n from viewed_files group by session_id',
+    )
+    for (const row of read) at(row.session_id).filesRead = Number(row.n)
+
+    // the last message of each open, submitted note decides who it is sitting
+    // with: an agent answer nobody has read yet is waiting on the human
+    const waiting = await this.db.all<{
+      session_id: number
+      answered: number
+      open_notes: number
+    }>(
+      `select t.session_id,
+              sum(case when m.author = 'agent' then 1 else 0 end) as answered,
+              count(*) as open_notes
+       from threads t
+       join messages m on m.id = (select max(id) from messages where thread_id = t.id)
+       where t.status = 'open' and t.pending = ?
+       group by t.session_id`,
+      [this.falseValue],
+    )
+    for (const row of waiting) {
+      const entry = at(row.session_id)
+      entry.awaiting =
+        Number(row.answered) > 0
+          ? 'you'
+          : Number(row.open_notes) > 0
+            ? 'agent'
+            : null
+    }
+
+    const totals = await this.db.all<{
+      session_id: number
+      replies: number
+      last_at: string | Date | null
+    }>(
+      `select v.session_id,
+              sum(case when v.subject = 'note' and v.action = 'replied' and a.kind = 'agent' then 1 else 0 end) as replies,
+              max(v.at) as last_at
+       from activity v
+       left join actors a on a.id = v.actor_id
+       where v.session_id is not null
+       group by v.session_id`,
+    )
+    for (const row of totals) {
+      const entry = at(row.session_id)
+      entry.agentReplies = Number(row.replies)
+      entry.lastActivityAt = row.last_at === null ? null : toText(row.last_at)
+    }
+
+    // max() over subject and action separately would splice two different rows
+    // together, so the newest entry per session is fetched as itself
+    const latest = await this.db.all<{
+      session_id: number
+      subject: string
+      action: string
+      actor_name: string | null
+    }>(
+      `select v.session_id, v.subject, v.action, a.name as actor_name
+       from activity v
+       left join actors a on a.id = v.actor_id
+       where v.id in (
+         select max(id) from activity where session_id is not null group by session_id
+       )`,
+    )
+    for (const row of latest) {
+      const entry = at(row.session_id)
+      entry.lastAction = `${row.subject}.${row.action}`
+      entry.lastActorName = row.actor_name
+    }
+
+    return out
+  }
+
+  /**
    * Whether a session already carries one of these. The get-or-create routes
    * are called on every visit, so "has this been recorded once" is what keeps
    * them from writing a row per page load.
@@ -511,6 +637,16 @@ export class Store {
       messages,
     }
   }
+}
+
+export interface SessionRollup {
+  notes: NoteCounts
+  filesRead: number
+  agentReplies: number
+  lastActivityAt: string | null
+  lastAction: string | null
+  lastActorName: string | null
+  awaiting: 'you' | 'agent' | null
 }
 
 interface ActivityRow {

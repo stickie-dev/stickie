@@ -100,7 +100,7 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
         </span>
         {thread.pending && (
           <span className="rounded border border-violet-500/40 bg-violet-500/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-violet-700 dark:text-violet-300">
-            pending
+            draft
           </span>
         )}
         {thread.origin !== null && (

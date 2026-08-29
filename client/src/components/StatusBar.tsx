@@ -85,7 +85,8 @@ export function StatusBar() {
   }
 
   const unresolved = threads.filter((t) => t.status !== 'resolved').length
-  const pending = threads.filter((t) => t.pending).length
+  // `pending` is the API's name for it; a person reading the bar sees a draft
+  const drafts = threads.filter((t) => t.pending).length
   const seen = files.filter((f) => viewed.has(f.path)).length
 
   const copyPath = () => {
@@ -180,7 +181,7 @@ export function StatusBar() {
       <span className="grow" />
       <span className="shrink-0 text-faint">
         {files.length} changed · {seen} viewed · {unresolved} unresolved
-        {pending > 0 ? ` · ${pending} pending` : ''}
+        {drafts > 0 ? ` · ${drafts} draft` : ''}
       </span>
       <span
         className={`ml-2 shrink-0 ${connected ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}

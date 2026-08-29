@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router'
 import type { ClientEvent } from '@stickie/shared'
 import './monacoSetup'
 import { AddRepo } from './components/AddRepo'
+import { OverviewPage } from './components/OverviewPage'
 import { SettingsPage } from './components/settings/SettingsPage'
 import { Toasts } from './components/Toasts'
 import { Workspace } from './components/Workspace'
@@ -17,8 +18,10 @@ interface Here {
   tab: TabRef
 }
 
+/** The store's internal name for the continuous scroll is `flow`; an address
+ * calls it what the tab bar does. */
 function tabRef(tab: Tab): TabRef | null {
-  if (tab.kind === 'flow') return { kind: 'flow' }
+  if (tab.kind === 'flow') return { kind: 'diff' }
   if (tab.kind === 'commits') return { kind: 'commits' }
   return tab.path === undefined ? null : { kind: 'file', path: tab.path }
 }
@@ -116,21 +119,16 @@ function useRouteSync(page: Page | null, here: Here | null): void {
  * What a non-review address shows. Drawn over the workspace rather than in
  * place of it, so the review surface behind keeps its editors and its scroll.
  */
-function PageLayer({ page, here }: { page: Page | null; here: Here | null }) {
+function PageLayer({ page }: { page: Page | null }) {
   const repos = useReview((s) => s.repos)
 
   if (page === null) return <Navigate to="/" replace />
 
   if (page.kind === 'settings') return <SettingsPage section={page.section} />
 
+  // the root is the overview, and the way in to a workspace with no repos yet
   if (page.kind === 'home') {
-    if (repos.length === 0) return <AddRepo />
-    // the landing page arrives with the dashboard; for now the root is the way
-    // back to whichever tab was last open
-    if (here !== null) {
-      return <Navigate to={formatRoute({ kind: 'review', ...here })} replace />
-    }
-    return <div className="p-6 text-xs text-faint">loading…</div>
+    return repos.length === 0 ? <AddRepo /> : <OverviewPage />
   }
 
   return null
@@ -220,7 +218,7 @@ export function App() {
         {workspaceMounted && <Workspace active={on_review} />}
         {!on_review && (
           <div className="absolute inset-0 z-30 overflow-auto bg-surface">
-            <PageLayer page={page} here={here} />
+            <PageLayer page={page} />
           </div>
         )}
       </div>

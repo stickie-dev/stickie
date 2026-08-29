@@ -11,6 +11,14 @@ the only output.
 
 ## Features
 
+- **Overview** — the landing page. One row per thing being reviewed — a
+  repository's working tree, a branch, or a single commit — sorted by what it
+  wants from you and labelled *needs you* / *with agent* / *draft* / *clear*,
+  with note counts, agent round-trips, and what it compares as a short sha and
+  commit subject rather than forty characters of hex. Re-pinning the base as a
+  branch moves keeps the same row. Plus one activity feed across every
+  repository. A draft review in another repository used to be invisible until
+  you switched to it
 - **Continuous review flow** — every changed file stacked in one scroll
   (GitLab-style), sections mounting as they approach the viewport; or open
   any file on its own
@@ -23,7 +31,7 @@ the only output.
   reload
 - **Status bar** — the current path as clickable segments: each one opens
   what sits beside it (folders and files at that level) or copies the path,
-  beside the review's tally — files changed, viewed, unresolved, pending
+  beside the review's tally — files changed, viewed, unresolved, draft
 - **Linkable** — every tab has an address (`/r/1/file/src/store.ts?line=42`),
   so a file at a line can be pasted to someone else, or bookmarked; browser
   back and forward walk the tabs you opened
@@ -58,9 +66,10 @@ the only output.
   (per-language regex heuristics over bundled ripgrep, no indexer daemon);
   right-click *Find usages* opens a hit panel, optionally sweeping every
   registered repo at once for cross-repo blast-radius checks
-- **Review batches** — notes are *pending* until you hit Submit review, so
+- **Review batches** — a note is a *draft* until you hit Submit review, so
   agents receive a finished review, not a stream; per-note *post now* when
-  you want immediacy
+  you want immediacy. (The API field is still `pending`, so no adapter breaks
+  over a word.)
 - **Commit timeline** — the commits list never moves the review target
   (the pickers do that): a click opens that commit against its parent in its
   own tab, and ⌘/shift+click adds commits as further columns, so one file
@@ -147,9 +156,10 @@ spec is generated from the code and cannot drift.
 | POST | `/api/threads/:id/resolve` · `/reopen` | close / reopen |
 | GET | `/api/sessions/:id/prompt` | self-contained markdown export |
 | GET | `/api/sessions` | every review, newest first |
-| POST | `/api/sessions/:id/submit-review` | post the pending batch |
+| POST | `/api/sessions/:id/submit-review` | post the draft batch (`pending` in the API) |
 | GET | `/api/repos/:id/file?path=&rev=` | any file, at any revision |
 | GET | `/api/sessions/:id/activity` | the append-only record, newest first |
+| GET | `/api/overview` | every review and repo, with what waits on whom |
 
 The table is the agent-facing subset; Swagger lists the whole surface,
 including the UI's own routes (navigation, settings, commit files, viewed

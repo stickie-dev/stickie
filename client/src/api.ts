@@ -1,6 +1,7 @@
 import type {
   ActivityEntry,
   Author,
+  Overview,
   ChangedFile,
   FileContent,
   RepoInfo,
@@ -170,6 +171,8 @@ export const api = {
     fetch(
       `/api/sessions/${String(sessionId)}/activity${limit === undefined ? '' : `?limit=${String(limit)}`}`,
     ).then(toJson<ActivityEntry[]>),
+
+  overview: () => fetch('/api/overview').then(toJson<Overview>),
 
   settings: () => fetch('/api/settings').then(toJson<SettingsState>),
 
