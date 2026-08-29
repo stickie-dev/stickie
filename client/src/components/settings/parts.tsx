@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { btn, field, sunken } from '../../ui'
 
@@ -41,14 +42,19 @@ export function Field({
   )
 }
 
-/** Each section saves on its own, so each section carries its own button. */
-export function SaveRow({
+/**
+ * The button for the few settings that are not applied as they are touched: a
+ * name, the prompt instructions, the database behind everything. Those are
+ * written rather than chosen, and a half-written one is not an answer — so
+ * they wait to be applied, and everything else saves itself.
+ */
+export function ApplyRow({
   saving,
-  onSave,
+  onApply,
   children,
 }: {
   saving: boolean
-  onSave: () => void
+  onApply: () => void
   children?: ReactNode
 }) {
   return (
@@ -56,13 +62,37 @@ export function SaveRow({
       <button
         className={`text-xs ${btn('primary', 'px-3 py-1.5')}`}
         disabled={saving}
-        onClick={onSave}
+        onClick={onApply}
       >
-        {saving ? 'saving…' : 'save'}
+        {saving ? 'applying…' : 'apply'}
       </button>
       {children}
     </div>
   )
+}
+
+/**
+ * A field's local copy of a setting.
+ *
+ * Every save re-reads the whole settings object, and now that most of them
+ * save themselves that happens while someone is in the middle of typing
+ * somewhere else — a radio in Reviews would have reset a half-written prompt
+ * to what the server still had. So the answer from the server is adopted only
+ * when the box still holds what the server last said. What a reader typed
+ * outranks what the reader has not changed.
+ */
+export function useFieldValue(saved: string | undefined) {
+  const [value, setValue] = useState(saved ?? '')
+  /** what the server last said, which is what "untouched" means here */
+  const shown = useRef(saved)
+
+  useEffect(() => {
+    if (saved === undefined) return
+    setValue((current) => (current === (shown.current ?? '') ? saved : current))
+    shown.current = saved
+  }, [saved])
+
+  return { value, setValue, dirty: value !== (saved ?? '') }
 }
 
 export function Mono({ children }: { children: ReactNode }) {

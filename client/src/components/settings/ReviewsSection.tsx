@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { NoteDefault, RemoveMode, RepinMode, SubmitKey } from '../../api'
-import { Field, Mono, SaveRow, Section } from './parts'
+import { Field, Mono, Section } from './parts'
 import type { SettingsAccess } from './useSettings'
 
 const choices: { value: RepinMode; label: string; why: string }[] = [
@@ -60,7 +60,7 @@ const remove_choices: { value: RemoveMode; label: string; why: string }[] = [
   },
 ]
 
-export function ReviewsSection({ state, save, saving }: SettingsAccess) {
+export function ReviewsSection({ state, save }: SettingsAccess) {
   const [mode, setMode] = useState<RepinMode>('always')
   const [submit, setSubmit] = useState<SubmitKey>('enter')
   const [note, setNote] = useState<NoteDefault>('draft')
@@ -100,7 +100,10 @@ export function ReviewsSection({ state, save, saving }: SettingsAccess) {
                 name="repin-mode"
                 className="mt-0.5 shrink-0"
                 checked={mode === choice.value}
-                onChange={() => setMode(choice.value)}
+                onChange={() => {
+                  setMode(choice.value)
+                  void save({ repinMode: choice.value }, { quiet: true })
+                }}
               />
               <span>
                 <span className="text-ink">{choice.label}</span>
@@ -130,7 +133,10 @@ export function ReviewsSection({ state, save, saving }: SettingsAccess) {
                 name="submit-key"
                 className="mt-0.5 shrink-0"
                 checked={submit === choice.value}
-                onChange={() => setSubmit(choice.value)}
+                onChange={() => {
+                  setSubmit(choice.value)
+                  void save({ submitKey: choice.value }, { quiet: true })
+                }}
               />
               <span>
                 <span className="text-ink">{choice.label}</span>
@@ -156,7 +162,10 @@ export function ReviewsSection({ state, save, saving }: SettingsAccess) {
                 name="note-default"
                 className="mt-0.5 shrink-0"
                 checked={note === choice.value}
-                onChange={() => setNote(choice.value)}
+                onChange={() => {
+                  setNote(choice.value)
+                  void save({ noteDefault: choice.value }, { quiet: true })
+                }}
               />
               <span>
                 <span className="text-ink">{choice.label}</span>
@@ -182,7 +191,10 @@ export function ReviewsSection({ state, save, saving }: SettingsAccess) {
                 name="remove-mode"
                 className="mt-0.5 shrink-0"
                 checked={removal === choice.value}
-                onChange={() => setRemoval(choice.value)}
+                onChange={() => {
+                  setRemoval(choice.value)
+                  void save({ removeMode: choice.value }, { quiet: true })
+                }}
               />
               <span>
                 <span className="text-ink">{choice.label}</span>
@@ -193,17 +205,6 @@ export function ReviewsSection({ state, save, saving }: SettingsAccess) {
         </div>
       </Field>
 
-      <SaveRow
-        saving={saving}
-        onSave={() =>
-          void save({
-            repinMode: mode,
-            submitKey: submit,
-            noteDefault: note,
-            removeMode: removal,
-          })
-        }
-      />
     </Section>
   )
 }

@@ -12,7 +12,7 @@ export interface SettingsAccess {
    * untouched, which is what lets each section save on its own — a section
    * nobody opened cannot write a stale value over a fresh one.
    */
-  save: (fields: SaveFields) => Promise<void>
+  save: (fields: SaveFields, options?: { quiet?: boolean }) => Promise<void>
   saving: boolean
 }
 
@@ -37,8 +37,15 @@ export function useSettings(): SettingsAccess {
       )
   }, [pushToast])
 
+  /**
+   * `quiet` is for a control that saved itself. A radio that has moved, or a
+   * field you have just left, has already shown you what it did; a toast on
+   * top of that is the interface reading its own work back to you, once per
+   * click. A failure still speaks, because that is the case where the control
+   * is showing something that did not happen.
+   */
   const save = useCallback(
-    async (fields: SaveFields) => {
+    async (fields: SaveFields, options?: { quiet?: boolean }) => {
       setSaving(true)
       try {
         const result = await api.saveSettings(fields)
@@ -50,12 +57,11 @@ export function useSettings(): SettingsAccess {
         setRepinMode(fresh.repinMode)
         setSubmitKey(fresh.submitKey)
         setNoteDefault(fresh.noteDefault)
-        pushToast(
-          'info',
-          result.restartRequired
-            ? 'saved — restart stickie to use the new database'
-            : 'saved',
-        )
+        if (result.restartRequired) {
+          pushToast('info', 'saved — restart stickie to use the new database')
+        } else if (options?.quiet !== true) {
+          pushToast('info', 'saved')
+        }
       } catch (error) {
         pushToast(
           'error',

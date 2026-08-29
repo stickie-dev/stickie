@@ -1,16 +1,21 @@
-import { useEffect, useState } from 'react'
-import { Field, Mono, SaveRow, Section, field_classes } from './parts'
+import {
+  ApplyRow,
+  Field,
+  Mono,
+  Section,
+  field_classes,
+  useFieldValue,
+} from './parts'
 import type { SettingsAccess } from './useSettings'
 
 export function PromptSection({ state, save, saving }: SettingsAccess) {
-  const [instructions, setInstructions] = useState('')
-  useEffect(() => {
-    if (state !== null) setInstructions(state.promptInstructions)
-  }, [state])
+  // twelve rows of prose: the one setting most obviously mid-thought while
+  // something else is being saved, and the reason `useFieldValue` guards it
+  const instructions = useFieldValue(state?.promptInstructions)
 
   const customised =
     state !== null &&
-    instructions.trim() !== state.defaultPromptInstructions.trim()
+    instructions.value.trim() !== state.defaultPromptInstructions.trim()
 
   return (
     <Section
@@ -28,23 +33,23 @@ export function PromptSection({ state, save, saving }: SettingsAccess) {
         <textarea
           rows={12}
           className={`${field_classes} resize-y`}
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
+          value={instructions.value}
+          onChange={(e) => instructions.setValue(e.target.value)}
         />
       </Field>
-      <SaveRow
+      <ApplyRow
         saving={saving}
-        onSave={() => void save({ promptInstructions: instructions })}
+        onApply={() => void save({ promptInstructions: instructions.value })}
       >
         {customised && state !== null && (
           <button
             className="text-xs text-accent hover:underline"
-            onClick={() => setInstructions(state.defaultPromptInstructions)}
+            onClick={() => instructions.setValue(state.defaultPromptInstructions)}
           >
             restore the default
           </button>
         )}
-      </SaveRow>
+      </ApplyRow>
     </Section>
   )
 }

@@ -1,5 +1,11 @@
-import { useEffect, useState } from 'react'
-import { Field, Mono, SaveRow, Section, field_classes } from './parts'
+import {
+  ApplyRow,
+  Field,
+  Mono,
+  Section,
+  field_classes,
+  useFieldValue,
+} from './parts'
 import type { SettingsAccess } from './useSettings'
 
 const sources: Record<string, string> = {
@@ -13,10 +19,8 @@ const sources: Record<string, string> = {
 }
 
 export function IdentitySection({ state, save, saving }: SettingsAccess) {
-  const [name, setName] = useState('')
-  useEffect(() => {
-    if (state !== null) setName(state.identity.chosenName)
-  }, [state])
+  // the name is written rather than picked, so it waits to be applied
+  const name = useFieldValue(state?.identity.chosenName)
 
   const rows = state?.identity.perRepo ?? []
 
@@ -32,11 +36,14 @@ export function IdentitySection({ state, save, saving }: SettingsAccess) {
         <input
           className={field_classes}
           placeholder={state?.identity.fallback.name ?? ''}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          value={name.value}
+          onChange={(e) => name.setValue(e.target.value)}
         />
       </Field>
-      <SaveRow saving={saving} onSave={() => void save({ actorName: name })} />
+      <ApplyRow
+        saving={saving}
+        onApply={() => void save({ actorName: name.value })}
+      />
 
       <div className="pt-3">
         <h3 className="text-xs font-semibold tracking-wide text-soft uppercase">

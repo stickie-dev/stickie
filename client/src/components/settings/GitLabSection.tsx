@@ -1,20 +1,13 @@
-import { useEffect, useState } from 'react'
-import { Field, Mono, SaveRow, Section, field_classes } from './parts'
+import { useState } from 'react'
+import { ask } from '../../confirm'
+import { Field, Mono, Section, field_classes, useFieldValue } from './parts'
 import type { SettingsAccess } from './useSettings'
 
-export function GitLabSection({ state, save, saving }: SettingsAccess) {
-  const [url, setUrl] = useState('')
-  const [tokenEnv, setTokenEnv] = useState('')
+export function GitLabSection({ state, save }: SettingsAccess) {
+  const url = useFieldValue(state?.gitlabUrl ?? undefined)
+  const tokenEnv = useFieldValue(state?.gitlabTokenEnv ?? undefined)
+  // write-only: the stored one is never read back, so there is nothing to hold
   const [token, setToken] = useState('')
-  const [clearToken, setClearToken] = useState(false)
-
-  useEffect(() => {
-    if (state === null) return
-    setUrl(state.gitlabUrl ?? '')
-    setTokenEnv(state.gitlabTokenEnv ?? '')
-    setToken('')
-    setClearToken(false)
-  }, [state])
 
   const stored = state?.hasStoredToken === true
 
@@ -27,36 +20,58 @@ export function GitLabSection({ state, save, saving }: SettingsAccess) {
         <input
           className={field_classes}
           placeholder="https://gitlab.com"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          value={url.value}
+          onChange={(e) => url.setValue(e.target.value)}
+          onBlur={() => {
+            if (url.dirty) void save({ gitlabUrl: url.value }, { quiet: true })
+          }}
         />
       </Field>
 
       <Field
-        label={stored && !clearToken ? 'Token (stored — empty keeps it)' : 'Token'}
+        label={stored ? 'Token (stored — empty keeps it)' : 'Token'}
         hint="The stored token lives in plaintext in the database."
       >
+        {/* stored when you leave the field, and cleared from the box: what is
+            typed here is a secret, not a draft to come back to */}
         <input
           type="password"
           className={field_classes}
           placeholder={stored ? '••••••••' : 'glpat-…'}
           value={token}
-          onChange={(e) => {
-            setToken(e.target.value)
-            setClearToken(false)
+          onChange={(e) => setToken(e.target.value)}
+          onBlur={() => {
+            if (token === '') return
+            void save({ gitlabToken: token }, { quiet: true })
+            setToken('')
           }}
         />
       </Field>
 
+      {/*
+        A button rather than a checkbox that waits for a save. It asks first,
+        because it used to take two deliberate acts — tick, then save — and one
+        click that quietly deletes a secret is not the same offer.
+      */}
       {stored && (
-        <label className="flex items-center gap-1.5 text-xs text-soft">
-          <input
-            type="checkbox"
-            checked={clearToken}
-            onChange={(e) => setClearToken(e.target.checked)}
-          />
-          clear the stored token
-        </label>
+        <button
+          className="text-xs text-soft hover:text-ink"
+          onClick={() =>
+            void (async () => {
+              const sure = await ask({
+                title: 'Forget the stored token?',
+                detail:
+                  'stickie falls back to the named environment variable, or to ' +
+                  'GITLAB_TOKEN. Pasting a token here stores one again.',
+                confirmLabel: 'Forget it',
+                danger: true,
+              })
+              if (sure) await save({ gitlabToken: '' }, { quiet: true })
+            })()
+          }
+        >
+          forget the stored token
+        </button>
       )}
 
       <Field
@@ -87,23 +102,15 @@ export function GitLabSection({ state, save, saving }: SettingsAccess) {
         <input
           className={field_classes}
           placeholder="MY_GITLAB_TOKEN"
-          value={tokenEnv}
-          onChange={(e) => setTokenEnv(e.target.value)}
+          value={tokenEnv.value}
+          onChange={(e) => tokenEnv.setValue(e.target.value)}
+          onBlur={() => {
+            if (tokenEnv.dirty) {
+              void save({ gitlabTokenEnv: tokenEnv.value }, { quiet: true })
+            }
+          }}
         />
       </Field>
-
-      <SaveRow
-        saving={saving}
-        onSave={() =>
-          void save({
-            gitlabUrl: url,
-            gitlabTokenEnv: tokenEnv,
-            // untouched unless a new value was typed or clearing was asked for
-            ...(token !== '' ? { gitlabToken: token } : {}),
-            ...(clearToken ? { gitlabToken: '' } : {}),
-          })
-        }
-      />
     </Section>
   )
 }

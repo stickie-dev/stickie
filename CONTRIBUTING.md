@@ -240,6 +240,17 @@ Anything that decides from data it has not read yet needs a third state:
 "no repositories" and "no changes to review" are answers, and both were being
 given before anyone had looked.
 
+**A setting that is chosen applies itself; a setting that is written waits.**
+A radio, a toggle, a select is complete the moment it is touched, so it saves
+on the spot, and quietly — the control has already shown what it did, and a
+toast per click is the interface reading its own work back. A field you type
+into saves when you leave it, because that is when it is finished. Three are
+neither: a name, the Copy prompt instructions and the Postgres URL are
+written rather than picked, and a half-typed one is not an answer — those keep
+an explicit **apply**. Since a save re-reads the whole settings object,
+`useFieldValue` keeps a field the reader is editing from being overwritten by
+a save somewhere else on the page.
+
 **Where a control lives says what it acts on.** The top bar is the workspace
 and the review — source, base, search, the panels, the theme, settings. The
 menu at the end of the tabs is the diff: how it is drawn, and what can be done

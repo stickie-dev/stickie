@@ -1,17 +1,25 @@
-import { useEffect, useState } from 'react'
-import { Field, Mono, SaveRow, Section, field_classes } from './parts'
+import {
+  ApplyRow,
+  Field,
+  Mono,
+  Section,
+  field_classes,
+  useFieldValue,
+} from './parts'
 import type { SettingsAccess } from './useSettings'
 
 export function StorageSection({ state, save, saving }: SettingsAccess) {
-  const [databaseUrl, setDatabaseUrl] = useState('')
-  useEffect(() => {
-    if (state !== null) setDatabaseUrl(state.storage.databaseUrl ?? '')
-  }, [state])
+  /*
+   * The one field that still waits to be applied even though it is only a
+   * field. Everything else here answers a question about this screen; this one
+   * says where every note lives, takes a restart to happen, and would be a
+   * strange thing to set in passing by tabbing out of a half-typed URL.
+   */
+  const databaseUrl = useFieldValue(state?.storage.databaseUrl ?? undefined)
 
   const from_env = state?.storage.fromEnv === true
   // the field is shown back redacted, so an untouched value must not be saved
-  const changed =
-    state !== null && databaseUrl !== (state.storage.databaseUrl ?? '')
+  const changed = state !== null && databaseUrl.dirty
 
   return (
     <Section
@@ -45,19 +53,22 @@ export function StorageSection({ state, save, saving }: SettingsAccess) {
         <input
           className={field_classes}
           placeholder="postgresql://user:password@host:5432/stickie"
-          value={databaseUrl}
+          value={databaseUrl.value}
           disabled={from_env}
-          onChange={(e) => setDatabaseUrl(e.target.value)}
+          onChange={(e) => databaseUrl.setValue(e.target.value)}
         />
       </Field>
       {!from_env && (
-        <SaveRow saving={saving} onSave={() => void save({ databaseUrl })}>
+        <ApplyRow
+          saving={saving}
+          onApply={() => void save({ databaseUrl: databaseUrl.value })}
+        >
           {changed && (
             <span className="text-xs text-amber-600 dark:text-amber-400">
               a restart will be needed
             </span>
           )}
-        </SaveRow>
+        </ApplyRow>
       )}
     </Section>
   )

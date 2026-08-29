@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
 import type { FontScale } from '../../store'
 import { useReview } from '../../store'
-import { Field, SaveRow, Section, field_classes } from './parts'
+import { Field, Section, field_classes, useFieldValue } from './parts'
 import type { SettingsAccess } from './useSettings'
 import { btn } from '../../ui'
 
@@ -28,10 +27,7 @@ export function AppearanceSection({ state, save, saving }: SettingsAccess) {
   const toggleTheme = useReview((s) => s.toggleTheme)
   const fontScale = useReview((s) => s.fontScale)
   const setFontScale = useReview((s) => s.setFontScale)
-  const [wrapExtensions, setWrapExtensions] = useState('')
-  useEffect(() => {
-    if (state !== null) setWrapExtensions(state.wrapExtensions)
-  }, [state])
+  const wrap = useFieldValue(state?.wrapExtensions)
 
   return (
     <Section
@@ -79,15 +75,19 @@ export function AppearanceSection({ state, save, saving }: SettingsAccess) {
         label="Soft-wrap these extensions (comma separated)"
         hint="Any file can be wrapped or unwrapped on the spot from the header button or the editor's right-click menu. Anything unwrapped gets width rulers at 80, 100 and 120."
       >
+        {/* a list is finished when you leave it, not on every comma */}
         <input
           className={field_classes}
           placeholder="md,txt,json"
-          value={wrapExtensions}
-          onChange={(e) => setWrapExtensions(e.target.value)}
+          value={wrap.value}
+          onChange={(e) => wrap.setValue(e.target.value)}
+          onBlur={() => {
+            if (wrap.dirty) {
+              void save({ wrapExtensions: wrap.value }, { quiet: true })
+            }
+          }}
         />
       </Field>
-
-      <SaveRow saving={saving} onSave={() => void save({ wrapExtensions })} />
     </Section>
   )
 }
