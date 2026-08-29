@@ -305,6 +305,14 @@ export function App() {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
+    // the installed app's title bar is painted from this, and the theme here is
+    // a choice rather than the OS's, so both media variants are told the answer
+    const surface = getComputedStyle(document.documentElement)
+      .getPropertyValue('--surface')
+      .trim()
+    for (const tag of document.querySelectorAll('meta[name="theme-color"]')) {
+      tag.setAttribute('content', surface)
+    }
   }, [theme])
 
   useEffect(() => {
