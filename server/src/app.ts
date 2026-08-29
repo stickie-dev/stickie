@@ -18,6 +18,11 @@ import {
   databaseFromEnv,
   setDatabaseUrl,
 } from './config.js'
+import type {
+  ActivityAction,
+  ActivityInput,
+  ActivitySubject,
+} from './activity.js'
 import { buildPrompt, default_prompt_instructions } from './export.js'
 import { Identity } from './identity.js'
 import {
@@ -183,6 +188,21 @@ const thread_schema = z
   })
   .openapi('Thread')
 
+const activity_schema = z
+  .object({
+    id: z.number().int(),
+    at: z.string(),
+    subject: z.enum(['note', 'review', 'file']),
+    action: z.string(),
+    actorName: z.string().nullable(),
+    repoId: z.number().int().nullable(),
+    sessionId: z.number().int().nullable(),
+    threadId: z.number().int().nullable(),
+    messageId: z.number().int().nullable(),
+    detail: z.record(z.string(), z.unknown()).nullable(),
+  })
+  .openapi('ActivityEntry')
+
 const session_body = z.object({
   repoId: z.number().int(),
   source: source_schema,
@@ -297,12 +317,68 @@ export function createApp(
       ? (await identity.agent(claimed)).id
       : (await identity.human(repoPath)).actor.id
 
-  const threadChanged = (
-    action: ThreadEvent['action'],
-    sessionId: number,
-    threadId?: number,
-  ) => {
-    emit({ type: 'thread', action, sessionId, threadId })
+  /**
+   * Every mutation goes through here: it appends to the record and *then*
+   * tells connected clients. One call rather than two so the record cannot be
+   * forgotten — forgetting it would also break live refresh, which someone
+   * would notice immediately.
+   *
+   * It is awaited rather than fired off, and a failed append fails the request:
+   * a change stickie did not manage to record is not a change it should report as
+   * done.
+   */
+  const record = async <S extends ActivitySubject>(
+    entry: ActivityInput<S>,
+  ): Promise<void> => {
+    await store.recordActivity(entry)
+    if (entry.subject === 'note' && entry.sessionId != null) {
+      emit({
+        type: 'thread',
+        action: liveAction(entry.action),
+        sessionId: entry.sessionId,
+        ...(entry.threadId == null ? {} : { threadId: entry.threadId }),
+      })
+    }
+  }
+
+  /** The record has seven note actions; a client only needs to know three. */
+  const liveAction = (action: string): ThreadEvent['action'] =>
+    action === 'created' ? 'created' : action === 'deleted' ? 'deleted' : 'updated'
+
+  /**
+   * Who a change is attributed to. `'human'` means "the person, as the reviewed
+   * repository knows them", resolved from the session the recorder has had to
+   * look up anyway.
+   */
+  type Attribution = number | null | 'human'
+
+  /**
+   * A note event, with the repository denormalised onto the row so a
+   * cross-repo read stays one query. Takes the session when the caller has it
+   * and an id when it does not, rather than making every route fetch it twice.
+   */
+  const noteRecord = async (
+    action: ActivityAction<'note'>,
+    session: Session | number,
+    threadId: number | undefined,
+    actor: Attribution,
+    detail?: Record<string, unknown>,
+  ): Promise<void> => {
+    const owner =
+      typeof session === 'number' ? await store.getSession(session) : session
+    const actorId =
+      actor === 'human'
+        ? (await identity.human(owner?.repoPath ?? null)).actor.id
+        : actor
+    await record({
+      subject: 'note',
+      action,
+      actorId,
+      repoId: owner?.repoId ?? null,
+      sessionId: typeof session === 'number' ? session : session.id,
+      ...(threadId === undefined ? {} : { threadId }),
+      ...(detail === undefined ? {} : { detail }),
+    })
   }
 
   app.onError((error, c) => c.json({ error: errorMessage(error) }, 500))
@@ -469,6 +545,22 @@ export function createApp(
         base_ref,
         base_sha,
       )
+      // this route is get-or-create and the client calls it on every visit, so
+      // only the first sighting of a review is worth recording
+      if (!(await store.hasActivity(session.id, 'review', 'opened'))) {
+        await record({
+          subject: 'review',
+          action: 'opened',
+          actorId: (await identity.human(repo.path)).actor.id,
+          repoId: repo.id,
+          sessionId: session.id,
+          detail: {
+            source: body.source,
+            baseRef: base_ref,
+            baseSha: base_sha,
+          },
+        })
+      }
       hub.ensureWatch(
         body.source.kind === 'worktree' ? body.source.value : repo.path,
       )
@@ -533,7 +625,20 @@ export function createApp(
         session.baseRef,
         current,
       )
-      await store.moveOpenThreads(session.id, next.id)
+      const carried = await store.moveOpenThreads(session.id, next.id)
+      await record({
+        subject: 'review',
+        action: 'repinned',
+        actorId: (await identity.human(session.repoPath)).actor.id,
+        repoId: session.repoId,
+        sessionId: next.id,
+        detail: {
+          fromSessionId: session.id,
+          fromBaseSha: session.baseSha,
+          toBaseSha: current,
+          carried,
+        },
+      })
       return c.json({ ...next, baseStale: false }, 200)
     },
   )
@@ -795,6 +900,7 @@ export function createApp(
       if (body.endLine < body.startLine) {
         return c.json({ error: 'endLine before startLine' }, 400)
       }
+      const actorId = await actorFor(body.author, body.actor, session.repoPath)
       if (body.startLine === 0) {
         const note = await store.createThread(
           session.id,
@@ -806,12 +912,15 @@ export function createApp(
           '',
           body.author,
           body.body,
-          {
-            pending: body.pending ?? body.author === 'user',
-            actorId: await actorFor(body.author, body.actor, session.repoPath),
-          },
+          { pending: body.pending ?? body.author === 'user', actorId },
         )
-        threadChanged('created', note.sessionId, note.id)
+        await noteRecord('created', session, note.id, actorId, {
+          path: body.path,
+          scope: body.path === '' ? 'review' : 'file',
+          author: body.author,
+          pending: note.pending,
+          baseSha: session.baseSha,
+        })
         return c.json(note, 201)
       }
       const blob = await fileAtSide(
@@ -838,12 +947,18 @@ export function createApp(
         snippet,
         body.author,
         body.body,
-        {
-          pending: body.pending ?? body.author === 'user',
-          actorId: await actorFor(body.author, body.actor, session.repoPath),
-        },
+        { pending: body.pending ?? body.author === 'user', actorId },
       )
-      threadChanged('created', thread.sessionId, thread.id)
+      await noteRecord('created', session, thread.id, actorId, {
+        path: body.path,
+        side: body.side,
+        startLine: body.startLine,
+        endLine: body.endLine,
+        author: body.author,
+        pending: thread.pending,
+        baseSha: session.baseSha,
+        blobSha: blob.blobSha,
+      })
       return c.json(thread, 201)
     },
   )
@@ -867,15 +982,21 @@ export function createApp(
       // a reply is attributed as the reviewed repository would attribute it,
       // so the session has to be in hand
       const owner = await store.getSession(thread.sessionId)
-      await store.addMessage(
-        thread.id,
+      const actorId = await actorFor(
         body.author,
-        body.body,
-        await actorFor(body.author, body.actor, owner?.repoPath ?? null),
+        body.actor,
+        owner?.repoPath ?? null,
       )
+      await store.addMessage(thread.id, body.author, body.body, actorId)
       const updated = await store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
-      threadChanged('updated', updated.sessionId, updated.id)
+      await noteRecord(
+        'replied',
+        owner ?? thread.sessionId,
+        thread.id,
+        actorId,
+        { author: body.author },
+      )
       return c.json(updated, 200)
     },
   )
@@ -904,7 +1025,9 @@ export function createApp(
       await store.updateMessage(message.id, c.req.valid('json').body)
       const thread = await store.getThread(message.threadId)
       if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
-      threadChanged('updated', thread.sessionId, thread.id)
+      await noteRecord('edited', thread.sessionId, thread.id, 'human', {
+        messageId: message.id,
+      })
       return c.json(thread, 200)
     },
   )
@@ -925,7 +1048,14 @@ export function createApp(
       const thread = await store.getThread(c.req.valid('param').id)
       if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
       await store.deleteThread(thread.id)
-      threadChanged('deleted', thread.sessionId, thread.id)
+      // the note is gone; what it said and where is kept, because a record
+      // that vanishes with its subject records nothing
+      await noteRecord('deleted', thread.sessionId, thread.id, 'human', {
+        path: thread.path,
+        startLine: thread.startLine,
+        endLine: thread.endLine,
+        messages: thread.messages.length,
+      })
       return c.json({ ok: true }, 200)
     },
   )
@@ -963,13 +1093,21 @@ export function createApp(
       if (await store.countMessages(message.threadId) === 0) {
         await store.deleteThread(message.threadId)
         if (owner !== undefined) {
-          threadChanged('deleted', owner.sessionId, owner.id)
+          await noteRecord('deleted', owner.sessionId, owner.id, 'human', {
+            path: owner.path,
+            startLine: owner.startLine,
+            endLine: owner.endLine,
+            lastMessageRemoved: true,
+          })
         }
         return c.json({ deletedThread: true, thread: null }, 200)
       }
       const thread = await store.getThread(message.threadId)
       if (thread !== undefined) {
-        threadChanged('updated', thread.sessionId, thread.id)
+        await noteRecord('edited', thread.sessionId, thread.id, 'human', {
+          messageId: message.id,
+          removed: true,
+        })
       }
       return c.json({ deletedThread: false, thread: thread ?? null }, 200)
     },
@@ -995,7 +1133,13 @@ export function createApp(
       await store.setThreadStatus(thread.id, action === 'resolve' ? 'resolved' : 'open')
       const updated = await store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
-      threadChanged('updated', updated.sessionId, updated.id)
+      await noteRecord(
+        action === 'resolve' ? 'resolved' : 'reopened',
+        thread.sessionId,
+        thread.id,
+        'human',
+        { path: thread.path },
+      )
       return c.json(updated, 200)
     })
   }
@@ -1084,6 +1228,20 @@ export function createApp(
         source_cache.set(key, content)
         return content
       }
+      // handing the notes to an agent is itself part of the oversight story:
+      // this is the moment a human decided the review was ready to act on
+      await record({
+        subject: 'review',
+        action: 'exported',
+        actorId: (await identity.human(session.repoPath)).actor.id,
+        repoId: session.repoId,
+        sessionId: session.id,
+        detail: {
+          notes: threads.length,
+          threadIds: threads.map((t) => t.id),
+          baseSha: session.baseSha,
+        },
+      })
       return c.text(
         await buildPrompt(
           session,
@@ -1119,7 +1277,18 @@ export function createApp(
         return c.json({ error: 'unknown session' }, 404)
       }
       const posted = await store.postPending(session.id)
-      if (posted > 0) threadChanged('updated', session.id)
+      if (posted > 0) {
+        await record({
+          subject: 'review',
+          action: 'submitted',
+          actorId: (await identity.human(session.repoPath)).actor.id,
+          repoId: session.repoId,
+          sessionId: session.id,
+          detail: { posted },
+        })
+        // review.submitted is not a note event, so the live frame is its own
+        emit({ type: 'thread', action: 'updated', sessionId: session.id })
+      }
       return c.json({ posted }, 200)
     },
   )
@@ -1142,7 +1311,9 @@ export function createApp(
       await store.setThreadPending(thread.id, false)
       const updated = await store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
-      threadChanged('updated', updated.sessionId, updated.id)
+      await noteRecord('posted', thread.sessionId, thread.id, 'human', {
+        path: thread.path,
+      })
       return c.json(updated, 200)
     },
   )
@@ -1192,7 +1363,50 @@ export function createApp(
       }
       const body = c.req.valid('json')
       await store.setViewed(session.id, body.path, body.viewed)
+      // which files a reviewer actually opened is the part of the record that
+      // nothing else anywhere can reconstruct afterwards
+      await record({
+        subject: 'file',
+        action: body.viewed ? 'viewed' : 'unviewed',
+        actorId: (await identity.human(session.repoPath)).actor.id,
+        repoId: session.repoId,
+        sessionId: session.id,
+        detail: { path: body.path, baseSha: session.baseSha },
+      })
       return c.json({ ok: true }, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/sessions/{id}/activity',
+      tags: ['sessions'],
+      summary: 'What happened in this review, newest first',
+      description:
+        'The append-only record: notes raised, answered, resolved and deleted, ' +
+        'files opened, submissions, re-pins and exports — with who and when. ' +
+        'Nothing rewrites it, and on the local SQLite file nothing stops its ' +
+        'owner editing it either: a record, not evidence.',
+      request: {
+        params: id_param,
+        query: z.object({ limit: z.coerce.number().int().min(1).max(1000).optional() }),
+      },
+      responses: {
+        200: json_response(z.array(activity_schema), 'Activity'),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const session = await store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      const { limit } = c.req.valid('query')
+      return c.json(
+        await store.listActivity({ sessionId: session.id }, limit ?? 200),
+        200,
+      )
     },
   )
 
@@ -1460,7 +1674,17 @@ export function createApp(
         }
         imported += 1
       }
-      if (imported > 0) threadChanged('created', session.id)
+      if (imported > 0) {
+        await record({
+          subject: 'review',
+          action: 'imported',
+          actorId: (await identity.human(session.repoPath)).actor.id,
+          repoId: session.repoId,
+          sessionId: session.id,
+          detail: { source: 'gitlab', project, mr: ref.iid, imported, skipped },
+        })
+        emit({ type: 'thread', action: 'created', sessionId: session.id })
+      }
       return c.json({ imported, skipped }, 200)
     },
   )

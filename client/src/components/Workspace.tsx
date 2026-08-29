@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useReview } from '../store'
+import { ActivityPanel } from './ActivityPanel'
 import { CommentsPanel } from './CommentsPanel'
 import { CommitsPanel } from './CommitsPanel'
 import { FileTree } from './FileTree'
@@ -85,6 +86,7 @@ function DraftPill() {
 export function Workspace({ active }: { active: boolean }) {
   const setSearchOpen = useReview((s) => s.setSearchOpen)
   const commentsOpen = useReview((s) => s.commentsOpen)
+  const activityOpen = useReview((s) => s.activityOpen)
 
   // cmd+shift+F always opens workspace search; plain cmd+F only outside
   // editors and inputs so Monaco's in-file find keeps working
@@ -132,6 +134,7 @@ export function Workspace({ active }: { active: boolean }) {
           </main>
           <SidePane />
           {commentsOpen && <CommentsPanel />}
+          {activityOpen && <ActivityPanel />}
         </div>
         <UsagesPanel />
         <StatusBar />

@@ -133,6 +133,26 @@ export interface Thread {
   messages: ThreadMessage[]
 }
 
+/**
+ * One thing that happened, from the append-only record. `subject` and `action`
+ * are two fields rather than one string so a reader can ask for all of a kind;
+ * `detail` is whatever the route knew at the time, kept so a row still says
+ * something once the note it points at has been deleted.
+ */
+export interface ActivityEntry {
+  id: number
+  at: string
+  subject: 'note' | 'review' | 'file'
+  action: string
+  /** null for rows recorded before there were actors */
+  actorName: string | null
+  repoId: number | null
+  sessionId: number | null
+  threadId: number | null
+  messageId: number | null
+  detail: Record<string, unknown> | null
+}
+
 export interface FsEvent {
   type: 'fs'
   repoPath: string

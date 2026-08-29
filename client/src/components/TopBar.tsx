@@ -33,7 +33,9 @@ export function TopBar() {
   const submitReview = useReview((s) => s.submitReview)
   const toggleComments = useReview((s) => s.toggleComments)
   const setSearchOpen = useReview((s) => s.setSearchOpen)
+  const toggleActivity = useReview((s) => s.toggleActivity)
   const commentsOpen = useReview((s) => s.commentsOpen)
+  const activityOpen = useReview((s) => s.activityOpen)
   const open_threads = threads.filter((t) => t.status === 'open').length
   const pending_count = threads.filter(
     (t) => t.pending && t.status === 'open',
@@ -172,6 +174,13 @@ export function TopBar() {
         onClick={toggleComments}
       >
         Comments ({open_threads})
+      </button>
+      <button
+        className={`rounded border px-2 py-1 ${activityOpen ? 'border-accent text-accent' : 'border-edge text-soft hover:text-ink'}`}
+        title="what has happened in this review, and who did it"
+        onClick={toggleActivity}
+      >
+        Activity
       </button>
       {pending_count > 0 && (
         <button

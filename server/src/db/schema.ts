@@ -4,6 +4,12 @@ import type { Db, Dialect } from './driver.js'
  * The schema, per dialect. Two literals rather than a generated one: the
  * differences are few and worth reading side by side, and a home-made DDL
  * abstraction would hide more than it saves.
+ *
+ * `activity` is append-only by convention, not by permission: nothing in the
+ * code updates or deletes a row, and its foreign keys are deliberately plain
+ * integers with no `on delete cascade`, so deleting a note does not delete the
+ * record that it existed. On the default SQLite file the owner can still edit
+ * it by hand — it is a record, not evidence, and nothing may claim otherwise.
  */
 
 const sqlite_schema = `
@@ -64,6 +70,22 @@ create table if not exists actors (
   created_at text not null default (datetime('now')),
   unique (kind, name)
 );
+
+create table if not exists activity (
+  id integer primary key autoincrement,
+  at text not null default (datetime('now')),
+  actor_id integer references actors(id),
+  subject text not null,
+  action text not null,
+  repo_id integer,
+  session_id integer,
+  thread_id integer,
+  message_id integer,
+  detail text
+);
+
+create index if not exists activity_session on activity (session_id, id);
+create index if not exists activity_repo on activity (repo_id, id);
 `
 
 const postgres_schema = `
@@ -124,6 +146,22 @@ create table if not exists actors (
   created_at timestamptz not null default now(),
   unique (kind, name)
 );
+
+create table if not exists activity (
+  id serial primary key,
+  at timestamptz not null default now(),
+  actor_id integer references actors(id),
+  subject text not null,
+  action text not null,
+  repo_id integer,
+  session_id integer,
+  thread_id integer,
+  message_id integer,
+  detail text
+);
+
+create index if not exists activity_session on activity (session_id, id);
+create index if not exists activity_repo on activity (repo_id, id);
 `
 
 /**

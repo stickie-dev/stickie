@@ -1,3 +1,8 @@
+import type {
+  ActivityEntry,
+  ActivityInput,
+  ActivitySubject,
+} from './activity.js'
 import type { Db } from './db/driver.js'
 import { toBool, toText } from './db/driver.js'
 import type {
@@ -324,6 +329,71 @@ export class Store {
     ])
   }
 
+  /**
+   * Appends to the record. Nothing in this class updates or deletes an
+   * activity row; there is deliberately no method to.
+   */
+  async recordActivity(entry: ActivityInput): Promise<void> {
+    await this.db.run(
+      `insert into activity
+         (actor_id, subject, action, repo_id, session_id, thread_id, message_id, detail)
+       values (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        entry.actorId ?? null,
+        entry.subject,
+        entry.action,
+        entry.repoId ?? null,
+        entry.sessionId ?? null,
+        entry.threadId ?? null,
+        entry.messageId ?? null,
+        entry.detail === undefined ? null : JSON.stringify(entry.detail),
+      ],
+    )
+  }
+
+  /**
+   * Whether a session already carries one of these. The get-or-create routes
+   * are called on every visit, so "has this been recorded once" is what keeps
+   * them from writing a row per page load.
+   */
+  async hasActivity(
+    sessionId: number,
+    subject: ActivitySubject,
+    action: string,
+  ): Promise<boolean> {
+    const row = await this.db.get<{ id: number }>(
+      'select id from activity where session_id = ? and subject = ? and action = ? limit 1',
+      [sessionId, subject, action],
+    )
+    return row !== undefined
+  }
+
+  /** Newest first, since that is the order anyone reading it wants. */
+  async listActivity(
+    where: { sessionId?: number; repoId?: number },
+    limit = 200,
+  ): Promise<ActivityEntry[]> {
+    const clauses: string[] = []
+    const params: unknown[] = []
+    if (where.sessionId !== undefined) {
+      clauses.push('v.session_id = ?')
+      params.push(where.sessionId)
+    }
+    if (where.repoId !== undefined) {
+      clauses.push('v.repo_id = ?')
+      params.push(where.repoId)
+    }
+    const filter = clauses.length === 0 ? '' : `where ${clauses.join(' and ')}`
+    params.push(limit)
+    const rows = await this.db.all<ActivityRow>(
+      `select v.*, a.name as actor_name from activity v
+       left join actors a on a.id = v.actor_id
+       ${filter} order by v.id desc limit ?`,
+      params,
+    )
+    return rows.map(activityFromRow)
+  }
+
   async getSetting(key: string): Promise<string | null> {
     const row = await this.db.get<{ value: string }>(
       'select value from settings where key = ?',
@@ -440,6 +510,43 @@ export class Store {
       actorName: row.actor_name,
       messages,
     }
+  }
+}
+
+interface ActivityRow {
+  id: number
+  at: string | Date
+  subject: string
+  action: string
+  repo_id: number | null
+  session_id: number | null
+  thread_id: number | null
+  message_id: number | null
+  detail: string | null
+  actor_name: string | null
+}
+
+function activityFromRow(row: ActivityRow): ActivityEntry {
+  let detail: Record<string, unknown> | null = null
+  if (row.detail !== null) {
+    try {
+      detail = JSON.parse(row.detail) as Record<string, unknown>
+    } catch {
+      // a row whose detail cannot be read is still a row that happened
+      detail = null
+    }
+  }
+  return {
+    id: row.id,
+    at: toText(row.at),
+    subject: row.subject as ActivitySubject,
+    action: row.action,
+    actorName: row.actor_name,
+    repoId: row.repo_id,
+    sessionId: row.session_id,
+    threadId: row.thread_id,
+    messageId: row.message_id,
+    detail,
   }
 }
 

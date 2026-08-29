@@ -1,4 +1,5 @@
 import type {
+  ActivityEntry,
   Author,
   ChangedFile,
   FileContent,
@@ -164,6 +165,11 @@ export const api = {
 
   reopen: (threadId: number) =>
     post(`/api/threads/${threadId}/reopen`, {}).then(toJson<Thread>),
+
+  activity: (sessionId: number, limit?: number) =>
+    fetch(
+      `/api/sessions/${String(sessionId)}/activity${limit === undefined ? '' : `?limit=${String(limit)}`}`,
+    ).then(toJson<ActivityEntry[]>),
 
   settings: () => fetch('/api/settings').then(toJson<SettingsState>),
 

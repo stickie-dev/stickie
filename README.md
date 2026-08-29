@@ -67,6 +67,12 @@ the only output.
   reads left to right through the commits that touched it
 - **Session continuity** — when HEAD moves past the pinned base (the agent
   committed), one click re-pins and carries open notes forward
+- **A record of what happened** — every note raised, answered, resolved or
+  deleted, every file marked read, every submission, re-pin and export, with
+  who and when, in an *Activity* panel beside the diff. It is append-only:
+  nothing rewrites it, and a deleted note leaves its record behind. It lives in
+  the same database as the notes, so on a local SQLite file its owner can still
+  edit it — a record, not proof, and stickie says so where you read it
 - **Who wrote what** — notes carry a name, not just a role: yours as the
   reviewed repository's own git config knows you (local over global, the way a
   commit there would be attributed), or one name everywhere from Settings →
@@ -143,6 +149,7 @@ spec is generated from the code and cannot drift.
 | GET | `/api/sessions` | every review, newest first |
 | POST | `/api/sessions/:id/submit-review` | post the pending batch |
 | GET | `/api/repos/:id/file?path=&rev=` | any file, at any revision |
+| GET | `/api/sessions/:id/activity` | the append-only record, newest first |
 
 The table is the agent-facing subset; Swagger lists the whole surface,
 including the UI's own routes (navigation, settings, commit files, viewed

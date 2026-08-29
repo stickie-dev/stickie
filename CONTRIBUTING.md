@@ -57,6 +57,24 @@ repo, which is local-over-global and so the identity a commit made there would
 carry. Someone whose global config is their employer's may well review a
 personal repository under a different name, and the record should say which.
 
+## The record
+
+`activity` is append-only by convention: nothing in `Store` updates or deletes
+a row and there is deliberately no method to, and its foreign keys are plain
+integers with no cascade so deleting a note does not delete the record that it
+existed. Its `detail` blob holds what the route already knew — path, lines,
+base sha, counts — so a row still says something once what it points at is
+gone.
+
+Every mutation goes through `record` in `app.ts`, which appends and *then*
+emits the live frame. One call rather than two, so the record cannot be
+forgotten: forgetting it would break live refresh, which someone notices
+immediately. It is awaited, and a failed append fails the request — a change
+stickie did not record is not a change it should report as done.
+
+`subject` and `action` are separate columns; the pairs that make sense are
+declared in `activity.ts` and the types make an invalid one unwritable.
+
 ## Conventions
 
 - comments state constraints the code cannot, nothing else

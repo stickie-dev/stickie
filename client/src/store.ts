@@ -218,6 +218,8 @@ interface ReviewState {
   deleteMessage: (threadId: number, messageId: number) => Promise<void>
   commentsOpen: boolean
   toggleComments: () => void
+  activityOpen: boolean
+  toggleActivity: () => void
   resolveThread: (threadId: number) => Promise<void>
   reopenThread: (threadId: number) => Promise<void>
   copyPrompt: () => Promise<void>
@@ -554,6 +556,7 @@ export const useReview = create<ReviewState>((set, get) => {
     sidePane: null,
     searchOpen: false,
     reviewActive: false,
+    activityOpen: false,
     viewMode: 'flow',
     commits: [],
     commitView: null,
@@ -1132,6 +1135,7 @@ export const useReview = create<ReviewState>((set, get) => {
     commentsOpen: false,
 
     toggleComments: () => set({ commentsOpen: !get().commentsOpen }),
+    toggleActivity: () => set({ activityOpen: !get().activityOpen }),
 
     deleteThread: async (threadId) => {
       try {

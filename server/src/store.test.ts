@@ -211,3 +211,101 @@ describe('Store actors', () => {
     expect(thread.messages[0]?.actorName).toBeNull()
   })
 })
+
+describe('Store activity', () => {
+  const setup = async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const session = await store.getOrCreateSession(
+      repo.id,
+      { kind: 'worktree', value: '/tmp/repo' },
+      'master',
+      'abc123',
+    )
+    return { store, repo, session }
+  }
+
+  it('appends in order and reads back newest first', async () => {
+    const { store, repo, session } = await setup()
+    const actor = await store.getOrCreateActor('human', 'Jane Doe')
+    for (const action of ['created', 'replied', 'resolved'] as const) {
+      await store.recordActivity({
+        subject: 'note',
+        action,
+        actorId: actor.id,
+        repoId: repo.id,
+        sessionId: session.id,
+        threadId: 7,
+      })
+    }
+    const rows = await store.listActivity({ sessionId: session.id })
+    expect(rows.map((r) => r.action)).toEqual(['resolved', 'replied', 'created'])
+    expect(rows.every((r) => r.actorName === 'Jane Doe')).toBe(true)
+  })
+
+  it('round-trips the detail blob', async () => {
+    const { store, repo, session } = await setup()
+    await store.recordActivity({
+      subject: 'review',
+      action: 'submitted',
+      repoId: repo.id,
+      sessionId: session.id,
+      detail: { posted: 3, baseSha: 'abc123' },
+    })
+    const [row] = await store.listActivity({ sessionId: session.id })
+    expect(row?.detail).toEqual({ posted: 3, baseSha: 'abc123' })
+    expect(row?.actorName).toBeNull()
+  })
+
+  it('keeps a row after the note it points at is deleted', async () => {
+    const { store, repo, session } = await setup()
+    const thread = await store.createThread(
+      session.id,
+      'a.ts',
+      'source',
+      1,
+      1,
+      null,
+      'x',
+      'user',
+      'note',
+    )
+    await store.recordActivity({
+      subject: 'note',
+      action: 'created',
+      repoId: repo.id,
+      sessionId: session.id,
+      threadId: thread.id,
+      detail: { path: 'a.ts' },
+    })
+    await store.deleteThread(thread.id)
+    const rows = await store.listActivity({ sessionId: session.id })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.threadId).toBe(thread.id)
+  })
+
+  it('answers whether a session has already recorded something', async () => {
+    const { store, session } = await setup()
+    expect(await store.hasActivity(session.id, 'review', 'opened')).toBe(false)
+    await store.recordActivity({
+      subject: 'review',
+      action: 'opened',
+      sessionId: session.id,
+    })
+    expect(await store.hasActivity(session.id, 'review', 'opened')).toBe(true)
+    expect(await store.hasActivity(session.id, 'review', 'submitted')).toBe(false)
+  })
+
+  it('honours the limit', async () => {
+    const { store, session } = await setup()
+    for (let i = 0; i < 5; i++) {
+      await store.recordActivity({
+        subject: 'file',
+        action: 'viewed',
+        sessionId: session.id,
+        detail: { path: `f${String(i)}.ts` },
+      })
+    }
+    expect(await store.listActivity({ sessionId: session.id }, 2)).toHaveLength(2)
+  })
+})
