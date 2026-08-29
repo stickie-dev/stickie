@@ -12,6 +12,16 @@ import { timeValue } from '../time'
 import { TimeAgo } from './TimeAgo'
 import { useReview } from '../store'
 import { Loading, Skeleton, SkeletonRows } from './Skeleton'
+import {
+  badge,
+  button,
+  button_primary,
+  card,
+  enter,
+  field,
+  row,
+  th,
+} from '../ui'
 
 /**
  * The landing page: every review across every registered repository, and what
@@ -69,11 +79,10 @@ const status_why: Record<Status, string> = {
 }
 
 const status_classes: Record<Status, string> = {
-  'needs-you':
-    'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40',
-  'with-agent': 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/40',
-  draft: 'bg-overlay text-soft border-edge',
-  clear: 'bg-overlay text-faint border-edge',
+  'needs-you': 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+  'with-agent': 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
+  draft: 'bg-violet-500/15 text-violet-700 dark:text-violet-300',
+  clear: 'bg-overlay text-faint',
 }
 
 function statusOf(row: ReviewRow): Status {
@@ -184,7 +193,7 @@ function Comparing({ row }: { row: ReviewRow }) {
       <div className="truncate">
         <span className="font-mono text-ink">{source.name}</span>
         {source.subject !== null && (
-          <span className="ml-2 text-soft">{source.subject}</span>
+          <span className="ml-2 text-[11px] text-faint">{source.subject}</span>
         )}
       </div>
       <div className="truncate text-faint">
@@ -245,9 +254,7 @@ function Th({
   return (
     <th
       title={hint}
-      className={`px-2 py-1.5 font-medium tracking-wide text-faint uppercase ${
-        align === 'right' ? 'text-right' : 'text-left'
-      }`}
+      className={`${th} ${align === 'right' ? 'text-right' : 'text-left'}`}
     >
       {children}
     </th>
@@ -324,18 +331,18 @@ function ReviewsTable({
             // which a click handler on its own would take away
             <tr
               key={review.key}
-              className="cursor-pointer border-b border-edge last:border-b-0 hover:bg-overlay"
+              className={`cursor-pointer ${row}`}
               onClick={() => void navigate(to)}
             >
-              <td className="px-2 py-2">
+              <td className="px-2 py-2.5">
                 <span
                   title={status_why[status]}
-                  className={`rounded border px-1.5 py-0.5 whitespace-nowrap ${status_classes[status]}`}
+                  className={`${badge} whitespace-nowrap ${status_classes[status]}`}
                 >
                   {status_label[status]}
                 </span>
               </td>
-              <td className="px-2 py-2 font-semibold text-ink">
+              <td className="px-2 py-2.5 font-medium whitespace-nowrap text-ink">
                 <Link
                   className="hover:underline"
                   to={to}
@@ -499,28 +506,29 @@ export function OverviewPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex items-center gap-3 border-b border-edge px-3 py-2 text-xs">
+      <header className="flex items-center gap-2.5 px-4 py-2.5 text-xs">
         <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
-        <span className="font-bold tracking-wide text-ink">stickie</span>
+        <span className="font-semibold tracking-tight text-ink">stickie</span>
         <span className="text-faint">overview</span>
         <span className="grow" />
-        <button
-          className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
-          onClick={() => void load()}
-        >
+        <button className={button} onClick={() => void load()}>
           reload
         </button>
         <Link
-          className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
+          className={button}
           to={formatRoute({ kind: 'settings', section: 'identity' })}
           title="settings"
         >
-          ⚙
+          settings
         </Link>
       </header>
 
-      <div className="min-h-0 grow overflow-y-auto p-6">
-        {error !== null && <p className="mb-4 text-xs text-rose-500">{error}</p>}
+      <div className={`min-h-0 grow overflow-y-auto px-6 pt-2 pb-10 ${enter}`}>
+        {error !== null && (
+          <p className="mb-4 rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-600 dark:text-rose-300">
+            {error}
+          </p>
+        )}
 
         {loading ? (
           <Loading what="the overview">
@@ -531,7 +539,9 @@ export function OverviewPage() {
           </Loading>
         ) : (
           <>
-            <p className="mb-1 text-sm text-ink">{headline}</p>
+            <p className="mb-1 text-[15px] leading-snug font-medium text-ink">
+              {headline}
+            </p>
             <p className="mb-6 text-xs text-faint">
               {drafts > 0
                 ? `${String(drafts)} ${drafts === 1 ? 'note is still a draft' : 'notes are still drafts'}, so no agent can see ${drafts === 1 ? 'it' : 'them'} yet.`
@@ -541,12 +551,12 @@ export function OverviewPage() {
         )}
 
         {(listed.length > 0 || loading) && (
-          <section className="mb-8">
-            <h2 className="mb-2 text-sm font-semibold text-ink">Reviews</h2>
-            <div className="overflow-x-auto rounded border border-edge">
+          <section className="mb-10">
+            <h2 className="mb-2 text-[13px] font-semibold text-ink">Reviews</h2>
+            <div className={`overflow-x-auto ${card}`}>
               <ReviewsTable reviews={listed} loading={loading} />
             </div>
-            <p className="mt-2 text-xs text-faint">
+            <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-faint">
               A row is one thing being reviewed — a repository&rsquo;s working
               tree, a branch, or a single commit — and its counts cover every
               base it has been pinned to, so re-pinning after the branch moves
@@ -571,9 +581,11 @@ export function OverviewPage() {
           </section>
         )}
 
-        <section className="mb-8">
-          <h2 className="mb-2 text-sm font-semibold text-ink">Repositories</h2>
-          <div className="overflow-x-auto rounded border border-edge">
+        <section className="mb-10">
+          <h2 className="mb-2 text-[13px] font-semibold text-ink">
+            Repositories
+          </h2>
+          <div className={`overflow-x-auto ${card}`}>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="border-b border-edge">
@@ -588,7 +600,7 @@ export function OverviewPage() {
                 {repos.map((repo) => (
                   <tr
                     key={repo.id}
-                    className="cursor-pointer border-b border-edge last:border-b-0 hover:bg-overlay"
+                    className={`group cursor-pointer ${row}`}
                     onClick={() => void openRepo(repo)}
                   >
                     <td
@@ -630,7 +642,7 @@ export function OverviewPage() {
                             ? 'take this repository out of the workspace, keeping its notes'
                             : 'remove this repository and delete its reviews'
                         }
-                        className="text-faint hover:text-rose-500 disabled:opacity-40"
+                        className={`opacity-0 group-hover:opacity-100 focus:opacity-100 ${button} hover:text-rose-500 disabled:opacity-40`}
                         onClick={(e) => {
                           e.stopPropagation()
                           void removeRepo(repo)
@@ -657,7 +669,7 @@ export function OverviewPage() {
                 <tr className="border-t border-edge">
                   <td className="px-2 py-2" colSpan={3}>
                     <input
-                      className="w-full rounded border border-edge bg-surface px-2 py-1 font-mono text-xs text-ink outline-none focus:border-accent"
+                      className={`w-full font-mono text-xs ${field}`}
                       placeholder="~/path/to/a/git/repository"
                       value={newPath}
                       onChange={(e) => setNewPath(e.target.value)}
@@ -668,7 +680,7 @@ export function OverviewPage() {
                   </td>
                   <td className="px-2 py-2" colSpan={2}>
                     <button
-                      className="rounded border border-edge px-2 py-1 text-soft hover:text-ink"
+                      className={button_primary}
                       onClick={() => void addRepo()}
                     >
                       add repository
@@ -681,8 +693,8 @@ export function OverviewPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-sm font-semibold text-ink">Activity</h2>
-          <div className="overflow-x-auto rounded border border-edge">
+          <h2 className="mb-2 text-[13px] font-semibold text-ink">Activity</h2>
+          <div className={`overflow-x-auto ${card}`}>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="border-b border-edge">
@@ -695,7 +707,7 @@ export function OverviewPage() {
               </thead>
               <tbody>
                 {(overview?.recent ?? []).map((entry) => (
-                  <tr key={entry.id} className="border-b border-edge last:border-b-0">
+                  <tr key={entry.id} className={row}>
                     <td className="px-2 py-1.5 whitespace-nowrap text-faint">
                       <TimeAgo at={entry.at} />
                     </td>
@@ -730,7 +742,7 @@ export function OverviewPage() {
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-xs text-faint">
+          <p className="mt-2 text-[11px] text-faint">
             From the append-only record, across every repository, newest first.
           </p>
         </section>

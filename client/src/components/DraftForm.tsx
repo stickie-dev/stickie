@@ -3,6 +3,7 @@ import type { NoteDefault } from '../api'
 import { postsComment } from '../keys'
 import type { Draft } from '../store'
 import { useReview } from '../store'
+import { button, field } from '../ui'
 
 /** Where a form for the same note is rendered; each surface focuses alone. */
 type Surface = 'zone' | 'panel'
@@ -99,7 +100,7 @@ function SubmitSplit({
 }) {
   const noteDefault = useReview((s) => s.noteDefault)
   return (
-    <span className="inline-flex overflow-hidden rounded border border-accent">
+    <span className="inline-flex overflow-hidden rounded-md ring-1 ring-accent">
       {note_actions.map((action) => {
         const current = action.value === noteDefault
         return (
@@ -208,7 +209,7 @@ export function DraftForm({
 
   return (
     <div
-      className={`min-w-0 rounded-md border bg-panel p-2 text-sm shadow-lg ${active ? 'border-accent' : 'border-edge'}`}
+      className={`min-w-0 rounded-lg bg-panel p-2 text-[13px] shadow-lifted ${active ? 'ring-1 ring-accent' : ''}`}
       onFocusCapture={() => setActiveDraft(draft.id)}
       onMouseDownCapture={() => setActiveDraft(draft.id)}
     >
@@ -236,7 +237,7 @@ export function DraftForm({
         ref={textareaRef}
         data-stickie-draft={key}
         rows={2}
-        className="w-full resize-y rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
+        className={`w-full resize-y ${field}`}
         placeholder={`What should change here? (${
           submitKey === 'enter' ? '↵' : '⌘↵'
         } to ${noteDefault === 'comment' ? 'comment' : 'draft'}, ${
@@ -260,7 +261,7 @@ export function DraftForm({
       />
       <div className="mt-1 flex items-center justify-end gap-2">
         <button
-          className="rounded px-2 py-1 text-xs text-soft hover:text-ink"
+          className={`text-xs ${button}`}
           onClick={() => cancelDraft(draft.id)}
         >
           cancel

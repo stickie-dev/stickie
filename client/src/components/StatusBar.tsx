@@ -102,7 +102,7 @@ export function StatusBar() {
     return (
       <>
         <div className="fixed inset-0 z-40" onClick={() => setOpen(null)} />
-        <div className="absolute bottom-full left-0 z-50 mb-1 max-h-72 w-80 overflow-y-auto rounded-md border border-edge bg-panel py-1 shadow-xl">
+        <div className="absolute bottom-full left-0 z-50 mb-1 max-h-72 w-80 overflow-y-auto rounded-lg bg-panel py-1 shadow-lifted">
           <button
             className="flex w-full items-center gap-2 px-2 py-1 text-left text-soft hover:bg-overlay hover:text-ink"
             onClick={() => {
@@ -141,7 +141,7 @@ export function StatusBar() {
   }
 
   return (
-    <div className="relative flex shrink-0 items-center gap-1 border-t border-edge bg-surface px-3 py-1 text-[11px]">
+    <div className="relative flex shrink-0 items-center gap-1 border-t border-edge bg-panel px-3 py-1 text-[11px]">
       <button
         className="shrink-0 text-soft hover:text-ink"
         title="make this repository active"

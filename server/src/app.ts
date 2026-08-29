@@ -681,6 +681,8 @@ export function createApp(
       const mode =
         query.mode ?? removeMode(await store.getSetting('repo_remove_mode'))
       const { deleted, notes } = await store.removeRepo(id, mode)
+      // it is out of the workspace either way, so stop following its files
+      hub.forget(repo.path)
       // the record outlives what it points at: after a delete this row is the
       // only thing left saying those reviews and notes were ever here
       await record({

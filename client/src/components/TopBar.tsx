@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import type { ReviewSource } from '@stickie/shared'
 import { api } from '../api'
 import { formatRoute } from '../routes'
+import { button, button_on, button_primary, field, icon_button, motion } from '../ui'
 import { useReview } from '../store'
 
 function shortPath(path: string): string {
@@ -130,18 +131,17 @@ export function TopBar() {
     })()
   }
 
-  const select_classes =
-    'rounded border border-edge bg-overlay px-1.5 py-1 text-ink'
+  const select_classes = `${field} py-0.5`
 
   return (
-    <header className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-edge px-3 py-2 text-xs">
+    <header className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 border-b border-edge bg-panel px-3 py-1.5 text-xs">
       <Link
         to="/"
         className="flex items-center gap-2"
         title="every review, across every repository"
       >
         <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
-        <span className="font-bold tracking-wide text-ink">stickie</span>
+        <span className="font-semibold tracking-tight text-ink">stickie</span>
       </Link>
       <span
         className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-faint'}`}
@@ -149,7 +149,7 @@ export function TopBar() {
       />
 
       <button
-        className="rounded border border-edge px-1.5 py-1 text-soft hover:text-ink disabled:opacity-40"
+        className={`${icon_button} px-1.5 disabled:opacity-30`}
         title="back ( [ )"
         disabled={!canBack}
         onClick={() => void navBack()}
@@ -157,7 +157,7 @@ export function TopBar() {
         ‹
       </button>
       <button
-        className="rounded border border-edge px-1.5 py-1 text-soft hover:text-ink disabled:opacity-40"
+        className={`${icon_button} px-1.5 disabled:opacity-30`}
         title="forward ( ] )"
         disabled={!canForward}
         onClick={() => void navForward()}
@@ -166,7 +166,7 @@ export function TopBar() {
       </button>
 
       <span
-        className="max-w-40 truncate font-semibold text-ink"
+        className="max-w-40 truncate font-medium text-ink"
         title="active repository — click any file in the tree to switch"
       >
         {repos.find((r) => r.id === activeRepoId)?.name ?? ''}
@@ -221,7 +221,7 @@ export function TopBar() {
       )}
       {session?.baseStale === true && (
         <button
-          className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300"
+          className={`rounded-md bg-amber-500/15 px-2 py-1 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300 ${motion}`}
           title="HEAD moved past the pinned base; re-pin and carry open notes forward"
           onClick={() => void repin()}
         >
@@ -231,21 +231,21 @@ export function TopBar() {
 
       <span className="grow" />
       <button
-        className="shrink-0 rounded border border-edge px-2 py-1 text-soft hover:text-ink"
+        className={`shrink-0 ${button}`}
         title="search all repos (⌘F / ⌘⇧F)"
         onClick={() => setSearchOpen(true)}
       >
         Search
       </button>
       <button
-        className={`shrink-0 rounded border px-2 py-1 ${commentsOpen ? 'border-accent text-accent' : 'border-edge text-soft hover:text-ink'}`}
+        className={`shrink-0 ${commentsOpen ? button_on : button}`}
         title="toggle the all-comments panel"
         onClick={toggleComments}
       >
         Comments ({open_threads})
       </button>
       <button
-        className={`shrink-0 rounded border px-2 py-1 ${activityOpen ? 'border-accent text-accent' : 'border-edge text-soft hover:text-ink'}`}
+        className={`shrink-0 ${activityOpen ? button_on : button}`}
         title="what has happened in this review, and who did it"
         onClick={toggleActivity}
       >
@@ -253,7 +253,7 @@ export function TopBar() {
       </button>
       {pending_count > 0 && (
         <button
-          className="shrink-0 rounded bg-emerald-600 px-2.5 py-1 font-medium text-white hover:bg-emerald-500"
+          className={`shrink-0 rounded-md bg-emerald-600 px-2.5 py-1 font-medium text-white shadow-soft hover:bg-emerald-500 ${motion}`}
           title="send every draft note so agents can see them"
           onClick={() => void submitReview()}
         >
@@ -261,7 +261,7 @@ export function TopBar() {
         </button>
       )}
       <button
-        className="shrink-0 rounded border border-edge px-2 py-1 text-soft hover:text-ink"
+        className={`shrink-0 ${button}`}
         title="import unresolved GitLab MR discussions (needs GITLAB_TOKEN on the server)"
         disabled={session === null}
         onClick={() => {
@@ -272,14 +272,14 @@ export function TopBar() {
         Import MR
       </button>
       <Link
-        className="shrink-0 rounded border border-edge px-2 py-1 text-soft hover:text-ink"
+        className={`shrink-0 ${button}`}
         title="settings"
         to={formatRoute({ kind: 'settings', section: 'identity' })}
       >
-        ⚙
+        settings
       </Link>
       <button
-        className="shrink-0 rounded bg-accent px-2.5 py-1 font-medium text-white hover:bg-accent-strong disabled:opacity-50"
+        className={`shrink-0 ${button_primary} disabled:opacity-50`}
         disabled={session === null}
         onClick={() => void copyPrompt()}
       >

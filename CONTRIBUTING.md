@@ -121,6 +121,21 @@ The boundary carries ISO-8601 with the zone in it. SQLite stores UTC and says so
 nowhere, so `toText` spells it out: a reader that takes "2026-08-24 09:11:44"
 for local time is wrong by its own offset.
 
+## Watching, and the cost of a descriptor
+
+A reviewed repository is watched with one recursive `fs.watch` per repository,
+filtered in the handler. It was a chokidar watch, which watches each file: on a
+four-repository workspace that reached 8,300 open descriptors, because linked
+worktrees and agent checkouts living inside a repository count every file in
+them again.
+
+The cost of holding descriptors is not memory, it is `fork`: a spawned `git`
+inherits the descriptor table, so a spawn measured 10ms with a few open and
+181ms with 8,000, and the overview page took ten seconds to answer instead of
+half of one. Anything that opens a descriptor per file in a repository is
+therefore a performance decision about every git call stickie makes, not a local
+one.
+
 ## Conventions
 
 - comments state constraints the code cannot, nothing else

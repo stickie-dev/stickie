@@ -3,6 +3,7 @@ import type { ChangedFile } from '@stickie/shared'
 import { fileIconUrl, folderIconUrl } from '../fileIcons'
 import { useReview } from '../store'
 import { Loading, Skeleton } from './Skeleton'
+import { field } from '../ui'
 
 const status_letter: Record<ChangedFile['status'], string> = {
   added: 'A',
@@ -358,7 +359,7 @@ export function FileTree() {
         {adding ? (
           <input
             autoFocus
-            className="w-full rounded border border-edge bg-surface px-2 py-1 font-mono text-ink outline-none focus:border-accent"
+            className={`w-full font-mono ${field}`}
             placeholder="~/path/to/repo"
             value={newPath}
             onChange={(e) => setNewPath(e.target.value)}

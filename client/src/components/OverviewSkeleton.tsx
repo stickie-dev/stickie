@@ -1,4 +1,5 @@
 import { Loading, Skeleton, SkeletonRows } from './Skeleton'
+import { card } from '../ui'
 
 /**
  * The overview before anything is known about the workspace — not even whether
@@ -20,7 +21,7 @@ export function OverviewSkeleton() {
         </Loading>
         <section className="mt-6">
           <Skeleton w="w-20" h="h-3.5" className="mb-2" />
-          <div className="overflow-hidden rounded border border-edge">
+          <div className={`overflow-hidden ${card}`}>
             <table className="w-full border-collapse text-xs">
               <tbody>
                 <SkeletonRows

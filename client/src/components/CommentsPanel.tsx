@@ -4,6 +4,7 @@ import { postsComment } from '../keys'
 import { orderedThreadIds, useReview } from '../store'
 import { ThreadCard } from './ThreadCard'
 import { TimeAgo } from './TimeAgo'
+import { field } from '../ui'
 
 /** A composer for notes that carry no code anchor. */
 function NoteComposer({ onDone }: { onDone: () => void }) {
@@ -27,7 +28,7 @@ function NoteComposer({ onDone }: { onDone: () => void }) {
       <div className="mb-1 flex items-center gap-2 text-xs text-soft">
         <span>note on</span>
         <select
-          className="rounded border border-edge bg-surface px-1 py-0.5 text-ink"
+          className={`px-1 py-0.5 ${field}`}
           value={scope}
           onChange={(e) => setScope(e.target.value as 'review' | 'file')}
         >
@@ -40,7 +41,7 @@ function NoteComposer({ onDone }: { onDone: () => void }) {
       <textarea
         autoFocus
         rows={3}
-        className="w-full resize-y rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
+        className={`w-full resize-y ${field}`}
         placeholder="Anything not tied to a line — approach, missing tests, naming… (⌘↵ to add)"
         value={body}
         onChange={(e) => setBody(e.target.value)}
@@ -137,7 +138,7 @@ export function CommentsPanel() {
         </button>
       </div>
       <div className="flex items-center gap-1 border-b border-edge px-3 py-1.5 text-xs">
-        <div className="flex overflow-hidden rounded border border-edge">
+        <div className="flex overflow-hidden rounded-md bg-overlay">
           {([true, false] as const).map((only) => {
             const active = openOnly === only
             return (

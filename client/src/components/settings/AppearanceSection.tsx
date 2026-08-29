@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useReview } from '../../store'
 import { Field, SaveRow, Section, field_classes } from './parts'
 import type { SettingsAccess } from './useSettings'
+import { button } from '../../ui'
 
 export function AppearanceSection({ state, save, saving }: SettingsAccess) {
   const theme = useReview((s) => s.theme)
@@ -18,7 +19,7 @@ export function AppearanceSection({ state, save, saving }: SettingsAccess) {
     >
       <Field label="Theme">
         <button
-          className="rounded border border-edge px-2 py-1 text-xs text-ink hover:bg-overlay"
+          className={`text-xs ${button}`}
           onClick={toggleTheme}
         >
           {theme === 'dark' ? 'switch to light' : 'switch to dark'}

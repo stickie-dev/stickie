@@ -16,7 +16,6 @@
     "@hono/zod-openapi": "^1.5.1",
     "@stickie/shared": "workspace:*",
     "@vscode/ripgrep": "^1.18.0",
-    "chokidar": "^4.0.0",
     "execa": "^9.5.0",
     "hono": "^4.6.0",
     "pg": "^8.23.0",

@@ -3,6 +3,7 @@ import { fileIconUrl } from '../fileIcons'
 import type { Tab } from '../store'
 import { useReview } from '../store'
 import { tabLabels } from '../tabLabels'
+import { button, button_on, motion } from '../ui'
 
 /** Room kept for the overflow button when not every tab fits. */
 const overflow_reserve = 52
@@ -116,10 +117,10 @@ export function TabBar() {
       <div
         key={tab.id}
         data-tab-key={`${tab.id}:${labelOf(tab)}`}
-        className={`group flex max-w-64 shrink-0 items-center gap-1.5 rounded-t-md border-x border-t px-2.5 py-1.5 ${
+        className={`group flex max-w-64 shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 ${motion} ${
           is_active
-            ? 'border-edge bg-panel text-ink'
-            : 'border-transparent text-soft hover:bg-overlay hover:text-ink'
+            ? 'bg-panel text-ink shadow-soft'
+            : 'text-soft hover:bg-overlay/70 hover:text-ink'
         }`}
       >
         <button
@@ -140,7 +141,7 @@ export function TabBar() {
         </button>
         {tab.kind !== 'flow' && (
           <button
-            className="shrink-0 rounded px-0.5 text-faint opacity-0 group-hover:opacity-100 hover:bg-edge hover:text-ink"
+            className={`shrink-0 rounded-sm px-0.5 text-faint opacity-0 group-hover:opacity-100 hover:bg-overlay hover:text-ink ${motion}`}
             title="close tab"
             onClick={() => closeTab(tab.id)}
           >
@@ -152,7 +153,7 @@ export function TabBar() {
   }
 
   return (
-    <div className="relative flex shrink-0 items-stretch border-b border-edge bg-surface pt-1 text-xs">
+    <div className="relative flex shrink-0 items-stretch border-b border-edge bg-surface px-1 py-1 text-xs">
       <div
         ref={stripRef}
         className="flex min-w-0 grow items-stretch gap-0.5 overflow-hidden px-1"
@@ -161,9 +162,7 @@ export function TabBar() {
       </div>
       {hidden.length > 0 && (
         <button
-          className={`mr-1 shrink-0 self-center rounded px-2 py-1 ${
-            listing ? 'bg-overlay text-ink' : 'text-soft hover:text-ink'
-          }`}
+          className={`mr-1 shrink-0 self-center ${listing ? button_on : button}`}
           title={`${hidden.length} more open`}
           onClick={() => setListing(!listing)}
         >
@@ -173,7 +172,7 @@ export function TabBar() {
       {listing && hidden.length > 0 && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setListing(false)} />
-          <div className="absolute top-full right-1 z-50 max-h-80 w-80 overflow-y-auto rounded-md border border-edge bg-panel py-1 shadow-xl">
+          <div className="absolute top-full right-1 z-50 max-h-80 w-80 overflow-y-auto rounded-lg bg-panel py-1 shadow-lifted">
             {hidden.map((tab) => (
               <div
                 key={tab.id}

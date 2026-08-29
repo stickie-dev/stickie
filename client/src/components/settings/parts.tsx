@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
+import { button_primary, field, sunken } from '../../ui'
 
-export const field_classes =
-  'w-full rounded border border-edge bg-surface px-2 py-1.5 font-mono text-xs text-ink outline-none focus:border-accent'
+export const field_classes = `w-full py-1.5 font-mono text-xs ${field}`
 
 export function Section({
   title,
@@ -54,7 +54,7 @@ export function SaveRow({
   return (
     <div className="flex items-center gap-3 pt-1">
       <button
-        className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-strong disabled:opacity-50"
+        className={`px-3 py-1.5 text-xs ${button_primary} disabled:opacity-50`}
         disabled={saving}
         onClick={onSave}
       >
@@ -72,7 +72,7 @@ export function Mono({ children }: { children: ReactNode }) {
 /** A shell command, on one line, selectable and copyable. */
 export function Command({ text }: { text: string }) {
   return (
-    <pre className="overflow-x-auto rounded border border-edge bg-surface px-2 py-1.5 font-mono text-xs text-ink">
+    <pre className={`overflow-x-auto px-2 py-1.5 font-mono text-xs text-ink ${sunken}`}>
       {text}
     </pre>
   )

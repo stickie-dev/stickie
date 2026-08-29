@@ -3,6 +3,7 @@ import type { Thread } from '@stickie/shared'
 import { postsComment } from '../keys'
 import { useReview } from '../store'
 import { TimeAgo } from './TimeAgo'
+import { badge, button_primary, field } from '../ui'
 
 const ref_pattern = /(@[\w./-]+(?::[\w./-]+)?:L\d+(?:-L?\d+)?)/g
 
@@ -41,11 +42,9 @@ function MessageBody({ body }: { body: string }) {
 }
 
 const status_styles: Record<Thread['status'], string> = {
-  open: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40',
-  resolved:
-    'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40',
-  detached:
-    'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40',
+  open: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+  resolved: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+  detached: 'bg-rose-500/15 text-rose-700 dark:text-rose-300',
 }
 
 export function ThreadCard({ thread }: { thread: Thread | undefined }) {
@@ -90,14 +89,12 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
 
   return (
     <div
-      className={`min-w-0 rounded-md border bg-panel text-sm shadow-lg ${
-        linked ? 'border-accent ring-1 ring-accent' : 'border-edge'
+      className={`min-w-0 rounded-lg bg-panel text-[13px] shadow-lifted ${
+        linked ? 'ring-1 ring-accent' : ''
       }`}
     >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-edge px-3 py-1.5">
-        <span
-          className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${status_styles[thread.status]}`}
-        >
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-edge/60 px-3 py-1.5">
+        <span className={`${badge} ${status_styles[thread.status]}`}>
           {thread.status}
         </span>
         <span className="text-xs text-soft">
@@ -119,12 +116,14 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
           {thread.number}
         </span>
         {thread.pending && (
-          <span className="rounded border border-violet-500/40 bg-violet-500/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-violet-700 dark:text-violet-300">
+          <span
+            className={`${badge} bg-violet-500/15 text-violet-700 dark:text-violet-300`}
+          >
             draft
           </span>
         )}
         {thread.origin !== null && (
-          <span className="rounded border border-edge px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-soft">
+          <span className={`${badge} bg-overlay text-soft`}>
             {thread.origin}
           </span>
         )}
@@ -184,7 +183,7 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
               <textarea
                 autoFocus
                 rows={2}
-                className="grow resize-y rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
+                className={`grow resize-y ${field}`}
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 onKeyDown={(e) => {
@@ -198,7 +197,7 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
               />
               <div className="flex flex-col gap-1">
                 <button
-                  className="rounded bg-accent px-2 py-0.5 text-xs text-white hover:bg-accent-strong"
+                  className={`${button_primary} text-xs`}
                   onClick={() => {
                     if (editText.trim() !== '') {
                       void editMessage(thread.id, message.id, editText.trim())
@@ -255,11 +254,11 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
           ),
         )}
         {showReply ? (
-          <div className="flex gap-2 border-t border-edge pt-2">
+          <div className="flex gap-2 border-t border-edge/60 pt-2">
             <textarea
               autoFocus
               rows={2}
-              className="grow resize-y rounded border border-edge bg-surface px-2 py-1 text-ink outline-none focus:border-accent"
+              className={`grow resize-y ${field}`}
               placeholder={
                 submitKey === 'enter'
                   ? 'reply… (↵ to send, ⇧↵ for a new line)'
@@ -277,14 +276,14 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
               }}
             />
             <button
-              className="rounded bg-accent px-2 py-1 text-xs text-white hover:bg-accent-strong"
+              className={`${button_primary} text-xs`}
               onClick={() => void submitReply()}
             >
               send
             </button>
           </div>
         ) : (
-          <div className="border-t border-edge pt-1.5">
+          <div className="border-t border-edge/60 pt-1.5">
             <button
               className="text-xs text-soft hover:text-ink"
               onClick={() => setShowReply(true)}

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useReview } from '../store'
+import { button_primary, card, enter, field } from '../ui'
 
 export function AddRepo() {
   const addRepo = useReview((s) => s.addRepo)
@@ -19,14 +20,14 @@ export function AddRepo() {
   }
 
   return (
-    <div className="mx-auto mt-24 w-[28rem] rounded-lg border border-edge bg-panel p-6">
+    <div className={`mx-auto mt-24 w-[28rem] p-6 ${card} ${enter}`}>
       <h2 className="text-sm font-semibold text-ink">Add a repository</h2>
       <p className="mt-1 text-xs text-faint">
         Path to a git repository to review (~ works).
       </p>
       <div className="mt-3 flex gap-2">
         <input
-          className="grow rounded border border-edge bg-surface px-2 py-1.5 font-mono text-xs text-ink outline-none focus:border-accent"
+          className={`grow py-1.5 font-mono text-xs ${field}`}
           placeholder="~/path/to/repo"
           value={path}
           onChange={(e) => setPath(e.target.value)}
@@ -35,7 +36,7 @@ export function AddRepo() {
           }}
         />
         <button
-          className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-strong"
+          className={`px-3 py-1.5 text-xs ${button_primary}`}
           onClick={() => void submit()}
         >
           add

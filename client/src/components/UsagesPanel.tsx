@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { NavHit } from '../api'
 import { useReview } from '../store'
+import { button } from '../ui'
 
 export function UsagesPanel() {
   const usages = useReview((s) => s.usages)
@@ -38,7 +39,7 @@ export function UsagesPanel() {
         </span>
         <span className="grow" />
         <button
-          className="rounded border border-edge px-2 py-0.5 text-soft hover:text-ink"
+          className={`px-2 py-0.5 ${button}`}
           onClick={() =>
             void openUsages(
               usages.name,

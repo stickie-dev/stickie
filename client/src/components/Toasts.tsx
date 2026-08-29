@@ -1,4 +1,5 @@
 import { useReview } from '../store'
+import { enter } from '../ui'
 
 export function Toasts() {
   const toasts = useReview((s) => s.toasts)
@@ -11,10 +12,10 @@ export function Toasts() {
       {toasts.map((toast) => (
         <button
           key={toast.id}
-          className={`rounded-md border px-3 py-2 text-left text-xs shadow-xl ${
+          className={`${enter} rounded-lg px-3 py-2 text-left text-xs shadow-lifted ${
             toast.kind === 'error'
-              ? 'border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200'
-              : 'border-edge bg-panel text-ink'
+              ? 'bg-rose-50 text-rose-800 dark:bg-rose-950 dark:text-rose-200'
+              : 'bg-panel text-ink'
           }`}
           title="dismiss"
           onClick={() => dismissToast(toast.id)}

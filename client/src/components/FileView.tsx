@@ -13,6 +13,7 @@ import { CommentLayer } from './CommentLayer'
 import { CommitTimeline } from './CommitTimeline'
 import { ContinuousDiff } from './ContinuousDiff'
 import { Loading, SkeletonCode } from './Skeleton'
+import { button } from '../ui'
 import { FileName } from './FileName'
 
 const side_by_side_min_width = 1440
@@ -343,7 +344,7 @@ function WrapAll({ files }: { files: ChangedFile[] }) {
     <span className="flex shrink-0 items-center gap-1.5 text-soft">
       <span className="text-faint">{state}</span>
       <button
-        className="rounded border border-edge px-1.5 py-0.5 hover:text-ink"
+        className={`px-1.5 py-0.5 ${button}`}
         title="soft-wrap every file in this diff"
         disabled={all}
         onClick={() => setWrapAll(paths, true)}
@@ -351,7 +352,7 @@ function WrapAll({ files }: { files: ChangedFile[] }) {
         wrap all
       </button>
       <button
-        className="rounded border border-edge px-1.5 py-0.5 hover:text-ink"
+        className={`px-1.5 py-0.5 ${button}`}
         title="stop wrapping every file in this diff"
         disabled={wrapped === 0}
         onClick={() => setWrapAll(paths, false)}
