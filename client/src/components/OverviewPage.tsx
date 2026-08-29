@@ -9,6 +9,7 @@ import type {
 import { api } from '../api'
 import { formatRoute } from '../routes'
 import { timeValue } from '../time'
+import { ThemeToggle } from './ThemeToggle'
 import { TimeAgo } from './TimeAgo'
 import { useReview } from '../store'
 import { Loading, Skeleton, SkeletonRows } from './Skeleton'
@@ -540,6 +541,7 @@ export function OverviewPage() {
         <button className={btn()} onClick={() => void load()}>
           reload
         </button>
+        <ThemeToggle />
         <Link
           className={btn()}
           to={formatRoute({ kind: 'settings', section: 'identity' })}

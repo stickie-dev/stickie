@@ -137,6 +137,11 @@ the only output.
 - **Reading comfort** — light and dark themes built for diffs, soft wrap by
   file type (settings), per file (header button, right-click menu) or for every
   file in a diff at once, and width rulers at 80/100/120 on anything unwrapped
+- **Where things are** — the top bar carries the review's own controls and the
+  workspace's: source and base, search, the comments and activity panels, the
+  theme, settings. The diff's own menu is the one at the end of the tabs — how
+  it is drawn (side by side or inline, unchanged lines, wrapping) and what can
+  be done with it (*Copy prompt*, which takes this review's notes to an agent)
 - **Settings** — a page at `/settings` with a section each for identity, review
   behaviour (who moves a stale base pin), storage, GitLab instance and token
   resolution, the instruction block *Copy prompt* appends,

@@ -36,7 +36,13 @@ export const sunken = 'rounded-md bg-sunken'
  */
 export type ButtonKind = 'primary' | 'secondary' | 'outline' | 'text'
 
-const button_base = 'rounded-sm px-2 py-1 disabled:cursor-not-allowed'
+/*
+ * No `not-allowed` cursor on a disabled button. The colour already says it is
+ * not ready, and a crossed-out pointer says something stronger and less true —
+ * that the reader is doing something wrong, when usually they have simply not
+ * typed anything yet.
+ */
+const button_base = 'rounded-sm px-2 py-1'
 
 const button_kinds: Record<ButtonKind, string> = {
   primary:

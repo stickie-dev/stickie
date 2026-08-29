@@ -4,6 +4,7 @@ import { api } from '../api'
 import { ask } from '../confirm'
 import { formatRoute } from '../routes'
 import { btn, button_on, field, icon_button } from '../ui'
+import { ThemeToggle } from './ThemeToggle'
 import { useReview } from '../store'
 
 function shortPath(path: string): string {
@@ -22,8 +23,6 @@ export function TopBar() {
   const setBase = useReview((s) => s.setBase)
   const repin = useReview((s) => s.repin)
   const importMr = useReview((s) => s.importMr)
-  const copyPrompt = useReview((s) => s.copyPrompt)
-  const promptCopied = useReview((s) => s.promptCopied)
   const connected = useReview((s) => s.connected)
   const threads = useReview((s) => s.threads)
   const navBack = useReview((s) => s.navBack)
@@ -277,6 +276,7 @@ export function TopBar() {
       >
         Import MR
       </button>
+      <ThemeToggle />
       <Link
         className={`shrink-0 ${btn()}`}
         title="settings"
@@ -284,13 +284,6 @@ export function TopBar() {
       >
         settings
       </Link>
-      <button
-        className={`shrink-0 ${btn('primary', 'px-2.5')}`}
-        disabled={session === null}
-        onClick={() => void copyPrompt()}
-      >
-        {promptCopied ? 'copied ✓' : 'Copy prompt'}
-      </button>
     </header>
   )
 }

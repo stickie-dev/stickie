@@ -9,6 +9,7 @@ import { IdentitySection } from './IdentitySection'
 import { PromptSection } from './PromptSection'
 import { ReviewsSection } from './ReviewsSection'
 import { StorageSection } from './StorageSection'
+import { ThemeToggle } from '../ThemeToggle'
 import { useSettings } from './useSettings'
 import { Loading, Skeleton, SkeletonLines } from '../Skeleton'
 import { btn, enter, motion, page } from '../../ui'
@@ -58,6 +59,7 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
           `lastPlace` is the last address that was not settings, and '/' when
           settings was loaded directly.
         */}
+        <ThemeToggle />
         <button className={btn()} onClick={() => void navigate(lastPlace())}>
           back
         </button>

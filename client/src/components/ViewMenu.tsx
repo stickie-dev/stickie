@@ -3,13 +3,16 @@ import { useReview, wrapFor } from '../store'
 import { btn, button_on, eyebrow, motion } from '../ui'
 
 /**
- * How the diff is drawn, in one menu at the end of the tabs.
+ * The diff's own menu, at the end of the tabs: how it is drawn, and what can be
+ * done with it.
  *
- * These were a row of words above the diff — "12 changed files · all wrapped ·
- * wrap all · none" — which spent a line of the screen on counts the status bar
- * already carries, and still had no room for the view mode or the unchanged
- * regions, so those existed on a single file and nowhere on the diff. A menu
- * costs one glyph and holds all of it.
+ * How it is drawn used to be a row of words above the diff — "12 changed files
+ * · all wrapped · wrap all · none" — which spent a line of the screen on counts
+ * the status bar already carries, and still had no room for the view mode or
+ * the unchanged regions, so those existed on a single file and nowhere on the
+ * diff. Copy prompt used to be in the top bar beside Search and Settings,
+ * which are about the workspace; taking this review's notes to an agent is an
+ * act on this diff, and belongs where the diff's other choices are.
  *
  * What it offers depends on what is open, because wrapping is per file and
  * "every file in this diff" only means something in the diff.
@@ -65,6 +68,9 @@ export function ViewMenu() {
   const wrapOverrides = useReview((s) => s.wrapOverrides)
   const toggleWrap = useReview((s) => s.toggleWrap)
   const setWrapAll = useReview((s) => s.setWrapAll)
+  const copyPrompt = useReview((s) => s.copyPrompt)
+  const promptCopied = useReview((s) => s.promptCopied)
+  const session = useReview((s) => s.session)
   const ref = useRef<HTMLDivElement>(null)
 
   // a menu in normal document flow, so pointerdown outside it closes it —
@@ -146,6 +152,19 @@ export function ViewMenu() {
             >
               Shown
             </Choice>
+          </Group>
+          <Group label="This review">
+            <button
+              className={`w-full px-2 py-1 text-left text-xs ${btn()}`}
+              disabled={session === null}
+              title="every unresolved note as markdown, on the clipboard, for pasting into any agent"
+              onClick={() => {
+                setOpen(false)
+                void copyPrompt()
+              }}
+            >
+              {promptCopied ? 'Copied ✓' : 'Copy prompt'}
+            </button>
           </Group>
           <Group label={in_flow ? 'Wrap long lines' : 'Wrap long lines here'}>
             {in_flow ? (
