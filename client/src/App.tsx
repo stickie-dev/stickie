@@ -11,6 +11,7 @@ import { ConfirmDialog } from './components/ConfirmDialog'
 import { Toasts } from './components/Toasts'
 import { Workspace } from './components/Workspace'
 import type { Page, TabRef } from './routes'
+import { rememberPlace } from './lastPlace'
 import { formatRoute, isReviewRoute, parseRoute, sameTab } from './routes'
 import type { Tab } from './store'
 import { useReview } from './store'
@@ -295,6 +296,12 @@ export function App() {
     setReviewActive(on_review)
   }, [on_review, setReviewActive])
 
+  // where settings' "back" returns to: the last address that was not settings,
+  // since settings' own sections are addresses and history walks those first
+  useEffect(() => {
+    if (page !== null && page.kind !== 'settings') rememberPlace(address)
+  }, [page, address])
+
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
@@ -348,7 +355,7 @@ export function App() {
       <div className="relative min-h-0 grow">
         {workspaceMounted && <Workspace active={on_review} />}
         {!on_review && (
-          <div className="absolute inset-0 z-30 overflow-auto bg-surface">
+          <div className="stickie-scroll absolute inset-0 z-30 overflow-auto bg-surface">
             <PageLayer page={page} />
           </div>
         )}

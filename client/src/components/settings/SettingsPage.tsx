@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import type { SettingsSection } from '../../routes'
 import { formatRoute, settings_sections } from '../../routes'
 import { AgentsSection } from './AgentsSection'
@@ -11,7 +11,8 @@ import { ReviewsSection } from './ReviewsSection'
 import { StorageSection } from './StorageSection'
 import { useSettings } from './useSettings'
 import { Loading, Skeleton, SkeletonLines } from '../Skeleton'
-import { btn, enter, motion } from '../../ui'
+import { btn, enter, motion, page } from '../../ui'
+import { lastPlace } from '../../lastPlace'
 
 const titles: Record<SettingsSection, string> = {
   identity: 'Identity',
@@ -41,33 +42,33 @@ const sections: Record<
 export function SettingsPage({ section }: { section: SettingsSection }) {
   const access = useSettings()
   const navigate = useNavigate()
-  const location = useLocation()
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex items-center gap-2.5 px-4 py-2.5 text-xs">
+    <div className="min-h-full">
+      <header className="sticky top-0 z-10 bg-surface py-2.5 text-xs">
+        <div className={`flex items-center gap-2.5 ${page}`}>
         <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
         <span className="font-semibold tracking-tight text-ink">stickie</span>
         <span className="text-faint">settings</span>
         <span className="grow" />
         {/*
-          Back where the reader was, not to the root: settings is reached from a
-          review, from the overview, and from a pasted address, and only the
-          last of those has nowhere to go back to. `location.key` is 'default'
-          for the entry a page was loaded on, which is how that case is known.
+          Back to what the reader was looking at, which is not the same as one
+          step back in history: every settings section is an address, so history
+          walks Identity, Storage, GitLab before it ever leaves the page.
+          `lastPlace` is the last address that was not settings, and '/' when
+          settings was loaded directly.
         */}
-        <button
-          className={btn()}
-          onClick={() => {
-            if (location.key === 'default') void navigate('/')
-            else void navigate(-1)
-          }}
-        >
+        <button className={btn()} onClick={() => void navigate(lastPlace())}>
           back
         </button>
+        </div>
       </header>
-      <div className="flex min-h-0 grow">
-        <nav className="w-48 shrink-0 space-y-0.5 px-2 py-3">
+      {/* the same frame as the overview, so the left edge does not move when a
+          reader comes here from it */}
+      <div className={`flex ${page}`}>
+        {/* sticky, since the page scrolls as one now and a section can be
+            taller than the window */}
+        <nav className="sticky top-12 h-fit w-48 shrink-0 space-y-0.5 py-3">
           {settings_sections.map((name) => (
             <Link
               key={name}
@@ -82,7 +83,7 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
             </Link>
           ))}
         </nav>
-        <div className={`min-h-0 grow overflow-y-auto p-6 ${enter}`}>
+        <div className={`grow px-6 pt-2 pb-10 ${enter}`}>
           {/*
             Sections render their own fields empty until the settings land,
             which reads as a page of blank controls. One silhouette of a

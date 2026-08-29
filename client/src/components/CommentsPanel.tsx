@@ -33,6 +33,15 @@ function NoteComposer({ onDone }: { onDone: () => void }) {
     <div className="rounded-lg bg-panel p-2 text-[13px] ring-1 ring-accent">
       <div className="mb-1 flex items-center gap-2 text-xs text-soft">
         <span>note on</span>
+        {/*
+          Both are notes with no line under them. The review is the usual one —
+          the approach, a missing test, something that belongs to the change
+          rather than to a place in it. The other attaches the same kind of note
+          to a whole file, for "this file should be split" and the like; it is
+          the file that is open, since a list of every file to pick from is a
+          file picker and this is a note box. The export writes them as "whole
+          review" and "path (whole file)".
+        */}
         <select
           className={`px-1 py-0.5 ${field}`}
           value={scope}
@@ -40,7 +49,9 @@ function NoteComposer({ onDone }: { onDone: () => void }) {
         >
           <option value="review">the whole review</option>
           <option value="file" disabled={selectedPath === null}>
-            {selectedPath === null ? 'no file open' : selectedPath}
+            {selectedPath === null
+              ? 'a whole file — none open'
+              : `the whole file — ${selectedPath.split('/').at(-1) ?? selectedPath}`}
           </option>
         </select>
       </div>

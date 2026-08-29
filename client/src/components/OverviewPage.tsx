@@ -13,7 +13,7 @@ import { TimeAgo } from './TimeAgo'
 import { useReview } from '../store'
 import { Loading, Skeleton, SkeletonRows } from './Skeleton'
 import { ask } from '../confirm'
-import { badge, btn, card, enter, field, row, th } from '../ui'
+import { badge, btn, card, enter, field, page, row, th } from '../ui'
 
 /**
  * The landing page: every review across every registered repository, and what
@@ -524,8 +524,15 @@ export function OverviewPage() {
           : 'Nothing is waiting on you.'
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex items-center gap-2.5 px-4 py-2.5 text-xs">
+    <div className="min-h-full">
+      {/*
+        The bars stay full width — they belong to the window. What is read sits
+        in a column with a ceiling on it and centred, because on a wide screen
+        a table pinned to the left edge leaves the reader's eyes travelling
+        across empty space to reach the numbers on the right.
+      */}
+      <header className="sticky top-0 z-10 bg-surface py-2.5 text-xs">
+        <div className={`flex items-center gap-2.5 ${page}`}>
         <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
         <span className="font-semibold tracking-tight text-ink">stickie</span>
         <span className="text-faint">overview</span>
@@ -540,9 +547,11 @@ export function OverviewPage() {
         >
           settings
         </Link>
+        </div>
       </header>
 
-      <div className={`min-h-0 grow overflow-y-auto px-6 pt-2 pb-10 ${enter}`}>
+      <div>
+        <div className={`${page} pt-2 pb-10 ${enter}`}>
         {error !== null && (
           <p className="mb-4 rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-600 dark:text-rose-300">
             {error}
@@ -780,6 +789,7 @@ export function OverviewPage() {
             From the append-only record, across every repository, newest first.
           </p>
         </section>
+        </div>
       </div>
     </div>
   )

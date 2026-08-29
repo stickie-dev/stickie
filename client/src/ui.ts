@@ -90,5 +90,18 @@ export const row = `border-b border-edge/50 last:border-b-0 hover:bg-overlay/60 
 export const eyebrow =
   'text-[10px] font-medium tracking-[0.08em] text-faint uppercase'
 
+/**
+ * The frame every full page is laid out in: fluid, so a laptop has no gutters
+ * at all, with a ceiling so a table on a 34-inch screen does not stretch to
+ * the width of the desk. One token because the overview and settings had
+ * 72rem and 64rem, which made the left edge jump when you moved between them —
+ * the thing a reader notices even when neither width is wrong.
+ *
+ * Prose and fields keep their own measure inside it (`Section` is 2xl): a
+ * table wants width, a paragraph wants about eighty characters, and one frame
+ * can hold both as long as it does not force either.
+ */
+export const page = 'mx-auto w-full max-w-[100rem] px-6'
+
 /** Content arriving: a short rise, once, rather than a fade on every render. */
 export const enter = 'animate-rise'

@@ -94,6 +94,38 @@
 }
 
 /*
+ * A scrollbar appearing must not move a centred column.
+ *
+ * The overview and settings centre their content in the window, so when one of
+ * them grew past the fold and took a scrollbar, everything shifted by half its
+ * width — and the two pages disagreed by exactly that, since one overflowed and
+ * the other did not. Reserving the gutter keeps the column still. Applied to
+ * the one scroller a page has: nested scrollers reserve twice and put the
+ * header and the content back out of step with each other.
+ */
+.stickie-scroll {
+  scrollbar-gutter: stable;
+}
+
+/*
+ * A selection has to win over the diff's own colours.
+ *
+ * Monaco paints one line's overlays as siblings in DOM order, all at
+ * `z-index: auto`: the selection first, then the inserted/removed line
+ * background — which is opaque, so on every changed line the selection was
+ * painted and then buried. Nothing about the colours could fix that; the
+ * selection was there, underneath. Raising it one step puts it over the line
+ * tint and over the word-level diff highlight, which is the right order: what
+ * the reader has selected is more important than how it got there.
+ *
+ * The text itself is in `.view-lines`, a different container above all of
+ * these, so it stays readable through the selection either way.
+ */
+.monaco-editor .view-overlays .selected-text {
+  z-index: 1;
+}
+
+/*
  * A loading silhouette: the shape of the thing that is coming, with a sheen
  * travelling across it. The gradient is on the background rather than a child
  * element so any box can be one without a wrapper.

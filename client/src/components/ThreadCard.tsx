@@ -358,9 +358,11 @@ export function ThreadCard({
             </button>
           </div>
         ) : (
+          // the whole row, not the word: the row is the target a pointer is
+          // already over, and a two-word hit area inside it is a thing to aim at
           <div className="border-t border-edge/60 pt-1.5">
             <button
-              className="text-xs text-soft hover:text-ink"
+              className={`w-full text-left text-xs ${btn('text', 'px-1.5')}`}
               onClick={() => setShowReply(true)}
             >
               reply…
