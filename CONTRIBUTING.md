@@ -57,6 +57,29 @@ repo, which is local-over-global and so the identity a commit made there would
 carry. Someone whose global config is their employer's may well review a
 personal repository under a different name, and the record should say which.
 
+## What a review is
+
+A review is `(repo, source, base_ref)` — this working tree or this branch,
+against this ref — and that is the table's unique key. The commit the base is
+pinned to is *state*: `getOrCreateSession` finds a review by its ref and leaves
+the pin alone, and re-pinning updates it in place. Keying on the pinned commit
+instead is what used to mint a fresh review every time the reviewed branch got a
+commit, splitting one person's notes across a row per commit.
+
+`db/sessionKey.ts` moves an older database onto that key, once, from
+`applySchema`. It merges whatever forked under the old keying — notes and viewed
+files onto one survivor, the one holding the most notes — before swapping the
+constraint. SQLite cannot drop a constraint, so the table is rebuilt with
+foreign keys switched off around it (this connection has them on, and dropping
+the old table with them on would cascade every note away) and
+`pragma foreign_key_check` verifies the result. The merge re-points `activity`
+rows at the survivor, which is the one thing that ever rewrites the record: it
+is a one-off re-key rather than a runtime path, and it writes a
+`review.merged` row saying so.
+
+Looking at one commit against its parent is a *view*, not a review: the commits
+list opens it in its own tab and creates nothing.
+
 ## The record
 
 `activity` is append-only by convention: nothing in `Store` updates or deletes

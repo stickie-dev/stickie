@@ -72,22 +72,24 @@ describe('Store', () => {
     expect(await store.countOpenThreads(session.id)).toBe(2)
   })
 
-  it('carries unresolved notes to a re-pinned session', async () => {
+  it('keeps every note on the review when its base is re-pinned', async () => {
     const store = await freshStore()
     const repo = await store.addRepo('/tmp/repo')
     const source = { kind: 'worktree' as const, value: '/tmp/repo' }
-    const before = await store.getOrCreateSession(repo.id, source, 'master', 'aaa')
+    const session = await store.getOrCreateSession(repo.id, source, 'master', 'aaa')
     const kept = await store.createThread(
-      before.id, 'a.py', 'source', 1, 1, null, 'x', 'user', 'open one',
+      session.id, 'a.py', 'source', 1, 1, null, 'x', 'user', 'open one',
     )
     const done = await store.createThread(
-      before.id, 'a.py', 'source', 2, 2, null, 'y', 'user', 'closed one',
+      session.id, 'a.py', 'source', 2, 2, null, 'y', 'user', 'closed one',
     )
     await store.setThreadStatus(done.id, 'resolved')
-    const after = await store.getOrCreateSession(repo.id, source, 'master', 'bbb')
-    expect(await store.moveOpenThreads(before.id, after.id)).toBe(1)
-    expect((await store.listThreads(after.id)).map((t) => t.id)).toEqual([
+    await store.repinSession(session.id, 'bbb')
+    // resolved history stays with the review it belongs to, rather than being
+    // left behind on a session nothing opens any more
+    expect((await store.listThreads(session.id)).map((t) => t.id)).toEqual([
       kept.id,
+      done.id,
     ])
   })
 
@@ -418,7 +420,7 @@ describe('Store.summarizeSessions', () => {
     const { store, repo, session } = await seed()
     const other = await store.getOrCreateSession(
       repo.id,
-      { kind: 'worktree', value: '/tmp/repo' },
+      { kind: 'ref', value: 'feature/x' },
       'master',
       'def456',
     )
@@ -429,4 +431,86 @@ describe('Store.summarizeSessions', () => {
     expect(summary.get(session.id)?.notes.total).toBe(1)
     expect(summary.get(other.id)?.notes.total).toBe(2)
   })
+})
+
+describe('session identity', () => {
+  const open = (
+    store: Awaited<ReturnType<typeof freshStore>>,
+    repoId: number,
+    baseSha: string,
+  ) =>
+    store.getOrCreateSession(
+      repoId,
+      { kind: 'worktree', value: '/tmp/repo' },
+      'master',
+      baseSha,
+    )
+
+  it('is the ref, not the commit the ref pointed at', async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const first = await open(store, repo.id, 'aaa')
+    // the branch moved and a fresh visit resolved a different merge-base
+    const again = await open(store, repo.id, 'bbb')
+    expect(again.id).toBe(first.id)
+    expect(await store.listSessions()).toHaveLength(1)
+  })
+
+  it('keeps a different base ref apart when the commits differ', async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const against_master = await open(store, repo.id, 'aaa')
+    const against_head = await store.getOrCreateSession(
+      repo.id,
+      { kind: 'worktree', value: '/tmp/repo' },
+      'HEAD',
+      'bbb',
+    )
+    expect(against_head.id).not.toBe(against_master.id)
+  })
+
+  it('keeps two refs apart even when they point at the same commit', async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const against_master = await open(store, repo.id, 'aaa')
+    const against_head = await store.getOrCreateSession(
+      repo.id,
+      { kind: 'worktree', value: '/tmp/repo' },
+      'HEAD',
+      'aaa',
+    )
+    expect(against_head.id).not.toBe(against_master.id)
+  })
+
+  it('answers with the base a review is pinned to, not the one just resolved', async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    await open(store, repo.id, 'aaa')
+    // the caller resolved a fresh merge-base; the review keeps its own pin
+    expect((await open(store, repo.id, 'zzz')).baseSha).toBe('aaa')
+  })
+
+  it('re-pins in place, keeping the notes on the same review', async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const session = await open(store, repo.id, 'aaa')
+    await store.createThread(
+      session.id,
+      'a.ts',
+      'source',
+      1,
+      1,
+      null,
+      'x',
+      'user',
+      'note',
+    )
+    await store.repinSession(session.id, 'ccc')
+    const after = await store.getSession(session.id)
+    expect(after?.baseSha).toBe('ccc')
+    expect(await store.listThreads(session.id)).toHaveLength(1)
+    expect(await store.listSessions()).toHaveLength(1)
+  })
+
+
 })

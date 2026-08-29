@@ -114,6 +114,19 @@ export class Store {
     await this.db.run('delete from repos where id = ?', [id])
   }
 
+  /**
+   * A review is identified by what is being reviewed and against what *ref* —
+   * not against which commit that ref happened to point at. The pinned sha is
+   * state, not identity: every commit to the reviewed branch used to move the
+   * merge-base and so mint a brand-new review on the next page load, splitting
+   * one person's notes across a row per commit.
+   *
+   * A base that has since moved is not hidden by this — `baseStale` still
+   * reports it and re-pinning still moves the pin deliberately.
+   *
+   * The insert relies on the table's unique key being that same tuple; see
+   * `db/sessionKey.ts`, which moves an older database onto it.
+   */
   async getOrCreateSession(
     repoId: number,
     source: ReviewSource,
@@ -125,14 +138,25 @@ export class Store {
        values (?, ?, ?, ?, ?) on conflict do nothing`,
       [repoId, source.kind, source.value, baseRef, baseSha],
     )
+    // selected by the key, so an existing review comes back with the base it is
+    // already pinned to rather than the one just resolved
     const row = await this.db.get<SessionRow>(
       `select s.*, r.path as repo_path from sessions s
        join repos r on r.id = s.repo_id
-       where s.repo_id = ? and s.source_kind = ? and s.source_value = ? and s.base_sha = ?`,
-      [repoId, source.kind, source.value, baseSha],
+       where s.repo_id = ? and s.source_kind = ? and s.source_value = ?
+         and s.base_ref = ?`,
+      [repoId, source.kind, source.value, baseRef],
     )
     if (row === undefined) throw new Error('session insert failed')
     return sessionFromRow(row)
+  }
+
+  /** Moves the pin, in place: re-pinning continues a review, it does not fork one. */
+  async repinSession(sessionId: number, baseSha: string): Promise<void> {
+    await this.db.run('update sessions set base_sha = ? where id = ?', [
+      baseSha,
+      sessionId,
+    ])
   }
 
   async getSession(id: number): Promise<Session | undefined> {
@@ -590,18 +614,6 @@ export class Store {
       [sessionId],
     )
     return rows.map((r) => r.path)
-  }
-
-  /** Carry unresolved threads over to a re-pinned session. */
-  async moveOpenThreads(
-    fromSessionId: number,
-    toSessionId: number,
-  ): Promise<number> {
-    const result = await this.db.run(
-      `update threads set session_id = ? where session_id = ? and status != 'resolved'`,
-      [toSessionId, fromSessionId],
-    )
-    return result.changes
   }
 
   async setThreadAnchor(

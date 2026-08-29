@@ -50,12 +50,11 @@ export function TopBar() {
     }
   }
 
+  // A review is a worktree or a branch. Looking at one commit against its
+  // parent is a way of reading that review, not a review of its own — the
+  // commits list opens it in its own tab without minting anything.
   const changeSource = (key: string) => {
-    const parsed = parse_source(key)
-    // reviewing a single commit: diff it against its parent
-    const is_commit =
-      parsed.kind === 'ref' && /^[0-9a-f]{40}$/.test(parsed.value)
-    void setSource(parsed, is_commit ? `${parsed.value}^` : undefined)
+    void setSource(parse_source(key), undefined)
   }
 
   const select_classes =
@@ -120,13 +119,6 @@ export function TopBar() {
               {targets.branches.map((branch) => (
                 <option key={branch.name} value={`ref:${branch.name}`}>
                   {branch.name}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="commits (vs parent)">
-              {targets.recentCommits.map((commit) => (
-                <option key={commit.sha} value={`ref:${commit.sha}`}>
-                  {commit.shortSha} {commit.subject.slice(0, 48)}
                 </option>
               ))}
             </optgroup>

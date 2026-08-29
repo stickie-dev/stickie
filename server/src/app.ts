@@ -668,11 +668,11 @@ export function createApp(
       method: 'post',
       path: '/api/sessions/{id}/repin',
       tags: ['sessions'],
-      summary: 'Re-pin a stale HEAD base and carry open threads forward',
+      summary: 'Move a stale base pin to the freshly resolved commit',
       description:
-        'Creates (or reuses) the session at the freshly resolved base and ' +
-        'moves all unresolved threads to it; resolved threads stay with the ' +
-        'old session as history.',
+        'Re-pins this review in place, so its notes and its history stay ' +
+        'together; the base it moved from is kept in the activity record. ' +
+        'Notes re-anchor against the new base on the next read.',
       request: { params: id_param },
       responses: {
         200: json_response(session_schema, 'The re-pinned session'),
@@ -693,27 +693,21 @@ export function createApp(
       if (current === session.baseSha) {
         return c.json({ ...session, baseStale: false }, 200)
       }
-      const next = await store.getOrCreateSession(
-        session.repoId,
-        session.source,
-        session.baseRef,
-        current,
-      )
-      const carried = await store.moveOpenThreads(session.id, next.id)
+      // the pin moves on this review rather than starting another one; what
+      // the base used to be is not lost, it is in the record below
+      await store.repinSession(session.id, current)
       await record({
         subject: 'review',
         action: 'repinned',
         actorId: (await identity.human(session.repoPath)).actor.id,
         repoId: session.repoId,
-        sessionId: next.id,
-        detail: {
-          fromSessionId: session.id,
-          fromBaseSha: session.baseSha,
-          toBaseSha: current,
-          carried,
-        },
+        sessionId: session.id,
+        detail: { fromBaseSha: session.baseSha, toBaseSha: current },
       })
-      return c.json({ ...next, baseStale: false }, 200)
+      return c.json(
+        { ...session, baseSha: current, baseStale: false },
+        200,
+      )
     },
   )
 
@@ -2085,29 +2079,32 @@ async function reanchorThreads(
   session: Session,
   threads: Thread[],
 ): Promise<Thread[]> {
+  // keyed by side as well as path: the same file reads differently on each
   const contents = new Map<string, string | null>()
   const result: Thread[] = []
   for (const thread of threads) {
-    // a note with no code anchor has nothing to re-locate
-    if (
-      thread.startLine === 0 ||
-      thread.side !== 'source' ||
-      thread.status === 'resolved'
-    ) {
+    // a note with no code anchor has nothing to re-locate, and a resolved one
+    // is history: it keeps the lines it was written against
+    if (thread.startLine === 0 || thread.status === 'resolved') {
       result.push(thread)
       continue
     }
-    let content = contents.get(thread.path)
+    // base-side notes re-anchor too. They did not have to while a session's
+    // base was frozen for its lifetime, but re-pinning now moves the base under
+    // them, and a note left on its old line number against new content points
+    // at whatever happens to be there.
+    const key = `${thread.side}:${thread.path}`
+    let content = contents.get(key)
     if (content === undefined) {
       const blob = await fileAtSide(
         session.repoPath,
         session.source,
         session.baseSha,
-        'source',
+        thread.side,
         thread.path,
       )
       content = blob.content
-      contents.set(thread.path, content)
+      contents.set(key, content)
     }
     if (content === null) {
       await store.setThreadStatus(thread.id, 'detached')

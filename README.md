@@ -43,13 +43,20 @@ the only output.
   code at all: notes on a whole file or on the review itself
 - **Review targets** — source is any worktree's working tree or any branch;
   base defaults to HEAD (worktrees) or the merge-base with the default
-  branch (branches), pinned at session creation
+  branch (branches). A review *is* that pair: the commit its base is pinned to
+  is state, not identity, so committing to the branch you are reviewing does
+  not start a second review of it. Looking at one commit against its parent is
+  a way of reading a review, not a review of its own
 - **Live refresh** — file watching pushes updates over a websocket while the
   agent edits; the diff, note positions, and counters follow along, and notes
   the agent posts, answers, or resolves appear without a reload
-- **Re-anchoring** — notes store the code snippet they were written against
-  and re-locate themselves after edits; a note whose code vanished turns
-  `detached` instead of pointing at the wrong line
+- **Re-anchoring** — a note stores the lines *and* the code that was on them,
+  and the code is the truth: on every read it is searched for again (exact,
+  then ignoring indentation, nearest to where it used to be) and the stored
+  line numbers are corrected to follow it. A note whose code vanished turns
+  `detached` rather than pointing at whatever moved into its place. Both sides
+  re-anchor, so re-pinning the base does not leave base-side notes behind.
+  Resolved notes are frozen where they were written — they are history
 - **Agent loop** — open notes via REST or MCP (`stickie-mcp`, five tools over
   the same routes), agent replies and resolves; or the zero-integration
   *Copy prompt* export — markdown, language-tagged code fences, in an order
@@ -74,8 +81,9 @@ the only output.
   (the pickers do that): a click opens that commit against its parent in its
   own tab, and ⌘/shift+click adds commits as further columns, so one file
   reads left to right through the commits that touched it
-- **Session continuity** — when HEAD moves past the pinned base (the agent
-  committed), one click re-pins and carries open notes forward
+- **Session continuity** — when the base moves past the pinned commit (the
+  agent committed), one click re-pins in place: the review keeps every note,
+  resolved history included, and the commit it moved from stays in the record
 - **A record of what happened** — every note raised, answered, resolved or
   deleted, every file marked read, every submission, re-pin and export, with
   who and when, in an *Activity* panel beside the diff. It is append-only:

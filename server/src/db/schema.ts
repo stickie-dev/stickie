@@ -1,4 +1,5 @@
 import type { Db, Dialect } from './driver.js'
+import { rekeySessions } from './sessionKey.js'
 
 /**
  * The schema, per dialect. Two literals rather than a generated one: the
@@ -10,6 +11,10 @@ import type { Db, Dialect } from './driver.js'
  * integers with no `on delete cascade`, so deleting a note does not delete the
  * record that it existed. On the default SQLite file the owner can still edit
  * it by hand — it is a record, not evidence, and nothing may claim otherwise.
+ *
+ * A review is keyed by its base *ref*, not by the commit that ref pointed at
+ * when it started: see `sessionKey.ts`, which moves an older database onto that
+ * key.
  */
 
 const sqlite_schema = `
@@ -26,7 +31,7 @@ create table if not exists sessions (
   base_ref text not null,
   base_sha text not null,
   created_at text not null default (datetime('now')),
-  unique (repo_id, source_kind, source_value, base_sha)
+  unique (repo_id, source_kind, source_value, base_ref)
 );
 
 create table if not exists threads (
@@ -102,7 +107,7 @@ create table if not exists sessions (
   base_ref text not null,
   base_sha text not null,
   created_at timestamptz not null default now(),
-  unique (repo_id, source_kind, source_value, base_sha)
+  unique (repo_id, source_kind, source_value, base_ref)
 );
 
 create table if not exists threads (
@@ -215,5 +220,14 @@ export async function applySchema(db: Db): Promise<void> {
         await db.exec(`alter table ${table} add column ${ddl}`)
       }
     }
+  }
+  // after the columns exist: the merge it may perform reads threads and writes
+  // activity, so both have to be in their final shape first
+  const merged = await rekeySessions(db)
+  if (merged.length > 0) {
+    const absorbed = merged.reduce((n, plan) => n + plan.absorbed.length, 0)
+    console.log(
+      `stickie: re-keyed reviews by base ref, merging ${String(absorbed)} duplicate ${absorbed === 1 ? 'session' : 'sessions'} into ${String(merged.length)}`,
+    )
   }
 }

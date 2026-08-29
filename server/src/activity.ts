@@ -14,7 +14,7 @@ export const activity_actions = {
     'deleted',
     'posted',
   ],
-  review: ['opened', 'submitted', 'repinned', 'imported', 'exported'],
+  review: ['opened', 'submitted', 'repinned', 'imported', 'exported', 'merged'],
   file: ['viewed', 'unviewed'],
 } as const
 
