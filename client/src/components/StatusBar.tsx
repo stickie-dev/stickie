@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useReview } from '../store'
+import { activeFiles, useReview } from '../store'
 import { btn } from '../ui'
 
 interface Sibling {
@@ -19,7 +19,7 @@ export function StatusBar() {
   const activeRepoId = useReview((s) => s.activeRepoId)
   const selectedPath = useReview((s) => s.selectedPath)
   const viewMode = useReview((s) => s.viewMode)
-  const files = useReview((s) => s.files)
+  const files = useReview(activeFiles)
   const repoSessions = useReview((s) => s.repoSessions)
   const threads = useReview((s) => s.threads)
   const viewed = useReview((s) => s.viewed)

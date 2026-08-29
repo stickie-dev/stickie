@@ -8,7 +8,7 @@ import type { NavHit } from '../api'
 import { flowJump, markFlowClick } from '../flowNav'
 import { languageFor } from '../languages'
 import { formatRoute } from '../routes'
-import { useReview, wrapFor } from '../store'
+import { activeFiles, useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
 import { CommitTimeline } from './CommitTimeline'
 import { ContinuousDiff } from './ContinuousDiff'
@@ -417,7 +417,7 @@ export function FileView() {
   const activeRepoId = useReview((s) => s.activeRepoId)
   const viewed = useReview((s) => s.viewed)
   const toggleViewed = useReview((s) => s.toggleViewed)
-  const files = useReview((s) => s.files)
+  const files = useReview(activeFiles)
   const openFile = useReview((s) => s.openFile)
   const fileLoading = useReview((s) => s.fileLoading)
   const commits = useReview((s) => s.commits)
@@ -451,7 +451,7 @@ export function FileView() {
       }
       if (event.metaKey || event.ctrlKey || event.altKey) return
       const state = useReview.getState()
-      const paths = state.files.map((f) => f.path)
+      const paths = activeFiles(state).map((f) => f.path)
       const index = state.selectedPath === null
         ? -1
         : paths.indexOf(state.selectedPath)

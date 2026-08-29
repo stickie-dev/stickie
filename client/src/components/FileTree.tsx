@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ChangedFile } from '@stickie/shared'
 import { fileIconUrl, folderIconUrl } from '../fileIcons'
-import { useReview } from '../store'
+import { repoFiles, useReview } from '../store'
 import { Loading, Skeleton } from './Skeleton'
 import { field, motion } from '../ui'
 
@@ -92,6 +92,9 @@ function compress(dir: TreeDir): TreeDir {
 function RepoNode({ repoId }: { repoId: number }) {
   const repo = useReview((s) => s.repos.find((r) => r.id === repoId))
   const entry = useReview((s) => s.repoSessions[repoId])
+  // this repository's changed files, whether or not it is the active one:
+  // one list, so the count here cannot disagree with the diff beside it
+  const files = useReview((s) => repoFiles(s, repoId))
   const activeRepoId = useReview((s) => s.activeRepoId)
   const selectRepo = useReview((s) => s.selectRepo)
   const selectedPath = useReview((s) => s.selectedPath)
@@ -149,14 +152,14 @@ function RepoNode({ repoId }: { repoId: number }) {
 
   const tree = useMemo(() => {
     if (entry === undefined) return null
-    const status_by_path = new Map(entry.files.map((f) => [f.path, f]))
+    const status_by_path = new Map(files.map((f) => [f.path, f]))
     const items: TreeFile[] = entry.showAll
       ? (entry.allFiles ?? []).map((path) => ({
           path,
           name: path.split('/').at(-1) ?? path,
           status: status_by_path.get(path)?.status ?? null,
         }))
-      : entry.files.map((f) => ({
+      : files.map((f) => ({
           path: f.path,
           name: f.path.split('/').at(-1) ?? f.path,
           status: f.status,
@@ -164,7 +167,7 @@ function RepoNode({ repoId }: { repoId: number }) {
         }))
     const root = buildTree(items)
     return { ...root, dirs: root.dirs.map(compress) }
-  }, [entry])
+  }, [entry, files])
 
   if (repo === undefined) return null
 
@@ -314,15 +317,11 @@ function RepoNode({ repoId }: { repoId: number }) {
           </button>
           <span
             className="text-faint"
-            title={
-              entry?.showAll === true
-                ? `${String(entry.files.length)} files in this repository`
-                : `${String(entry?.files.length ?? 0)} changed ${
-                    entry?.files.length === 1 ? 'file' : 'files'
-                  }`
-            }
+            title={`${String(files.length)} changed ${
+              files.length === 1 ? 'file' : 'files'
+            }`}
           >
-            {entry?.files.length ?? 0}
+            {files.length}
           </span>
         </span>
       </div>
@@ -339,7 +338,7 @@ function RepoNode({ repoId }: { repoId: number }) {
       {expanded && tree !== null && (
         <div className="ml-[13px] border-l border-edge/70">
           {renderDir(tree)}
-          {!entry?.showAll && entry?.files.length === 0 && (
+          {entry?.showAll !== true && files.length === 0 && (
             <p className="px-3 py-1 text-faint">no changes</p>
           )}
         </div>

@@ -102,7 +102,6 @@ interface ReviewState {
   source: ReviewSource | null
   baseRef: string | undefined
   session: Session | null
-  files: ChangedFile[]
   allFiles: string[] | null
   showAll: boolean
   selectedPath: string | null
@@ -169,6 +168,12 @@ interface ReviewState {
   activeTabId: number | null
   /** bumped when watched files change so flow sections refetch content */
   contentEpoch: number
+  /**
+   * What the workspace holds per registered repository — the tree shows all of
+   * them, so each needs its own review and its own changed files. `files` here
+   * is the *only* copy, including for the repository being reviewed; read it
+   * through `repoFiles` / `activeFiles` rather than caching it a second time.
+   */
   repoSessions: Record<
     number,
     {
@@ -378,6 +383,30 @@ function statusOf(
   return files.find((f) => f.path === path)?.status ?? 'unchanged'
 }
 
+/** One identity, so a selector falling back to it does not force a render. */
+const no_files: ChangedFile[] = []
+
+/**
+ * What has changed in one repository. It is held per repository because the
+ * tree shows every registered one, not only the one being reviewed — and it is
+ * held *there only*. The active repo used to keep a second copy at the root of
+ * the store, which is what let the tree read "no changes" beside a diff full of
+ * files: `refresh` and `repin` wrote the root copy and left the per-repo one
+ * where it was.
+ */
+export function repoFiles(
+  state: ReviewState,
+  repoId: number | null,
+): ChangedFile[] {
+  if (repoId === null) return no_files
+  return state.repoSessions[repoId]?.files ?? no_files
+}
+
+/** The changed files of the repository under review. */
+export function activeFiles(state: ReviewState): ChangedFile[] {
+  return repoFiles(state, state.activeRepoId)
+}
+
 /** Kept in step with the server's own default until settings are read. */
 const default_wrap_extensions = 'md,markdown,txt,rst,csv,log,json'
 
@@ -430,9 +459,9 @@ export const useReview = create<ReviewState>((set, get) => {
         api.threads(session.id, true),
         api.viewed(session.id),
       ])
+      const entry = get().repoSessions[activeRepoId]
       set({
         session,
-        files,
         threads,
         viewed: new Set(viewed),
         allFiles: null,
@@ -440,9 +469,6 @@ export const useReview = create<ReviewState>((set, get) => {
         baseContent: null,
         sourceContent: null,
         error: null,
-      })
-      const entry = get().repoSessions[activeRepoId]
-      set({
         repoSessions: {
           ...get().repoSessions,
           [activeRepoId]: {
@@ -470,6 +496,22 @@ export const useReview = create<ReviewState>((set, get) => {
     } catch (error) {
       set({ error: error instanceof Error ? error.message : String(error) })
     }
+  }
+
+  /**
+   * Patches what the workspace holds for one repository. Everything that
+   * re-reads a diff goes through here, so the tree and the diff cannot end up
+   * describing different states of the same repository.
+   */
+  function updateRepoSession(
+    repoId: number,
+    patch: Partial<ReviewState['repoSessions'][number]>,
+  ): void {
+    const entry = get().repoSessions[repoId]
+    if (entry === undefined) return
+    set({
+      repoSessions: { ...get().repoSessions, [repoId]: { ...entry, ...patch } },
+    })
   }
 
   async function ensureRepoSession(repoId: number): Promise<void> {
@@ -600,7 +642,8 @@ export const useReview = create<ReviewState>((set, get) => {
    * is searched there instead, or it could not be found at all.
    */
   async function runFind(): Promise<void> {
-    const { session, files, findQuery, findCase, contentEpoch } = get()
+    const { session, findQuery, findCase, contentEpoch } = get()
+    const files = activeFiles(get())
     const query = findQuery
     if (session === null || query === '') {
       set({ findMatches: [], findAt: 0, findCapped: false, findBusy: false })
@@ -638,8 +681,9 @@ export const useReview = create<ReviewState>((set, get) => {
 
   /** Keeps the files either side of the open one warm, so j/k lands instantly. */
   function prefetchNeighbours(path: string): void {
-    const { session, files, contentEpoch } = get()
+    const { session, contentEpoch } = get()
     if (session === null) return
+    const files = activeFiles(get())
     const index = files.findIndex((f) => f.path === path)
     if (index === -1) return
     for (const step of [1, -1]) {
@@ -737,7 +781,6 @@ export const useReview = create<ReviewState>((set, get) => {
     source: null,
     baseRef: undefined,
     session: null,
-    files: [],
     allFiles: null,
     showAll: false,
     selectedPath: null,
@@ -1014,7 +1057,7 @@ export const useReview = create<ReviewState>((set, get) => {
       }
       // changed files review in the continuous flow; anything else (all-files
       // browsing, unchanged refs) opens the single-file view
-      const changed = get().files.some((f) => f.path === path)
+      const changed = activeFiles(get()).some((f) => f.path === path)
       if (get().viewMode === 'flow' && changed) {
         get().flowSelect(path)
       } else {
@@ -1023,7 +1066,8 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     flowSelect: (path) => {
-      const { files, activeRepoId } = get()
+      const { activeRepoId } = get()
+      const files = activeFiles(get())
       const flow_tab =
         activeRepoId === null ? null : ensureFlowTab(activeRepoId)
       set({
@@ -1190,7 +1234,7 @@ export const useReview = create<ReviewState>((set, get) => {
           ? active
           : (tabs[0]?.id ?? null),
         ...(get().activeRepoId === repoId
-          ? { activeRepoId: null, session: null, files: [], threads: [] }
+          ? { activeRepoId: null, session: null, threads: [] }
           : {}),
       })
       return answer
@@ -1252,8 +1296,9 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     openFile: async (path, status) => {
-      const { session, files, contentEpoch } = get()
+      const { session, contentEpoch } = get()
       if (session === null) return
+      const files = activeFiles(get())
       const resolved = status ?? statusOf(files, path)
       // the draft survives navigation so other files can be browsed and
       // referenced while composing
@@ -1711,7 +1756,11 @@ export const useReview = create<ReviewState>((set, get) => {
           api.threads(next.id, true),
           api.viewed(next.id),
         ])
-        set({ session: next, files, threads, viewed: new Set(viewed) })
+        set({ session: next, threads, viewed: new Set(viewed) })
+        const repoId = get().activeRepoId
+        if (repoId !== null) {
+          updateRepoSession(repoId, { sessionId: next.id, files })
+        }
         // moving the base can leave a note without the code it was written
         // against, and a pin that moved on its own must not do that quietly
         const detached = (list: Thread[]) =>
@@ -1754,7 +1803,9 @@ export const useReview = create<ReviewState>((set, get) => {
         api.threads(session.id, true),
         api.session(session.id).catch(() => null),
       ])
-      set({ files, threads, contentEpoch: get().contentEpoch + 1 })
+      set({ threads, contentEpoch: get().contentEpoch + 1 })
+      const repoId = get().activeRepoId
+      if (repoId !== null) updateRepoSession(repoId, { files })
       if (fresh !== null && get().session?.id === session.id) {
         set({ session: fresh })
       }
@@ -1813,8 +1864,10 @@ export const useReview = create<ReviewState>((set, get) => {
       if (repoId !== get().activeRepoId) await get().selectRepo(repoId)
       const entry = get().repoSessions[repoId]
       // a folder with nothing changed in it only exists in the all-files tree
-      const changed = entry?.files.some((f) => f.path.startsWith(`${dir}/`))
-      if (entry !== undefined && changed !== true && !entry.showAll) {
+      const changed = repoFiles(get(), repoId).some((f) =>
+        f.path.startsWith(`${dir}/`),
+      )
+      if (entry !== undefined && !changed && !entry.showAll) {
         await get().toggleRepoShowAll(repoId)
       }
       set({ revealDir: { repoId, dir } })

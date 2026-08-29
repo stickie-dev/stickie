@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useReview, wrapFor } from '../store'
+import { activeFiles, useReview, wrapFor } from '../store'
 import { btn, button_on, eyebrow, motion } from '../ui'
 
 /**
@@ -62,7 +62,7 @@ export function ViewMenu() {
   const collapseUnchanged = useReview((s) => s.collapseUnchanged)
   const setCollapseUnchanged = useReview((s) => s.setCollapseUnchanged)
   const viewMode = useReview((s) => s.viewMode)
-  const files = useReview((s) => s.files)
+  const files = useReview(activeFiles)
   const selectedPath = useReview((s) => s.selectedPath)
   const wrapExtensions = useReview((s) => s.wrapExtensions)
   const wrapOverrides = useReview((s) => s.wrapOverrides)
