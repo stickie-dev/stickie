@@ -6,6 +6,7 @@ import type { CommitBetween } from '../api'
 import { languageFor } from '../languages'
 import { useReview, wrapFor } from '../store'
 import { Loading, Skeleton, SkeletonCode } from './Skeleton'
+import { btn } from '../ui'
 
 interface Step {
   /** the commit this column arrives at */
@@ -67,7 +68,7 @@ export function CommitTimeline({
         </span>
         <span className="grow" />
         <button
-          className="shrink-0 text-soft hover:text-ink"
+          className={`shrink-0 ${btn()}`}
           title="clear the commit selection"
           onClick={() => void selectCommits([])}
         >
@@ -233,7 +234,7 @@ function FileTimeline({
         </span>
         <span className="grow" />
         <button
-          className="shrink-0 text-soft hover:text-ink"
+          className={`shrink-0 ${btn()}`}
           title="soft-wrap long lines in this file"
           onClick={() => toggleWrap(file.path)}
         >

@@ -1,30 +1,36 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { NoteDefault } from '../api'
 import { DraftForm } from './DraftForm'
+import { SubmitSplit } from './SubmitSplit'
 import { postsComment } from '../keys'
 import { orderedThreadIds, useReview } from '../store'
 import { ThreadCard } from './ThreadCard'
-import { TimeAgo } from './TimeAgo'
-import { field } from '../ui'
+import { btn, field, field_flush } from '../ui'
 
 /** A composer for notes that carry no code anchor. */
 function NoteComposer({ onDone }: { onDone: () => void }) {
   const addNote = useReview((s) => s.addNote)
+  const rememberNoteDefault = useReview((s) => s.rememberNoteDefault)
   const submitKey = useReview((s) => s.submitKey)
   const selectedPath = useReview((s) => s.selectedPath)
-  const [scope, setScope] = useState<'review' | 'file'>(
-    selectedPath === null ? 'review' : 'file',
-  )
+  /**
+   * The whole review, whether or not a file is open. This is the composer for a
+   * remark that belongs to no line, and the usual such remark is about the
+   * change rather than about whichever file happens to be on screen — which is
+   * what it used to assume.
+   */
+  const [scope, setScope] = useState<'review' | 'file'>('review')
   const [body, setBody] = useState('')
 
-  const submit = () => {
+  const submit = (as?: NoteDefault) => {
     if (body.trim() === '') return
-    void addNote(scope, body.trim())
+    void addNote(scope, body.trim(), as)
     setBody('')
     onDone()
   }
 
   return (
-    <div className="rounded-md border border-accent bg-panel p-2 text-sm">
+    <div className="rounded-lg bg-panel p-2 text-[13px] ring-1 ring-accent">
       <div className="mb-1 flex items-center gap-2 text-xs text-soft">
         <span>note on</span>
         <select
@@ -41,7 +47,7 @@ function NoteComposer({ onDone }: { onDone: () => void }) {
       <textarea
         autoFocus
         rows={3}
-        className={`w-full resize-y ${field}`}
+        className={`w-full resize-y ${field_flush}`}
         placeholder="Anything not tied to a line — approach, missing tests, naming… (⌘↵ to add)"
         value={body}
         onChange={(e) => setBody(e.target.value)}
@@ -54,19 +60,17 @@ function NoteComposer({ onDone }: { onDone: () => void }) {
         }}
       />
       <div className="mt-1 flex justify-end gap-2">
-        <button
-          className="rounded px-2 py-1 text-xs text-soft hover:text-ink"
-          onClick={onDone}
-        >
+        <button className={`text-xs ${btn()}`} onClick={onDone}>
           cancel
         </button>
-        <button
-          className="rounded bg-accent px-2 py-1 text-xs text-white hover:bg-accent-strong disabled:opacity-50"
+        {/* the same control a note on a line gets: one place decides what
+            sending means, and it says which it will do */}
+        <SubmitSplit
+          menuKey="general"
           disabled={body.trim() === ''}
-          onClick={submit}
-        >
-          add note
-        </button>
+          onPick={(as) => void rememberNoteDefault(as)}
+          onSubmit={(as) => submit(as)}
+        />
       </div>
     </div>
   )
@@ -130,7 +134,7 @@ export function CommentsPanel() {
         <h2 className="text-sm font-semibold text-ink">Comments</h2>
         <span className="grow" />
         <button
-          className="rounded px-1.5 py-0.5 text-xs text-soft hover:bg-overlay hover:text-ink"
+          className={`text-xs ${btn('text', 'px-1.5 py-0.5')}`}
           title="close the panel"
           onClick={toggleComments}
         >
@@ -184,11 +188,12 @@ export function CommentsPanel() {
                 </button>
               )}
               <span className="grow" />
-              {arranging ? (
+              {/* the card carries its own time now, in its header */}
+              {arranging && (
                 <span className="flex shrink-0 items-center gap-0.5 text-xs text-soft">
                   <span className="mr-1 text-faint">{index + 1}</span>
                   <button
-                    className="rounded px-1.5 py-0.5 hover:bg-overlay hover:text-ink disabled:opacity-30"
+                    className={btn('text', 'px-1.5 py-0.5')}
                     title="earlier in the prompt"
                     disabled={index === 0}
                     onClick={() => moveInPromptOrder(thread.id, -1)}
@@ -196,7 +201,7 @@ export function CommentsPanel() {
                     ↑
                   </button>
                   <button
-                    className="rounded px-1.5 py-0.5 hover:bg-overlay hover:text-ink disabled:opacity-30"
+                    className={btn('text', 'px-1.5 py-0.5')}
                     title="later in the prompt"
                     disabled={index === visible.length - 1}
                     onClick={() => moveInPromptOrder(thread.id, 1)}
@@ -204,11 +209,6 @@ export function CommentsPanel() {
                     ↓
                   </button>
                 </span>
-              ) : (
-                <TimeAgo
-                  at={thread.createdAt}
-                  className="shrink-0 text-xs text-faint"
-                />
               )}
             </div>
             <ThreadCard thread={thread} />
@@ -252,7 +252,7 @@ export function CommentsPanel() {
           <NoteComposer onDone={() => setComposing(false)} />
         ) : (
           <button
-            className="w-full rounded border border-dashed border-edge px-2 py-1.5 text-xs text-soft hover:border-accent hover:text-ink"
+            className={`w-full border border-dashed border-edge text-xs ${btn('text', 'py-1.5 hover:border-accent')}`}
             title="a note on the whole file or the whole review, with no line behind it"
             onClick={() => setComposing(true)}
           >

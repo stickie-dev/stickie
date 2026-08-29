@@ -22,26 +22,58 @@ export const card = 'rounded-lg bg-panel shadow-soft'
 export const sunken = 'rounded-md bg-sunken'
 
 /**
- * A quiet control — the default. No border: it takes a fill when the pointer
- * is on it, which says "pressable" at the moment that matters instead of
- * drawing a box around every verb on the screen.
+ * Every button in the app is one of four kinds, and nothing else.
+ *
+ * `primary` and `secondary` are the only two filled colours — accent for the
+ * thing a surface is for, emerald for sending a review, which is the one other
+ * act with its own weight. `outline` is a control that needs an edge to be
+ * findable in a crowded row; `text` is the default, taking a fill only when the
+ * pointer is on it, so a screen full of verbs is not a screen full of boxes.
+ *
+ * Disabled is the same colour, lighter — never a greyed-out shape of a
+ * different kind, and never the same as enabled with a cursor that says no.
+ * Buttons sit a radius step tighter than the surfaces holding them.
  */
-export const button = `rounded-md px-2 py-1 text-soft hover:bg-overlay hover:text-ink ${motion}`
+export type ButtonKind = 'primary' | 'secondary' | 'outline' | 'text'
 
-/** The one thing on a surface that is the point of it. */
-export const button_primary = `rounded-md bg-accent px-2.5 py-1 font-medium text-white shadow-soft hover:bg-accent-strong ${motion}`
+const button_base = 'rounded-sm px-2 py-1 disabled:cursor-not-allowed'
 
-/** A control that is currently on. */
-export const button_on = `rounded-md bg-accent-soft px-2 py-1 text-accent ${motion}`
+const button_kinds: Record<ButtonKind, string> = {
+  primary:
+    'bg-accent font-medium text-white shadow-soft hover:bg-accent-strong disabled:bg-accent/35 disabled:text-white/80 disabled:shadow-none',
+  secondary:
+    'bg-emerald-600 font-medium text-white shadow-soft hover:bg-emerald-500 disabled:bg-emerald-600/35 disabled:text-white/80 disabled:shadow-none',
+  outline:
+    'text-soft ring-1 ring-edge hover:bg-overlay hover:text-ink disabled:text-faint disabled:ring-edge/40 disabled:hover:bg-transparent',
+  text: 'text-soft hover:bg-overlay hover:text-ink disabled:text-faint disabled:hover:bg-transparent',
+}
 
-/** An icon-sized version of the same, square rather than wide. */
-export const icon_button = `rounded-md p-1 text-soft hover:bg-overlay hover:text-ink ${motion}`
+/** The classes for a button of one kind, plus anything a caller adds. */
+export function btn(kind: ButtonKind = 'text', extra = ''): string {
+  return `${button_base} ${button_kinds[kind]} ${motion} ${extra}`.trim()
+}
+
+/** A control that is currently on — a toggle showing its state, not a colour. */
+export const button_on = `${button_base} bg-accent-soft text-accent ${motion}`
+
+/** Square rather than wide, for a single glyph. */
+export const icon_button = `rounded-sm p-1 text-soft hover:bg-overlay hover:text-ink disabled:text-faint ${motion}`
 
 /**
  * Text entry and selects, filled rather than outlined, with the focus ring
- * doing what a permanent border was doing badly.
+ * doing what a permanent border was doing badly. One pixel, not two: a card
+ * that is already ringed as the active note, holding a field ringed twice as
+ * thickly, is three lines around one place to type.
  */
-export const field = `rounded-md border-0 bg-overlay px-2 py-1 text-ink outline-none ring-1 ring-transparent focus:ring-2 focus:ring-accent/50 ${motion}`
+export const field = `rounded-md border-0 bg-overlay px-2 py-1 text-ink outline-none ring-1 ring-transparent focus:ring-1 focus:ring-accent/60 ${motion}`
+
+/**
+ * The same field with no line of its own, for one sitting inside something
+ * already outlined — a note being typed is in a card that rings itself the
+ * moment the field takes focus, and two rings around one place to type is a
+ * border twice as thick as anyone asked for.
+ */
+export const field_flush = `rounded-md border-0 bg-overlay px-2 py-1 text-ink outline-none ${motion}`
 
 /** A badge: a state, not an action. Pill-shaped so it cannot read as a button. */
 export const badge =

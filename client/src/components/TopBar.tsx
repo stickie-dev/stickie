@@ -1,8 +1,9 @@
 import { Link } from 'react-router'
 import type { ReviewSource } from '@stickie/shared'
 import { api } from '../api'
+import { ask } from '../confirm'
 import { formatRoute } from '../routes'
-import { button, button_on, button_primary, field, icon_button, motion } from '../ui'
+import { btn, button_on, field, icon_button } from '../ui'
 import { useReview } from '../store'
 
 function shortPath(path: string): string {
@@ -88,11 +89,13 @@ export function TopBar() {
       if (answer.ancestor) return true
     }
     if (from !== null && to !== null && from === to) return true
-    return window.confirm(
-      `This review has ${String(notes)} ${notes === 1 ? 'note' : 'notes'}. ` +
-        `They stay with ${from ?? 'it'} — comparing something else opens a ` +
-        'different review, with its own notes. Continue?',
-    )
+    return ask({
+      title: `Leave ${String(notes)} ${notes === 1 ? 'note' : 'notes'} behind?`,
+      detail:
+        `They stay with ${from ?? 'this review'} — comparing something else ` +
+        'opens a different review, with its own notes. Nothing is deleted.',
+      confirmLabel: 'Switch anyway',
+    })
   }
 
   // A review is a worktree or a branch. Looking at one commit against its
@@ -118,11 +121,14 @@ export function TopBar() {
           .catch(() => ({ ancestor: false }))
         if (
           !answer.ancestor &&
-          !window.confirm(
-            `This review has ${String(notes)} ${notes === 1 ? 'note' : 'notes'} ` +
-              `against ${from}. Comparing to ${next} instead opens a ` +
-              'different review, with its own notes. Continue?',
-          )
+          !(await ask({
+            title: `Leave ${String(notes)} ${notes === 1 ? 'note' : 'notes'} behind?`,
+            detail:
+              `They were written against ${from}. Comparing to ${next} ` +
+              'instead opens a different review, with its own notes. Nothing ' +
+              'is deleted.',
+            confirmLabel: 'Switch anyway',
+          }))
         ) {
           return
         }
@@ -149,7 +155,7 @@ export function TopBar() {
       />
 
       <button
-        className={`${icon_button} px-1.5 disabled:opacity-30`}
+        className={`${icon_button} px-1.5`}
         title="back ( [ )"
         disabled={!canBack}
         onClick={() => void navBack()}
@@ -157,7 +163,7 @@ export function TopBar() {
         ‹
       </button>
       <button
-        className={`${icon_button} px-1.5 disabled:opacity-30`}
+        className={`${icon_button} px-1.5`}
         title="forward ( ] )"
         disabled={!canForward}
         onClick={() => void navForward()}
@@ -221,7 +227,7 @@ export function TopBar() {
       )}
       {session?.baseStale === true && (
         <button
-          className={`rounded-md bg-amber-500/15 px-2 py-1 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300 ${motion}`}
+          className={btn('outline', 'bg-amber-500/15 text-amber-700 ring-amber-500/40 hover:bg-amber-500/25 dark:text-amber-300')}
           title="HEAD moved past the pinned base; re-pin and carry open notes forward"
           onClick={() => void repin()}
         >
@@ -231,21 +237,21 @@ export function TopBar() {
 
       <span className="grow" />
       <button
-        className={`shrink-0 ${button}`}
+        className={`shrink-0 ${btn()}`}
         title="search all repos (⌘F / ⌘⇧F)"
         onClick={() => setSearchOpen(true)}
       >
         Search
       </button>
       <button
-        className={`shrink-0 ${commentsOpen ? button_on : button}`}
+        className={`shrink-0 ${commentsOpen ? button_on : btn()}`}
         title="toggle the all-comments panel"
         onClick={toggleComments}
       >
         Comments ({open_threads})
       </button>
       <button
-        className={`shrink-0 ${activityOpen ? button_on : button}`}
+        className={`shrink-0 ${activityOpen ? button_on : btn()}`}
         title="what has happened in this review, and who did it"
         onClick={toggleActivity}
       >
@@ -253,7 +259,7 @@ export function TopBar() {
       </button>
       {pending_count > 0 && (
         <button
-          className={`shrink-0 rounded-md bg-emerald-600 px-2.5 py-1 font-medium text-white shadow-soft hover:bg-emerald-500 ${motion}`}
+          className={`shrink-0 ${btn('secondary', 'px-2.5')}`}
           title="send every draft note so agents can see them"
           onClick={() => void submitReview()}
         >
@@ -261,7 +267,7 @@ export function TopBar() {
         </button>
       )}
       <button
-        className={`shrink-0 ${button}`}
+        className={`shrink-0 ${btn()}`}
         title="import unresolved GitLab MR discussions (needs GITLAB_TOKEN on the server)"
         disabled={session === null}
         onClick={() => {
@@ -272,14 +278,14 @@ export function TopBar() {
         Import MR
       </button>
       <Link
-        className={`shrink-0 ${button}`}
+        className={`shrink-0 ${btn()}`}
         title="settings"
         to={formatRoute({ kind: 'settings', section: 'identity' })}
       >
         settings
       </Link>
       <button
-        className={`shrink-0 ${button_primary} disabled:opacity-50`}
+        className={`shrink-0 ${btn('primary', 'px-2.5')}`}
         disabled={session === null}
         onClick={() => void copyPrompt()}
       >

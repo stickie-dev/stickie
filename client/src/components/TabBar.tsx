@@ -3,7 +3,8 @@ import { fileIconUrl } from '../fileIcons'
 import type { Tab } from '../store'
 import { useReview } from '../store'
 import { tabLabels } from '../tabLabels'
-import { button, button_on, motion } from '../ui'
+import { btn, button_on, icon_button, motion } from '../ui'
+import { ViewMenu } from './ViewMenu'
 
 /** Room kept for the overflow button when not every tab fits. */
 const overflow_reserve = 52
@@ -162,13 +163,14 @@ export function TabBar() {
       </div>
       {hidden.length > 0 && (
         <button
-          className={`mr-1 shrink-0 self-center ${listing ? button_on : button}`}
+          className={`mr-1 shrink-0 self-center ${listing ? button_on : btn()}`}
           title={`${hidden.length} more open`}
           onClick={() => setListing(!listing)}
         >
           ⌄ {hidden.length}
         </button>
       )}
+      <ViewMenu />
       {listing && hidden.length > 0 && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setListing(false)} />
@@ -194,7 +196,7 @@ export function TabBar() {
                 </button>
                 {tab.kind !== 'flow' && (
                   <button
-                    className="shrink-0 rounded px-1 text-faint hover:bg-edge hover:text-ink"
+                    className={`shrink-0 ${icon_button}`}
                     title="close tab"
                     onClick={() => closeTab(tab.id)}
                   >

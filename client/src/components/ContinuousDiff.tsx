@@ -16,6 +16,7 @@ import { useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
 import { FileName } from './FileName'
 import { Loading, SkeletonCode } from './Skeleton'
+import { btn } from '../ui'
 
 type Attach = (
   instance: editor.IStandaloneCodeEditor,
@@ -141,6 +142,8 @@ function DiffSection({
         d.repoId === activeRepoId && d.path === file.path && d.side === side,
     )
 
+  const collapseUnchanged = useReview((s) => s.collapseUnchanged)
+  const finding = useReview((s) => s.findOpen && s.findMatches.length > 0)
   const binary = base?.binary === true || source?.binary === true
   const has_any = base?.content != null || source?.content != null
   // side-by-side renders one-sided files as a diff so added content sits
@@ -200,7 +203,7 @@ function DiffSection({
         </label>
         <span className="grow" />
         <button
-          className="shrink-0 text-soft hover:text-ink"
+          className={`shrink-0 ${btn()}`}
           title="soft-wrap long lines in this file (also in the right-click menu)"
           onClick={() => toggleWrap(file.path)}
         >
@@ -233,8 +236,12 @@ function DiffSection({
             options={{
               ...section_options,
               renderSideBySide: sideBySide,
+              // the reader's choice, not a constant: this said "always
+              // collapsed", so the menu's other answer did nothing here
               hideUnchangedRegions: {
-                enabled: true,
+                // a find match can sit in an unchanged region, and a region
+                // that is folded away cannot show it
+                enabled: collapseUnchanged && !finding,
                 contextLineCount: 3,
                 minimumLineCount: 5,
                 revealLineCount: 20,

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useReview } from '../store'
+import { btn } from '../ui'
 
 interface Sibling {
   name: string
@@ -143,7 +144,7 @@ export function StatusBar() {
   return (
     <div className="relative flex shrink-0 items-center gap-1 border-t border-edge bg-panel px-3 py-1 text-[11px]">
       <button
-        className="shrink-0 text-soft hover:text-ink"
+        className={`shrink-0 ${btn()}`}
         title="make this repository active"
         onClick={() => void selectRepo(repo.id)}
       >

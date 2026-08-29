@@ -12,16 +12,8 @@ import { timeValue } from '../time'
 import { TimeAgo } from './TimeAgo'
 import { useReview } from '../store'
 import { Loading, Skeleton, SkeletonRows } from './Skeleton'
-import {
-  badge,
-  button,
-  button_primary,
-  card,
-  enter,
-  field,
-  row,
-  th,
-} from '../ui'
+import { ask } from '../confirm'
+import { badge, btn, card, enter, field, row, th } from '../ui'
 
 /**
  * The landing page: every review across every registered repository, and what
@@ -176,6 +168,15 @@ function rows(reviews: ReviewOverview[]): ReviewRow[] {
  */
 function worthListing(row: ReviewRow): boolean {
   return row.notes.total > 0
+}
+
+/**
+ * On the default branch there is nothing to compare a branch against, so
+ * "against the default branch" and "what is not committed" are the same review
+ * and only one of them is worth offering.
+ */
+function on_default(repo: RepoOverview): boolean {
+  return repo.branch === repo.defaultBranch
 }
 
 /**
@@ -420,17 +421,27 @@ export function OverviewPage() {
       const notes = (overview?.reviews ?? [])
         .filter((review) => review.repoId === repo.id)
         .reduce((n, review) => n + review.notes.total, 0)
+      const keeping = removeMode === 'unregister' && notes > 0
       const counted =
         notes === 0
-          ? 'It has no notes.'
+          ? 'It has no notes to lose.'
           : `${String(notes)} ${notes === 1 ? 'note goes' : 'notes go'} with it.`
-      const question =
-        removeMode === 'unregister' && notes > 0
-          ? `Take ${repo.name} out of the workspace? Its ${String(notes)} ${
-              notes === 1 ? 'note is' : 'notes are'
-            } kept — adding the path back brings them again.`
-          : `Remove ${repo.name} and delete its reviews? ${counted} This cannot be undone.`
-      if (!window.confirm(question)) return
+      if (
+        !(await ask({
+          title: keeping
+            ? `Take ${repo.name} out of the workspace?`
+            : `Remove ${repo.name} and delete its reviews?`,
+          detail: keeping
+            ? `Its ${String(notes)} ${
+                notes === 1 ? 'note is' : 'notes are'
+              } kept — adding the path back brings them again.`
+            : `${counted} This cannot be undone.`,
+          confirmLabel: keeping ? 'Take it out' : 'Delete',
+          danger: !keeping,
+        }))
+      ) {
+        return
+      }
       try {
         await removeRepoFromWorkspace(repo.id, removeMode)
         await load()
@@ -454,18 +465,26 @@ export function OverviewPage() {
    * outright would pin its *tip* instead, so anything that landed on it since
    * you branched would read as your change, backwards.
    *
+   * `base` names one explicitly instead: `HEAD` is the working tree against
+   * the last commit, which is the uncommitted work on its own. That is a
+   * different review from the one against the default branch, with its own
+   * notes, and both are worth being able to start from here — the row used to
+   * reopen whichever of them this workspace happened to remember, which is not
+   * something a reader can see or choose.
+   *
    * Resolved on the click rather than being a link, because the review may not
    * exist yet and an address names one that does. `POST /api/sessions` is
    * get-or-create, so a second visit lands in the same review with the same
    * notes.
    */
   const openRepo = useCallback(
-    async (repo: RepoOverview) => {
+    async (repo: RepoOverview, base?: string) => {
       try {
-        const review = await api.createSession(repo.id, {
-          kind: 'worktree',
-          value: repo.path,
-        })
+        const review = await api.createSession(
+          repo.id,
+          { kind: 'worktree', value: repo.path },
+          base,
+        )
         await navigate(
           formatRoute({
             kind: 'review',
@@ -511,11 +530,11 @@ export function OverviewPage() {
         <span className="font-semibold tracking-tight text-ink">stickie</span>
         <span className="text-faint">overview</span>
         <span className="grow" />
-        <button className={button} onClick={() => void load()}>
+        <button className={btn()} onClick={() => void load()}>
           reload
         </button>
         <Link
-          className={button}
+          className={btn()}
           to={formatRoute({ kind: 'settings', section: 'identity' })}
           title="settings"
         >
@@ -619,17 +638,31 @@ export function OverviewPage() {
                     </td>
                     <td className="px-2 py-2">
                       {/*
-                        A button rather than a link, because the address of
-                        what this opens is not known until it exists: which
-                        review it is depends on the repository's current branch
-                        and on its default branch. ⌘-click and the keyboard
-                        lose out here; the rows above, which name a review that
-                        already exists, keep real links.
+                        Buttons rather than links, because the address of what
+                        they open is not known until it exists: which review it
+                        is depends on the repository's current branch and on its
+                        default branch. ⌘-click and the keyboard lose out here;
+                        the rows above, which name a review that already exists,
+                        keep real links.
                       */}
-                      <span className="text-accent hover:underline">
-                        {repo.branch === repo.defaultBranch
-                          ? 'browse the working tree'
-                          : `review against ${repo.defaultBranch}`}
+                      <span className="flex items-baseline gap-3">
+                        <span className="text-accent hover:underline">
+                          {on_default(repo)
+                            ? 'browse the working tree'
+                            : `review against ${repo.defaultBranch}`}
+                        </span>
+                        {!on_default(repo) && (
+                          <button
+                            className={`text-[11px] ${btn()}`}
+                            title="the working tree against the last commit — what is not committed yet, on its own"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void openRepo(repo, 'HEAD')
+                            }}
+                          >
+                            local changes
+                          </button>
+                        )}
                       </span>
                     </td>
                     <td className="px-2 py-2 text-right">
@@ -642,7 +675,7 @@ export function OverviewPage() {
                             ? 'take this repository out of the workspace, keeping its notes'
                             : 'remove this repository and delete its reviews'
                         }
-                        className={`opacity-0 group-hover:opacity-100 focus:opacity-100 ${button} hover:text-rose-500 disabled:opacity-40`}
+                        className={`opacity-0 group-hover:opacity-100 focus:opacity-100 ${btn('text', 'hover:text-rose-500')}`}
                         onClick={(e) => {
                           e.stopPropagation()
                           void removeRepo(repo)
@@ -680,7 +713,8 @@ export function OverviewPage() {
                   </td>
                   <td className="px-2 py-2" colSpan={2}>
                     <button
-                      className={button_primary}
+                      className={btn('primary')}
+                      disabled={newPath.trim() === ''}
                       onClick={() => void addRepo()}
                     >
                       add repository

@@ -61,8 +61,19 @@ monaco.editor.defineTheme('stickie-light', {
     'editorLineNumber.foreground': '#b0b3ba',
     'editorLineNumber.activeForeground': '#57606a',
     'editorGutter.background': '#ffffff',
-    'editor.selectionBackground': '#b6d7ff66',
-    'editor.inactiveSelectionBackground': '#b6d7ff33',
+    /*
+     * A selection has to be visible *over a diff line*, which is already
+     * tinted green or red — at 40% of a pale blue it was invisible against
+     * both. Strong enough to read as a selection, still light enough to read
+     * the code through.
+     */
+    'editor.selectionBackground': '#7cb7fbb0',
+    'editor.inactiveSelectionBackground': '#7cb7fb59',
+    /* the same text elsewhere in the file, and find */
+    'editor.selectionHighlightBackground': '#7cb7fb40',
+    'editor.wordHighlightBackground': '#7cb7fb33',
+    'editor.findMatchBackground': '#ffb01f99',
+    'editor.findMatchHighlightBackground': '#ffd77e80',
     'editorIndentGuide.background1': '#f0f1f3',
     'editorIndentGuide.activeBackground1': '#d8dbe0',
     'diffEditor.insertedLineBackground': '#e0f7e6',
@@ -99,13 +110,18 @@ monaco.editor.defineTheme('stickie-dark', {
     { token: 'attribute.name', foreground: '79c0ff' },
   ],
   colors: {
-    'editor.background': '#18181b',
+    /* the panel colour, so an editor sits in its surface rather than on it */
+    'editor.background': '#17171a',
     'editor.foreground': '#e6edf3',
     'editorLineNumber.foreground': '#4b4b53',
     'editorLineNumber.activeForeground': '#a1a1aa',
-    'editorGutter.background': '#18181b',
-    'editor.selectionBackground': '#3b507080',
-    'editor.inactiveSelectionBackground': '#3b507040',
+    'editorGutter.background': '#17171a',
+    'editor.selectionBackground': '#2d5c9ecc',
+    'editor.inactiveSelectionBackground': '#2d5c9e66',
+    'editor.selectionHighlightBackground': '#2d5c9e4d',
+    'editor.wordHighlightBackground': '#2d5c9e40',
+    'editor.findMatchBackground': '#b8860bcc',
+    'editor.findMatchHighlightBackground': '#8a6d1f99',
     'editorIndentGuide.background1': '#232327',
     'editorIndentGuide.activeBackground1': '#3f3f46',
     'diffEditor.insertedLineBackground': '#1d572b55',

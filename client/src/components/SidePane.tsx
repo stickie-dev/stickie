@@ -6,6 +6,7 @@ import { editor_font } from '../monacoSetup'
 import { languageFor } from '../languages'
 import { useReview } from '../store'
 import { Loading, SkeletonCode } from './Skeleton'
+import { btn } from '../ui'
 
 interface RefOffer {
   x: number
@@ -73,7 +74,7 @@ export function SidePane() {
         </span>
         <span className="grow" />
         <button
-          className="shrink-0 text-soft hover:text-ink"
+          className={`shrink-0 ${btn()}`}
           title="open this file in the main view"
           onClick={() => {
             void openRefTarget(pane.repoName, pane.path, pane.line)
@@ -83,7 +84,7 @@ export function SidePane() {
           open in main
         </button>
         <button
-          className="shrink-0 text-soft hover:text-ink"
+          className={`shrink-0 ${btn()}`}
           onClick={closeSide}
         >
           close

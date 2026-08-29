@@ -7,6 +7,7 @@ import { AddRepo } from './components/AddRepo'
 import { OverviewPage } from './components/OverviewPage'
 import { OverviewSkeleton } from './components/OverviewSkeleton'
 import { SettingsPage } from './components/settings/SettingsPage'
+import { ConfirmDialog } from './components/ConfirmDialog'
 import { Toasts } from './components/Toasts'
 import { Workspace } from './components/Workspace'
 import type { Page, TabRef } from './routes'
@@ -353,6 +354,7 @@ export function App() {
         )}
       </div>
       <Toasts />
+      <ConfirmDialog />
     </div>
   )
 }

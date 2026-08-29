@@ -3,7 +3,8 @@ import type { NoteDefault } from '../api'
 import { postsComment } from '../keys'
 import type { Draft } from '../store'
 import { useReview } from '../store'
-import { button, field } from '../ui'
+import { btn, field_flush } from '../ui'
+import { SubmitSplit } from './SubmitSplit'
 
 /** Where a form for the same note is rendered; each surface focuses alone. */
 type Surface = 'zone' | 'panel'
@@ -66,60 +67,6 @@ function watchFocus(): void {
       if (node?.dataset.stickieDraft !== holder) holder = null
     },
     true,
-  )
-}
-
-const note_actions: { value: NoteDefault; label: string; why: string }[] = [
-  {
-    value: 'draft',
-    label: 'Draft',
-    why: 'joins the review; no agent sees it until you send',
-  },
-  { value: 'comment', label: 'Comment', why: 'goes to the agent at once' },
-]
-
-/**
- * Submit, and the choice of what submitting means.
- *
- * The button used to say "comment" and produce a draft, because a reviewer's
- * note joins the batch by default — which is the point of the batch, but not
- * something a label should misreport.
- *
- * Both choices are shown rather than one behind a menu. A form in a Monaco view
- * zone is rebuilt whenever the zone is, which loses any state local to it — a
- * menu opened here closed itself immediately — and a popup would be clipped by
- * the zone besides. Two buttons need no state at all, and reach either choice
- * in one click instead of two. The emphasised one is what Enter does.
- */
-function SubmitSplit({
-  disabled,
-  onSubmit,
-}: {
-  disabled: boolean
-  onSubmit: (as: NoteDefault, remember: boolean) => void
-}) {
-  const noteDefault = useReview((s) => s.noteDefault)
-  return (
-    <span className="inline-flex overflow-hidden rounded-md ring-1 ring-accent">
-      {note_actions.map((action) => {
-        const current = action.value === noteDefault
-        return (
-          <button
-            key={action.value}
-            className={`px-2 py-1 text-xs disabled:opacity-50 ${
-              current
-                ? 'bg-accent text-white hover:bg-accent-strong'
-                : 'text-accent hover:bg-accent/10'
-            }`}
-            disabled={disabled}
-            title={`${action.why}${current ? '' : ' — and remembered for next time'}`}
-            onClick={() => onSubmit(action.value, !current)}
-          >
-            {action.label}
-          </button>
-        )
-      })}
-    </span>
   )
 }
 
@@ -237,7 +184,7 @@ export function DraftForm({
         ref={textareaRef}
         data-stickie-draft={key}
         rows={2}
-        className={`w-full resize-y ${field}`}
+        className={`w-full resize-y ${field_flush}`}
         placeholder={`What should change here? (${
           submitKey === 'enter' ? '↵' : '⌘↵'
         } to ${noteDefault === 'comment' ? 'comment' : 'draft'}, ${
@@ -261,17 +208,16 @@ export function DraftForm({
       />
       <div className="mt-1 flex items-center justify-end gap-2">
         <button
-          className={`text-xs ${button}`}
+          className={`text-xs ${btn()}`}
           onClick={() => cancelDraft(draft.id)}
         >
           cancel
         </button>
         <SubmitSplit
+          menuKey={`draft:${String(draft.id)}`}
           disabled={draft.body.trim() === ''}
-          onSubmit={(as, remember) => {
-            if (remember) void rememberNoteDefault(as)
-            void submitDraft(draft.id, as)
-          }}
+          onPick={(as: NoteDefault) => void rememberNoteDefault(as)}
+          onSubmit={(as: NoteDefault) => void submitDraft(draft.id, as)}
         />
       </div>
     </div>

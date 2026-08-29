@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useReview } from '../store'
-import { button_primary, card, enter, field } from '../ui'
+import { btn, card, enter, field } from '../ui'
 
 export function AddRepo() {
   const addRepo = useReview((s) => s.addRepo)
@@ -36,7 +36,8 @@ export function AddRepo() {
           }}
         />
         <button
-          className={`px-3 py-1.5 text-xs ${button_primary}`}
+          className={`text-xs ${btn('primary', 'px-3 py-1.5')}`}
+          disabled={path.trim() === ''}
           onClick={() => void submit()}
         >
           add

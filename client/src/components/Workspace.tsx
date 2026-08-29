@@ -11,6 +11,7 @@ import { StatusBar } from './StatusBar'
 import { TabBar } from './TabBar'
 import { TopBar } from './TopBar'
 import { UsagesPanel } from './UsagesPanel'
+import { FindBar } from './FindBar'
 
 /**
  * Shown while the active draft belongs to a file other than the open one —
@@ -116,34 +117,31 @@ export function Workspace({ active }: { active: boolean }) {
   const setSearchOpen = useReview((s) => s.setSearchOpen)
   const commentsOpen = useReview((s) => s.commentsOpen)
   const activityOpen = useReview((s) => s.activityOpen)
+  const openFind = useReview((s) => s.openFind)
   useAutoRepin()
 
-  // cmd+shift+F always opens workspace search; plain cmd+F only outside
-  // editors and inputs so Monaco's in-file find keeps working
+  /**
+   * ⌘F finds in the review you are reading; ⌘⇧F searches every repository.
+   *
+   * ⌘F used to do the second of those, which is a different question — and
+   * inside an editor it fell through to Monaco's own find, which searches that
+   * one file, so on a twenty-file diff it searched a twentieth of the screen.
+   * It is taken everywhere in the review now, including inside an editor, since
+   * that is where a reader's hand goes and the answer they want is the whole
+   * diff. The workspace search keeps ⌘⇧F and the Search button.
+   */
   useEffect(() => {
     if (!active) return
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return
       if (event.key !== 'f' && event.key !== 'F') return
-      if (event.shiftKey) {
-        event.preventDefault()
-        setSearchOpen(true)
-        return
-      }
-      const target = event.target as HTMLElement | null
-      const in_editor =
-        target !== null &&
-        (target.closest('.monaco-editor') !== null ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA')
-      if (!in_editor) {
-        event.preventDefault()
-        setSearchOpen(true)
-      }
+      event.preventDefault()
+      if (event.shiftKey) setSearchOpen(true)
+      else openFind(true)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [active, setSearchOpen])
+  }, [active, setSearchOpen, openFind])
 
   return (
     <div className="flex h-full min-h-0 flex-col" inert={!active}>
@@ -156,11 +154,12 @@ export function Workspace({ active }: { active: boolean }) {
             </div>
             <CommitsPanel />
           </aside>
-          <main className="flex min-w-0 grow flex-col">
+          <main className="relative flex min-w-0 grow flex-col">
             <TabBar />
             <div className="min-h-0 grow">
               <FileView />
             </div>
+            <FindBar />
           </main>
           <SidePane />
           {commentsOpen && <CommentsPanel />}

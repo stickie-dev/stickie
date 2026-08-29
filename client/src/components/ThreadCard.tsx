@@ -3,7 +3,8 @@ import type { Thread } from '@stickie/shared'
 import { postsComment } from '../keys'
 import { useReview } from '../store'
 import { TimeAgo } from './TimeAgo'
-import { badge, button_primary, field } from '../ui'
+import { ask } from '../confirm'
+import { badge, btn, field } from '../ui'
 
 const ref_pattern = /(@[\w./-]+(?::[\w./-]+)?:L\d+(?:-L?\d+)?)/g
 
@@ -72,6 +73,16 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
     thread === undefined ? '' : (s.replyDrafts[thread.id] ?? ''),
   )
   const [showReply, setShowReply] = useState(false)
+  /**
+   * A resolved note is history, and a file holding eleven of them is mostly
+   * history standing in front of the code. So it folds to its first line and
+   * opens on ask — except the note a link pointed at, which opens itself,
+   * being the one somebody was sent to read.
+   */
+  const [opened, setOpened] = useState(false)
+  const folds = thread?.status === 'resolved'
+  const open = !folds || opened || linked
+  const first = thread?.messages[0]
 
   if (thread === undefined) return null
 
@@ -115,6 +126,13 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
           {' · note '}
           {thread.number}
         </span>
+        {/*
+          When the note was raised, in the header rather than only on its first
+          message: the panel showed it above the card and the diff showed it
+          nowhere, so a note in the code said nothing about when it was written.
+          A folded note has no message line to carry it either.
+        */}
+        <TimeAgo at={thread.createdAt} className="text-xs text-faint" />
         {thread.pending && (
           <span
             className={`${badge} bg-violet-500/15 text-violet-700 dark:text-violet-300`}
@@ -144,6 +162,17 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
           not resolved — so a note whose code has gone has to be closable or it
           rides along in every export from here on.
         */}
+        {folds && (
+          <button
+            className={`mr-1 text-xs ${btn()}`}
+            title={
+              open ? 'fold this note away' : 'read this note and its replies'
+            }
+            onClick={() => setOpened(!opened)}
+          >
+            {open ? 'hide' : 'show'}
+          </button>
+        )}
         {thread.status === 'resolved' ? (
           <button
             className="text-xs text-amber-600 hover:underline dark:text-amber-400"
@@ -168,16 +197,49 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
           className="ml-2 text-xs text-rose-600 hover:underline dark:text-rose-400"
           title="delete this note and its replies"
           onClick={() => {
-            if (window.confirm('Delete this note and all its replies?')) {
-              void deleteThread(thread.id)
-            }
+            void (async () => {
+              const replies = thread.messages.length - 1
+              if (
+                await ask({
+                  title: `Delete note ${String(thread.number)}?`,
+                  detail:
+                    replies > 0
+                      ? `It and its ${String(replies)} ${
+                          replies === 1 ? 'reply' : 'replies'
+                        } go. The record keeps that it existed; the note itself cannot be brought back.`
+                      : 'The record keeps that it existed; the note itself cannot be brought back.',
+                  confirmLabel: 'Delete',
+                  danger: true,
+                })
+              ) {
+                await deleteThread(thread.id)
+              }
+            })()
           }}
         >
           delete
         </button>
       </div>
       <div className="space-y-2 px-3 py-2">
-        {thread.messages.map((message) =>
+        {/* folded: who raised it and the first line of what they said */}
+        {!open && (
+          <div className="flex min-w-0 items-baseline gap-1.5">
+            <span className="shrink-0 font-semibold text-ink">
+              {first?.actorName ?? first?.author ?? ''}
+            </span>
+            <span className="truncate text-soft">{first?.body ?? ''}</span>
+            {thread.messages.length > 1 && (
+              <span
+                className="shrink-0 text-xs text-faint"
+                title={`${String(thread.messages.length - 1)} more in this note`}
+              >
+                +{thread.messages.length - 1}
+              </span>
+            )}
+          </div>
+        )}
+        {open &&
+          thread.messages.map((message) =>
           editingId === message.id ? (
             <div key={message.id} className="flex gap-2">
               <textarea
@@ -197,7 +259,7 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
               />
               <div className="flex flex-col gap-1">
                 <button
-                  className={`${button_primary} text-xs`}
+                  className={`text-xs ${btn('primary')}`}
                   onClick={() => {
                     if (editText.trim() !== '') {
                       void editMessage(thread.id, message.id, editText.trim())
@@ -276,7 +338,7 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
               }}
             />
             <button
-              className={`${button_primary} text-xs`}
+              className={`text-xs ${btn('primary')}`}
               onClick={() => void submitReply()}
             >
               send

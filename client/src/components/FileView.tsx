@@ -13,7 +13,7 @@ import { CommentLayer } from './CommentLayer'
 import { CommitTimeline } from './CommitTimeline'
 import { ContinuousDiff } from './ContinuousDiff'
 import { Loading, SkeletonCode } from './Skeleton'
-import { button } from '../ui'
+import { btn } from '../ui'
 import { FileName } from './FileName'
 
 const side_by_side_min_width = 1440
@@ -322,47 +322,6 @@ function makeCaptureAttacher(
   }
 }
 
-/**
- * Wrap, for every file in the flow at once. Wrapping is otherwise a decision
- * per file, which is right when one file is prose among code and tedious when
- * the whole diff is prose. It says what it will do, not what is currently true,
- * because with a mixture there is no single current answer.
- */
-function WrapAll({ files }: { files: ChangedFile[] }) {
-  const wrapExtensions = useReview((s) => s.wrapExtensions)
-  const wrapOverrides = useReview((s) => s.wrapOverrides)
-  const setWrapAll = useReview((s) => s.setWrapAll)
-  const paths = files.map((file) => file.path)
-  const wrapped = paths.filter((path) =>
-    wrapFor(path, wrapExtensions, wrapOverrides),
-  ).length
-  const all = wrapped === paths.length && paths.length > 0
-  const state =
-    wrapped === 0 ? 'none wrapped' : all ? 'all wrapped' : `${String(wrapped)} of ${String(paths.length)} wrapped`
-
-  return (
-    <span className="flex shrink-0 items-center gap-1.5 text-soft">
-      <span className="text-faint">{state}</span>
-      <button
-        className={`px-1.5 py-0.5 ${button}`}
-        title="soft-wrap every file in this diff"
-        disabled={all}
-        onClick={() => setWrapAll(paths, true)}
-      >
-        wrap all
-      </button>
-      <button
-        className={`px-1.5 py-0.5 ${button}`}
-        title="stop wrapping every file in this diff"
-        disabled={wrapped === 0}
-        onClick={() => setWrapAll(paths, false)}
-      >
-        none
-      </button>
-    </span>
-  )
-}
-
 /** Equal-width note/ref actions rendered just below the mouse position. */
 function CaptureActions({
   target,
@@ -434,10 +393,10 @@ export function FileView() {
   const drafts = useReview((s) => s.drafts)
   const theme = useReview((s) => s.theme)
   const width = useWindowWidth()
-  const [sideBySideOverride, setSideBySideOverride] = useState<boolean | null>(
-    null,
-  )
-  const [collapseUnchanged, setCollapseUnchanged] = useState(true)
+  const sideBySideChoice = useReview((s) => s.sideBySide)
+  const collapseUnchanged = useReview((s) => s.collapseUnchanged)
+  const finding = useReview((s) => s.findOpen && s.findMatches.length > 0)
+  const setCollapseUnchanged = useReview((s) => s.setCollapseUnchanged)
   const [captureTarget, setCaptureTarget] = useState<CaptureTarget | null>(
     null,
   )
@@ -575,7 +534,7 @@ export function FileView() {
     return () => window.removeEventListener('keydown', onKey)
   }, [diffEditor])
 
-  const sideBySide = sideBySideOverride ?? width >= side_by_side_min_width
+  const sideBySide = sideBySideChoice ?? width >= side_by_side_min_width
   const monaco_theme = theme === 'dark' ? 'stickie-dark' : 'stickie-light'
 
   const viewMode = useReview((s) => s.viewMode)
@@ -605,8 +564,21 @@ export function FileView() {
       return
     }
     const timer = setTimeout(() => {
-      reveal_editor.revealLineInCenter(reveal.line)
-      reveal_editor.setPosition({ lineNumber: reveal.line, column: 1 })
+      // a find match knows its column, so select the match itself rather than
+      // centring the line and leaving the reader to spot which word it was
+      if (reveal.column !== undefined && reveal.length !== undefined) {
+        const range = {
+          startLineNumber: reveal.line,
+          startColumn: reveal.column,
+          endLineNumber: reveal.line,
+          endColumn: reveal.column + reveal.length,
+        }
+        reveal_editor.revealRangeInCenterIfOutsideViewport(range)
+        reveal_editor.setSelection(range)
+      } else {
+        reveal_editor.revealLineInCenter(reveal.line)
+        reveal_editor.setPosition({ lineNumber: reveal.line, column: 1 })
+      }
       clearReveal()
     }, 50)
     return () => clearTimeout(timer)
@@ -685,14 +657,10 @@ export function FileView() {
       )
     }
     return (
+      // no header row of its own: the counts it carried are in the status bar
+      // and the choices are in the view menu at the end of the tabs, which
+      // leaves the whole height for the diff
       <div className="flex h-full flex-col">
-        <div className="flex items-center gap-3 border-b border-edge px-3 py-1.5 text-xs">
-          <span className="text-soft">
-            {files.length} changed file{files.length === 1 ? '' : 's'}
-          </span>
-          <span className="grow" />
-          <WrapAll files={files} />
-        </div>
         <div className="min-h-0 grow">
           <ContinuousDiff
             files={files}
@@ -774,35 +742,14 @@ export function FileView() {
         </label>
         <span className="grow" />
         <button
-          className="shrink-0 text-faint hover:text-ink"
+          className={`shrink-0 ${btn()}`}
           title="keyboard shortcuts"
           onClick={() => setHelpOpen(true)}
         >
           ?
         </button>
-        <button
-          className="shrink-0 text-soft hover:text-ink"
-          title="soft-wrap long lines in this file (also in the right-click menu)"
-          onClick={() => toggleWrap(selectedPath)}
-        >
-          {wrap ? 'no wrap' : 'wrap'}
-        </button>
-        {has_both && (
-          <button
-            className="shrink-0 text-soft hover:text-ink"
-            onClick={() => setCollapseUnchanged(!collapseUnchanged)}
-          >
-            {collapseUnchanged ? 'expand unchanged' : 'collapse unchanged'}
-          </button>
-        )}
-        {has_both && (
-          <button
-            className="shrink-0 text-soft hover:text-ink"
-            onClick={() => setSideBySideOverride(!sideBySide)}
-          >
-            {sideBySide ? 'inline view' : 'side-by-side view'}
-          </button>
-        )}
+        {/* wrap, view mode and unchanged lines are in the view menu now, at
+            the end of the tabs, where the diff can reach them too */}
       </div>
       <div className="min-h-0 grow">
         {binary && (
@@ -826,7 +773,7 @@ export function FileView() {
                 ...editorOptions(width, wrap),
                 renderSideBySide: sideBySide,
                 hideUnchangedRegions: {
-                  enabled: collapseUnchanged,
+                  enabled: collapseUnchanged && !finding,
                   contextLineCount: 2,
                   minimumLineCount: 4,
                   revealLineCount: 20,
@@ -891,9 +838,13 @@ export function FileView() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
           onClick={() => setHelpOpen(false)}
         >
-          <div className="w-80 rounded-lg border border-edge bg-panel p-4 text-sm shadow-2xl">
+          <div className="w-80 rounded-lg bg-panel p-4 text-sm shadow-lifted">
             <h2 className="mb-2 font-semibold text-ink">Keyboard shortcuts</h2>
-            <dl className="grid grid-cols-[3rem_1fr] gap-y-1 text-xs">
+            <dl className="grid grid-cols-[4rem_1fr] gap-y-1 text-xs">
+              <dt className="font-mono text-soft">⌘F</dt>
+              <dd className="text-ink">find in this review</dd>
+              <dt className="font-mono text-soft">⌘⇧F</dt>
+              <dd className="text-ink">search every repository</dd>
               <dt className="font-mono text-soft">j / k</dt>
               <dd className="text-ink">next / previous changed file</dd>
               <dt className="font-mono text-soft">n / p</dt>
@@ -949,7 +900,7 @@ function DefinitionPicker({
           <span className="font-mono text-ink">{pick.name}</span>
         </span>
         <span className="grow" />
-        <button className="text-soft hover:text-ink" onClick={onDone}>
+        <button className={btn()} onClick={onDone}>
           close
         </button>
       </div>
@@ -974,7 +925,7 @@ function DefinitionPicker({
             <span className="truncate text-faint">{hit.preview.trim()}</span>
           </button>
           <button
-            className="hidden shrink-0 text-xs text-soft group-hover:inline hover:text-ink"
+            className={`hidden shrink-0 text-xs group-hover:inline ${btn()}`}
             title="open beside the diff"
             onClick={() => {
               openHitSide(hit)

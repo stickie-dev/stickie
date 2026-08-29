@@ -143,7 +143,10 @@ function Measured({
   })
 
   return (
-    <div ref={ref} className="py-1 pr-6">
+    // a left inset as well as a right one: a card's ring and its shadow are
+    // drawn outside its box, and the zone clips at the content edge, so with
+    // nothing on the left the border of the card came off
+    <div ref={ref} className="py-1 pr-6 pl-1.5">
       {children}
     </div>
   )

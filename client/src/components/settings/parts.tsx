@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { button_primary, field, sunken } from '../../ui'
+import { btn, field, sunken } from '../../ui'
 
 export const field_classes = `w-full py-1.5 font-mono text-xs ${field}`
 
@@ -54,7 +54,7 @@ export function SaveRow({
   return (
     <div className="flex items-center gap-3 pt-1">
       <button
-        className={`px-3 py-1.5 text-xs ${button_primary} disabled:opacity-50`}
+        className={`text-xs ${btn('primary', 'px-3 py-1.5')}`}
         disabled={saving}
         onClick={onSave}
       >

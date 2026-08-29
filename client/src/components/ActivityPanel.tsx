@@ -4,6 +4,7 @@ import { api } from '../api'
 import { useReview } from '../store'
 import { TimeAgo } from './TimeAgo'
 import { Loading, Skeleton } from './Skeleton'
+import { btn } from '../ui'
 
 /**
  * What happened in this review, newest first. Reading the record back is what
@@ -83,13 +84,13 @@ export function ActivityPanel() {
         </span>
         <span className="grow" />
         <button
-          className="text-soft hover:text-ink"
+          className={btn()}
           title="reload"
           onClick={() => void load()}
         >
           ↻
         </button>
-        <button className="text-soft hover:text-ink" onClick={toggleActivity}>
+        <button className={btn()} onClick={toggleActivity}>
           close
         </button>
       </div>

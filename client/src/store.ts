@@ -19,6 +19,9 @@ import type {
   SubmitKey,
 } from './api'
 import { cachedFile, prefetchFile } from './fileCache'
+import { flowReveal } from './flowNav'
+import type { Haystack, Match } from './find'
+import { findMatches as scanForMatches } from './find'
 import type { TabRef } from './routes'
 import {
   previous_tabs,
@@ -119,7 +122,18 @@ interface ReviewState {
   connected: boolean
   promptCopied: boolean
   theme: Theme
-  reveal: { path: string; line: number; side?: Side } | null
+  /**
+   * Where the next editor to mount should go. `column` and `length` come from
+   * a find match, so the match itself is selected rather than the line being
+   * centred and the reader left to spot it.
+   */
+  reveal: {
+    path: string
+    line: number
+    side?: Side
+    column?: number
+    length?: number
+  } | null
   /**
    * The note a note address asked for, by row id, marked until the reader
    * moves. Landing on its line is not enough on its own: a line can carry
@@ -238,6 +252,43 @@ interface ReviewState {
     captureRepoId?: number,
   ) => void
   setActiveDraft: (id: number) => void
+  /**
+   * Which draft has its send-menu open, if any. In the store rather than in the
+   * component because a form inside a Monaco view zone does not keep state of
+   * its own — the same reason the draft body and the reply text live here.
+   */
+  splitMenuFor: string | null
+  setSplitMenu: (key: string | null) => void
+  /**
+   * How a diff is drawn. Both used to be state inside the file view, which put
+   * them out of reach of anything else and lost them on every tab switch —
+   * they are choices about reading, and they belong to the reader, not to
+   * whichever file happens to be open.
+   *
+   * `sideBySide` is null until it is chosen, and then the window's width
+   * decides: wide enough for two columns, or not.
+   */
+  sideBySide: boolean | null
+  setSideBySide: (side: boolean | null) => void
+  /**
+   * Find, in the review that is open. `matches` is every occurrence across the
+   * diff's files, so the count is a real count and every editor can highlight
+   * its own — Monaco's find is per editor, and a diff is many.
+   */
+  findOpen: boolean
+  findQuery: string
+  findCase: boolean
+  findMatches: Match[]
+  findAt: number
+  findCapped: boolean
+  findBusy: boolean
+  openFind: (open: boolean) => void
+  setFindQuery: (query: string) => Promise<void>
+  setFindCase: (on: boolean) => Promise<void>
+  stepFind: (delta: number) => Promise<void>
+  goToMatch: (index: number) => Promise<void>
+  collapseUnchanged: boolean
+  setCollapseUnchanged: (collapse: boolean) => void
   setActiveReply: (threadId: number | null) => void
   updateReplyDraft: (threadId: number, body: string) => void
   cancelDraft: (id: number) => void
@@ -259,7 +310,17 @@ interface ReviewState {
   reopenThread: (threadId: number) => Promise<void>
   copyPrompt: () => Promise<void>
   /** notes with no code anchor: on the open file, or on the review itself */
-  addNote: (scope: 'review' | 'file', body: string) => Promise<void>
+  /**
+   * A note with no code under it — on a file, or on the review. It takes the
+   * same draft-or-comment choice as one written on a line: it went out as
+   * whatever the server defaulted to, which made the panel the one place in the
+   * app where that setting did not apply.
+   */
+  addNote: (
+    scope: 'review' | 'file',
+    body: string,
+    as?: NoteDefault,
+  ) => Promise<void>
   /** the order Copy prompt uses; ids not listed follow by age */
   promptOrder: number[]
   moveInPromptOrder: (threadId: number, delta: number) => void
@@ -529,6 +590,52 @@ export const useReview = create<ReviewState>((set, get) => {
     return true
   }
 
+  /**
+   * Runs the current query over the review's files.
+   *
+   * It reads the same contents the diff is built from, through the same cache,
+   * so a file already on screen costs nothing and a file further down costs one
+   * read that the diff would have made anyway. Source side, because that is
+   * what is being reviewed; a file that only exists on the base side (deleted)
+   * is searched there instead, or it could not be found at all.
+   */
+  async function runFind(): Promise<void> {
+    const { session, files, findQuery, findCase, contentEpoch } = get()
+    const query = findQuery
+    if (session === null || query === '') {
+      set({ findMatches: [], findAt: 0, findCapped: false, findBusy: false })
+      return
+    }
+    set({ findBusy: true })
+    const haystacks: Haystack[] = []
+    for (const file of files) {
+      const side: Side = file.status === 'deleted' ? 'base' : 'source'
+      try {
+        const content = await cachedFile(
+          session.id,
+          contentEpoch,
+          file.path,
+          side,
+        )
+        if (content.content !== null && !content.binary) {
+          haystacks.push({ path: file.path, side, content: content.content })
+        }
+      } catch {
+        // an unreadable file is not a reason to have no results
+      }
+    }
+    // the query may have moved on while those reads were in flight
+    if (get().findQuery !== query || get().findCase !== findCase) return
+    const { matches, capped } = scanForMatches(haystacks, query, findCase)
+    set({
+      findMatches: matches,
+      findAt: 0,
+      findCapped: capped,
+      findBusy: false,
+    })
+    if (matches.length > 0) await get().goToMatch(0)
+  }
+
   /** Keeps the files either side of the open one warm, so j/k lands instantly. */
   function prefetchNeighbours(path: string): void {
     const { session, files, contentEpoch } = get()
@@ -651,6 +758,16 @@ export const useReview = create<ReviewState>((set, get) => {
     theme: initialTheme(),
     reveal: null,
     noteHighlight: null,
+    splitMenuFor: null,
+    sideBySide: null,
+    collapseUnchanged: true,
+    findOpen: false,
+    findQuery: '',
+    findCase: false,
+    findMatches: [],
+    findAt: 0,
+    findCapped: false,
+    findBusy: false,
     usages: null,
     toasts: [],
     navHistory: [],
@@ -1272,6 +1389,63 @@ export const useReview = create<ReviewState>((set, get) => {
       })
     },
 
+    setSplitMenu: (key) => set({ splitMenuFor: key }),
+
+    setSideBySide: (side) => set({ sideBySide: side }),
+
+    openFind: (open) => {
+      set({ findOpen: open })
+      // the query survives closing: reopening to look for the same thing again
+      // is the common case, and it costs nothing to remember
+      if (!open) set({ findAt: 0 })
+    },
+
+    setFindQuery: async (query) => {
+      set({ findQuery: query })
+      await runFind()
+    },
+
+    setFindCase: async (on) => {
+      set({ findCase: on })
+      await runFind()
+    },
+
+    stepFind: async (delta) => {
+      const { findMatches: found, findAt } = get()
+      if (found.length === 0) return
+      // wraps both ways: a find that stops at the end is a find you have to
+      // close and reopen to use again
+      const next = (findAt + delta + found.length) % found.length
+      await get().goToMatch(next)
+    },
+
+    goToMatch: async (index) => {
+      const match = get().findMatches[index]
+      if (match === undefined) return
+      set({ findAt: index })
+      const select = { column: match.column, length: match.length }
+      if (get().viewMode === 'flow') {
+        // the flow scrolls itself and its editors are its own, so it reveals
+        // through flowNav rather than through the single view's `reveal`
+        if (match.path !== get().selectedPath) get().flowSelect(match.path)
+        flowReveal(match.path, match.line, select)
+        return
+      }
+      if (match.path !== get().selectedPath) {
+        await get().openFile(match.path).catch(() => undefined)
+      }
+      set({
+        reveal: {
+          path: match.path,
+          line: match.line,
+          side: match.side,
+          ...select,
+        },
+      })
+    },
+
+    setCollapseUnchanged: (collapse) => set({ collapseUnchanged: collapse }),
+
     setActiveDraft: (id) => {
       if (get().drafts.some((d) => d.id === id)) {
         set({ activeDraftId: id, activeReplyId: null })
@@ -1297,6 +1471,10 @@ export const useReview = create<ReviewState>((set, get) => {
           get().activeDraftId === id
             ? (drafts.at(-1)?.id ?? null)
             : get().activeDraftId,
+        // a menu belonging to a draft that no longer exists
+        ...(get().splitMenuFor === `draft:${String(id)}`
+          ? { splitMenuFor: null }
+          : {}),
       })
     },
 
@@ -1422,8 +1600,8 @@ export const useReview = create<ReviewState>((set, get) => {
 
     promptOrder: [],
 
-    addNote: async (scope, body) => {
-      const { session, selectedPath } = get()
+    addNote: async (scope, body, as) => {
+      const { session, selectedPath, noteDefault } = get()
       if (session === null) return
       const path = scope === 'file' ? (selectedPath ?? '') : ''
       try {
@@ -1433,6 +1611,7 @@ export const useReview = create<ReviewState>((set, get) => {
           startLine: 0,
           endLine: 0,
           body,
+          pending: (as ?? noteDefault) === 'draft',
         })
         set({ threads: [...get().threads, thread] })
       } catch (error) {

@@ -1,4 +1,4 @@
-import { Link } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import type { SettingsSection } from '../../routes'
 import { formatRoute, settings_sections } from '../../routes'
 import { AgentsSection } from './AgentsSection'
@@ -11,7 +11,7 @@ import { ReviewsSection } from './ReviewsSection'
 import { StorageSection } from './StorageSection'
 import { useSettings } from './useSettings'
 import { Loading, Skeleton, SkeletonLines } from '../Skeleton'
-import { button, enter, motion } from '../../ui'
+import { btn, enter, motion } from '../../ui'
 
 const titles: Record<SettingsSection, string> = {
   identity: 'Identity',
@@ -40,6 +40,8 @@ const sections: Record<
 
 export function SettingsPage({ section }: { section: SettingsSection }) {
   const access = useSettings()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -48,9 +50,21 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
         <span className="font-semibold tracking-tight text-ink">stickie</span>
         <span className="text-faint">settings</span>
         <span className="grow" />
-        <Link className={button} to="/">
-          back to the review
-        </Link>
+        {/*
+          Back where the reader was, not to the root: settings is reached from a
+          review, from the overview, and from a pasted address, and only the
+          last of those has nowhere to go back to. `location.key` is 'default'
+          for the entry a page was loaded on, which is how that case is known.
+        */}
+        <button
+          className={btn()}
+          onClick={() => {
+            if (location.key === 'default') void navigate('/')
+            else void navigate(-1)
+          }}
+        >
+          back
+        </button>
       </header>
       <div className="flex min-h-0 grow">
         <nav className="w-48 shrink-0 space-y-0.5 px-2 py-3">

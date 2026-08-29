@@ -17,7 +17,24 @@ type Edge = 'first' | 'last'
 
 const entries = new Map<string, Entry>()
 let scroller: HTMLElement | null = null
-let pending: { path: string; edge: Edge; expires: number } | null = null
+/** A range on one line, for selecting a found word. */
+export interface Select {
+  column: number
+  length: number
+}
+
+/**
+ * A jump waiting for its file's editors. `edge` is for stepping through
+ * changes, where the destination is "the first change in that file"; `line`
+ * and `select` are for a caller that already knows exactly where it means.
+ */
+let pending: {
+  path: string
+  edge: Edge
+  expires: number
+  line?: number
+  select?: Select
+} | null = null
 let jumping_until = 0
 let clicked_until = 0
 
@@ -80,12 +97,13 @@ export function registerFlowEditors(
   const land = () => {
     if (pending !== want) return
     const starts = changeStarts(entry)
-    const line = (want.edge === 'first' ? starts[0] : starts.at(-1)) ?? 1
+    const line =
+      want.line ?? ((want.edge === 'first' ? starts[0] : starts.at(-1)) ?? 1)
     jumping_until = performance.now() + 500
-    revealLine(entry, line)
+    revealLine(entry, line, want.select)
     for (const delay of [120, 360]) {
       setTimeout(() => {
-        if (pending === want) revealLine(entry, line)
+        if (pending === want) revealLine(entry, line, want.select)
       }, delay)
     }
     setTimeout(() => {
@@ -119,7 +137,7 @@ function changeStarts(entry: Entry): number[] {
   )
 }
 
-function revealLine(entry: Entry, line: number): void {
+function revealLine(entry: Entry, line: number, select?: Select): void {
   const modified = entry.modified
   const node = modified?.getDomNode() ?? null
   if (scroller === null || modified == null || node === null) return
@@ -130,7 +148,54 @@ function revealLine(entry: Entry, line: number): void {
   // a third of the way down clears the sticky file header and shows context
   const wanted = scroll_rect.top + scroll_rect.height * 0.3
   scroller.scrollTop += target - wanted
-  modified.setPosition({ lineNumber: line, column: 1 })
+  if (select === undefined) {
+    modified.setPosition({ lineNumber: line, column: 1 })
+    return
+  }
+  // a found word is selected, not merely scrolled to: on a long line the
+  // reader would otherwise have to spot which of them matched
+  modified.setSelection({
+    startLineNumber: line,
+    startColumn: select.column,
+    endLineNumber: line,
+    endColumn: select.column + select.length,
+  })
+}
+
+/**
+ * Put one line of one file on screen, and select part of it. The flow's
+ * editors are not the single-file view's, so the reveal that view listens for
+ * never reached them — a reference or a find match aimed into the flow scrolled
+ * nothing.
+ */
+export function flowReveal(path: string, line: number, select?: Select): void {
+  const entry = entries.get(path)
+  pending = {
+    path,
+    edge: 'first',
+    line,
+    select,
+    expires: performance.now() + 5000,
+  }
+  jumping_until = performance.now() + 500
+  if (entry === undefined) return
+  if (entry.modified == null) {
+    // not mounted yet: get its placeholder on screen and let
+    // registerFlowEditors finish the job when the editors exist
+    entry.section.scrollIntoView({ block: 'start' })
+    return
+  }
+  pending = null
+  // and again shortly: a section that has just mounted is still growing to its
+  // content height, so one reveal aimed at a line that has since moved lands
+  // short. The same retries the change-stepping path makes, for the same reason.
+  revealLine(entry, line, select)
+  for (const delay of [120, 360]) {
+    setTimeout(() => {
+      const still = entries.get(path)
+      if (still !== undefined) revealLine(still, line, select)
+    }, delay)
+  }
 }
 
 /**

@@ -770,9 +770,12 @@ export function createApp(
       tags: ['sessions'],
       summary: 'Get or create a review session',
       description:
-        'source is a worktree working tree or a ref. baseRef defaults to ' +
-        'HEAD for worktrees and to the merge-base with the default branch ' +
-        'for refs; it is resolved and pinned as baseSha at creation.',
+        'source is a worktree working tree or a ref. Without baseRef the base ' +
+        'is the merge-base with the default branch — what a merge request ' +
+        'compares — for a worktree as well as for a ref, falling back to HEAD ' +
+        'when the default branch shares no history. Pass `HEAD` for the ' +
+        'uncommitted work on its own. Whatever it resolves to is pinned as ' +
+        'baseSha at creation.',
       request: { body: json_body(session_body) },
       responses: {
         200: json_response(session_schema, 'The session'),

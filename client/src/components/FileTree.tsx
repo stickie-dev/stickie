@@ -3,7 +3,7 @@ import type { ChangedFile } from '@stickie/shared'
 import { fileIconUrl, folderIconUrl } from '../fileIcons'
 import { useReview } from '../store'
 import { Loading, Skeleton } from './Skeleton'
-import { field } from '../ui'
+import { field, motion } from '../ui'
 
 const status_letter: Record<ChangedFile['status'], string> = {
   added: 'A',
@@ -275,23 +275,34 @@ function RepoNode({ repoId }: { repoId: number }) {
             else void selectRepo(repoId)
           }}
         >
+          {/* the name does not shrink: it is what the row is. A long branch
+              name truncates instead, since it is the qualifier */}
           <span
-            className={`truncate font-semibold ${is_active ? 'text-ink' : 'text-soft'}`}
+            className={`shrink-0 font-semibold ${is_active ? 'text-ink' : 'text-soft'}`}
+            title={repo.path}
           >
             {repo.name}
           </span>
-          <span className="truncate text-[10px] text-faint">
+          <span
+            className="min-w-0 truncate text-[10px] text-faint"
+            title={`on ${repo.branch}`}
+          >
             {repo.branch}
           </span>
         </button>
         <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[10px]">
           {(entry?.openCount ?? 0) > 0 && (
-            <span className="rounded-full bg-amber-500/20 px-1.5 text-amber-700 dark:text-amber-300">
+            <span
+              className="rounded-full bg-amber-500/20 px-1.5 text-amber-700 dark:text-amber-300"
+              title={`${String(entry?.openCount ?? 0)} unresolved ${
+                entry?.openCount === 1 ? 'note' : 'notes'
+              } in this repository`}
+            >
               {entry?.openCount}
             </span>
           )}
           <button
-            className={`rounded border px-1 ${entry?.showAll === true ? 'border-accent text-accent' : 'border-edge text-faint hover:text-ink'}`}
+            className={`rounded-sm px-1 ${motion} ${entry?.showAll === true ? 'bg-accent-soft text-accent' : 'text-faint hover:bg-overlay hover:text-ink'}`}
             title={
               entry?.showAll === true
                 ? 'showing all files — click for changed only'
@@ -301,7 +312,18 @@ function RepoNode({ repoId }: { repoId: number }) {
           >
             all
           </button>
-          <span className="text-faint">{entry?.files.length ?? 0}</span>
+          <span
+            className="text-faint"
+            title={
+              entry?.showAll === true
+                ? `${String(entry.files.length)} files in this repository`
+                : `${String(entry?.files.length ?? 0)} changed ${
+                    entry?.files.length === 1 ? 'file' : 'files'
+                  }`
+            }
+          >
+            {entry?.files.length ?? 0}
+          </span>
         </span>
       </div>
       {expanded && entry === undefined && (

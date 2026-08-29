@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import type { NavHit } from '../api'
 import { useReview } from '../store'
+import { btn } from '../ui'
 
 /**
  * Workspace-wide text search (cmd+F / cmd+shift+F). Results open in the
@@ -108,7 +109,7 @@ export function SearchOverlay() {
                   </span>
                 </button>
                 <button
-                  className="hidden shrink-0 text-soft group-hover:inline hover:text-ink"
+                  className={`hidden shrink-0 group-hover:inline ${btn()}`}
                   title="open in the main view (leaves the diff)"
                   onClick={() => {
                     void openHit(hit)
