@@ -54,8 +54,15 @@ export interface Session {
   source: ReviewSource
   baseRef: string
   baseSha: string
-  /** true when baseRef is symbolic (HEAD) and has moved past baseSha */
+  /** the base ref has moved on from baseSha, and the pin can follow it */
   baseStale?: boolean
+  /**
+   * The base ref resolves to a commit that does not have baseSha in its
+   * history: the source is on another line of work — a branch cut from an
+   * older point, a rebase, a reset — rather than ahead of this one. Never
+   * re-pinned automatically, because the notes' code is not there.
+   */
+  baseDiverged?: boolean
 }
 
 export type FileChangeStatus =

@@ -13,6 +13,8 @@ import type {
   ThreadEvent,
 } from '@stickie/shared'
 import { extractSnippet, reanchor } from './anchors.js'
+import type { BasePinState } from './basePin.js'
+import { classifyBasePin } from './basePin.js'
 import {
   configuredDatabaseUrl,
   databaseFromEnv,
@@ -104,6 +106,7 @@ const session_schema = z
     baseRef: z.string(),
     baseSha: z.string(),
     baseStale: z.boolean().optional(),
+    baseDiverged: z.boolean().optional(),
   })
   .openapi('Session')
 
@@ -114,23 +117,41 @@ function sourceRoot(session: Session): string {
 }
 
 /**
- * HEAD bases go stale when the worktree commits; default-branch bases go
- * stale when the merge-base drifts (branch rebased or default advanced).
+ * The tip of what this review is *of*.
+ *
+ * A worktree review follows whatever that worktree has checked out, so its tip
+ * is HEAD; a branch review is of that branch, whatever the repository happens
+ * to have checked out at the time. Reading HEAD for both is how a review of
+ * `orbit-api` came to be re-pinned because someone started an unrelated
+ * branch in the same repository: git was asked about the wrong tip, and the
+ * answer was applied to this review.
  */
-async function isBaseStale(session: Session): Promise<boolean> {
+function sourceHead(session: Session): string {
+  return session.source.kind === 'worktree' ? 'HEAD' : session.source.value
+}
+
+/**
+ * Where this review's base would move to, and whether moving there is moving
+ * on. HEAD bases follow the tip commit; ref bases follow the merge-base, which
+ * drifts when the source is rebased or the base branch advances.
+ */
+async function basePin(session: Session): Promise<BasePinState> {
   try {
-    if (session.baseRef === 'HEAD') {
-      const current = await resolveRef(sourceRoot(session), 'HEAD')
-      return current !== session.baseSha
+    const root = sourceRoot(session)
+    const resolved =
+      session.baseRef === 'HEAD'
+        ? await resolveRef(root, sourceHead(session))
+        : await mergeBase(root, session.baseRef, sourceHead(session))
+    if (resolved === null || resolved === session.baseSha) {
+      return classifyBasePin(session.baseSha, resolved, false)
     }
-    const merge_base = await mergeBase(
-      sourceRoot(session),
-      session.baseRef,
-      'HEAD',
+    return classifyBasePin(
+      session.baseSha,
+      resolved,
+      await isAncestor(root, session.baseSha, resolved),
     )
-    return merge_base !== null && merge_base !== session.baseSha
   } catch {
-    return false
+    return classifyBasePin(session.baseSha, null, false)
   }
 }
 
@@ -850,8 +871,9 @@ export function createApp(
       // an existing review comes back with the base it is pinned to, which may
       // have been left behind since; saying so here is what lets a fresh load
       // offer the re-pin rather than waiting for the next file change
+      const pin = await basePin(session)
       return c.json(
-        { ...session, baseStale: await isBaseStale(session) },
+        { ...session, baseStale: pin.stale, baseDiverged: pin.diverged },
         200,
       )
     },
@@ -874,7 +896,11 @@ export function createApp(
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      return c.json({ ...session, baseStale: await isBaseStale(session) }, 200)
+      const pin = await basePin(session)
+      return c.json(
+        { ...session, baseStale: pin.stale, baseDiverged: pin.diverged },
+        200,
+      )
     },
   )
 
@@ -903,13 +929,20 @@ export function createApp(
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      const current =
-        session.baseRef === 'HEAD'
-          ? await resolveRef(sourceRoot(session), 'HEAD')
-          : ((await mergeBase(sourceRoot(session), session.baseRef, 'HEAD')) ??
-            session.baseSha)
-      if (current === session.baseSha) {
-        return c.json({ ...session, baseStale: false }, 200)
+      const pin = await basePin(session)
+      const current = pin.next
+      if (current === null) {
+        return c.json({ ...session, baseStale: false, baseDiverged: false }, 200)
+      }
+      /*
+       * A base that would move backwards is not this review moving on, and the
+       * setting is not permission to be pointed at another line of history:
+       * the automatic path stops here and the banner says why. A reviewer who
+       * asks for it by hand still gets it — with their notes' code gone from
+       * under them, which the client warns about before asking for this.
+       */
+      if (pin.diverged && c.req.valid('query').automatic === true) {
+        return c.json({ ...session, baseStale: false, baseDiverged: true }, 200)
       }
       // the pin moves on this review rather than starting another one; what
       // the base used to be is not lost, it is in the record below
@@ -926,10 +959,12 @@ export function createApp(
           // a pin the reviewer moved and one the setting moved for them are
           // different facts about who was watching
           automatic: c.req.valid('query').automatic === true,
+          // and a pin that moved off the line it was on is a third
+          ...(pin.diverged ? { diverged: true } : {}),
         },
       })
       return c.json(
-        { ...session, baseSha: current, baseStale: false },
+        { ...session, baseSha: current, baseStale: false, baseDiverged: false },
         200,
       )
     },

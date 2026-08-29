@@ -132,6 +132,35 @@ export function TopBar() {
 
   const select_classes = `${field} py-0.5`
 
+  const warning_button =
+    'bg-amber-500/15 text-amber-700 ring-amber-500/40 hover:bg-amber-500/25 dark:text-amber-300'
+
+  /**
+   * Re-pinning onto a line of history the notes were not written against. It
+   * is a reviewer's call and never a setting's, so this is the only way it
+   * happens — and it asks first, since what follows is notes re-anchored
+   * against unrelated code.
+   */
+  const moveBaseAnyway = async () => {
+    if (session === null) return
+    const notes = threads.length
+    const sure = await ask({
+      title: 'Move the base onto a different line of history?',
+      detail:
+        `The source does not have ${session.baseSha.slice(0, 8)} in its ` +
+        'history — it was branched from an older commit, rebased, or reset. ' +
+        (notes === 0
+          ? 'Re-pinning measures this review against the new base instead.'
+          : `Re-pinning re-anchors ${String(notes)} ` +
+            `${notes === 1 ? 'note' : 'notes'} against code they were not ` +
+            'written on; any that cannot be found turn detached. Nothing is ' +
+            'deleted.'),
+      confirmLabel: 'Re-pin anyway',
+      danger: true,
+    })
+    if (sure) await repin()
+  }
+
   // the overview's and settings' bar, on the review: the same surface, the same
   // rhythm and the same buttons, so moving between the three pages does not
   // feel like moving between three applications. The one division under the
@@ -209,11 +238,27 @@ export function TopBar() {
       )}
       {session?.baseStale === true && (
         <button
-          className={btn('outline', 'bg-amber-500/15 text-amber-700 ring-amber-500/40 hover:bg-amber-500/25 dark:text-amber-300')}
-          title="HEAD moved past the pinned base; re-pin and carry open notes forward"
+          className={btn('outline', warning_button)}
+          title="the base moved on past the pinned commit; re-pin and carry open notes forward"
           onClick={() => void repin()}
         >
           base moved — re-pin
+        </button>
+      )}
+      {/*
+        A different thing from a base that moved on, and it says so: the source
+        is on a line of history this base is not in — a branch cut from an
+        older commit, a rebase, a reset. Nothing re-pins it on its own; the
+        offer is here, and it asks, because the notes were written against code
+        this source does not have.
+      */}
+      {session?.baseDiverged === true && (
+        <button
+          className={btn('outline', warning_button)}
+          title="the source does not have the pinned base in its history"
+          onClick={() => void moveBaseAnyway()}
+        >
+          source moved off this base
         </button>
       )}
 

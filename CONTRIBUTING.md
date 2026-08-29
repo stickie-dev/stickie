@@ -87,6 +87,21 @@ worse than a policy living where the reviewer is. Anything in the client that
 decides whether to act on a setting must treat "not read yet" as its own state:
 a default that acts is a default that acts before the stored answer arrives.
 
+**A base only ever moves forward, and only its own source moves it.**
+`basePin.ts` holds the rule and `basePin()` in `app.ts` asks git for it. Two
+things it gets right that cost a review's notes when they were wrong:
+
+- The tip is the *session's* source — `HEAD` only when the source is a
+  worktree, the ref itself when it is a branch. Reading `HEAD` for both is how
+  a review of one branch was re-pinned because someone started an unrelated
+  branch in the same repository: git was asked about the wrong tip and the
+  answer was applied to this review.
+- The pinned commit has to be an ancestor of where the pin would go.
+  Re-pinning is justified by the notes' code still being there to re-anchor
+  onto, which is true only going forward. When it is not, that is `baseDiverged`
+  rather than `baseStale`: the source is on another line of work, the automatic
+  path refuses it outright, and the client offers a re-pin that asks first.
+
 ## The record
 
 `activity` is append-only by convention: nothing in `Store` updates or deletes

@@ -87,6 +87,9 @@ function useAutoRepin(): void {
   const repin = useReview((s) => s.repin)
   const tried = useRef('')
 
+  // `baseStale` is only ever true for a base that moved *on*: a source that
+  // moved off this base is reported as diverged and left alone, because a
+  // setting is not permission to point a review at other work
   const stale = session?.baseStale === true
   // notes still with an agent, or still being written, are the reason to wait
   const busy = threads.some((t) => t.status !== 'resolved')
