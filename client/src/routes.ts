@@ -19,6 +19,7 @@ export const settings_sections = [
   'prompt',
   'appearance',
   'agents',
+  'app',
 ] as const
 
 export type SettingsSection = (typeof settings_sections)[number]

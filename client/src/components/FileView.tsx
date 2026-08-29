@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { DiffEditor, Editor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { editor_font, monaco } from '../monacoSetup'
-import type { Side } from '@stickie/shared'
+import type { ChangedFile, Side } from '@stickie/shared'
 import { api } from '../api'
 import type { NavHit } from '../api'
 import { flowJump, markFlowClick } from '../flowNav'
@@ -12,6 +12,7 @@ import { useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
 import { CommitTimeline } from './CommitTimeline'
 import { ContinuousDiff } from './ContinuousDiff'
+import { FileName } from './FileName'
 
 const side_by_side_min_width = 1440
 
@@ -314,6 +315,47 @@ function makeCaptureAttacher(
     })
     instance.onDidScrollChange(() => setTarget(null))
   }
+}
+
+/**
+ * Wrap, for every file in the flow at once. Wrapping is otherwise a decision
+ * per file, which is right when one file is prose among code and tedious when
+ * the whole diff is prose. It says what it will do, not what is currently true,
+ * because with a mixture there is no single current answer.
+ */
+function WrapAll({ files }: { files: ChangedFile[] }) {
+  const wrapExtensions = useReview((s) => s.wrapExtensions)
+  const wrapOverrides = useReview((s) => s.wrapOverrides)
+  const setWrapAll = useReview((s) => s.setWrapAll)
+  const paths = files.map((file) => file.path)
+  const wrapped = paths.filter((path) =>
+    wrapFor(path, wrapExtensions, wrapOverrides),
+  ).length
+  const all = wrapped === paths.length && paths.length > 0
+  const state =
+    wrapped === 0 ? 'none wrapped' : all ? 'all wrapped' : `${String(wrapped)} of ${String(paths.length)} wrapped`
+
+  return (
+    <span className="flex shrink-0 items-center gap-1.5 text-soft">
+      <span className="text-faint">{state}</span>
+      <button
+        className="rounded border border-edge px-1.5 py-0.5 hover:text-ink"
+        title="soft-wrap every file in this diff"
+        disabled={all}
+        onClick={() => setWrapAll(paths, true)}
+      >
+        wrap all
+      </button>
+      <button
+        className="rounded border border-edge px-1.5 py-0.5 hover:text-ink"
+        title="stop wrapping every file in this diff"
+        disabled={wrapped === 0}
+        onClick={() => setWrapAll(paths, false)}
+      >
+        none
+      </button>
+    </span>
+  )
 }
 
 /** Equal-width note/ref actions rendered just below the mouse position. */
@@ -634,6 +676,7 @@ export function FileView() {
             {files.length} changed file{files.length === 1 ? '' : 's'}
           </span>
           <span className="grow" />
+          <WrapAll files={files} />
         </div>
         <div className="min-h-0 grow">
           <ContinuousDiff
@@ -701,8 +744,8 @@ export function FileView() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 border-b border-edge px-3 py-1.5 text-xs">
-        <span className="truncate font-mono text-ink">{selectedPath}</span>
-        <span className="rounded bg-overlay px-1.5 py-0.5 text-soft">
+        <FileName path={selectedPath} />
+        <span className="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-soft">
           {selectedStatus}
         </span>
         {fileLoading && <span className="shrink-0 text-faint">loading…</span>}

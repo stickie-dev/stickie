@@ -112,13 +112,21 @@ the only output.
   repo; results (and definition/usage hits) open in a read-only pane beside
   the diff, where selections feed refs into the note being written
 - **Reading comfort** — light and dark themes built for diffs, soft wrap by
-  file type (settings) or per file (header button, right-click menu), and
-  width rulers at 80/100/120 on anything unwrapped
+  file type (settings), per file (header button, right-click menu) or for every
+  file in a diff at once, and width rulers at 80/100/120 on anything unwrapped
 - **Settings** — a page at `/settings` with a section each for identity, review
   behaviour (who moves a stale base pin), storage, GitLab instance and token
   resolution, the instruction block *Copy prompt* appends,
   appearance (theme and which file types wrap), and agents (this server's API
   address, the MCP command with your own path filled in, and the tool table)
+
+## As an app
+
+stickie carries a web manifest and a service worker, so a browser that installs
+web apps will offer to give it its own window and icon — Chrome and Edge put
+"Install" in the address bar or their menu, Safari calls it "Add to Dock".
+Settings → App has a button for it when the browser is offering, and says so
+when it is not. Installed or not it is the same local server on the same port.
 
 ## Run
 

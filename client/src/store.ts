@@ -261,6 +261,12 @@ interface ReviewState {
   /** per-file wrap decisions taken from the editor's context menu */
   wrapOverrides: Record<string, boolean>
   toggleWrap: (path: string) => void
+  /**
+   * One decision for every file on screen. The per-file toggle stays, and this
+   * simply writes the same override across the flow — otherwise a reader who
+   * wants prose wrapped everywhere has to say so once per file.
+   */
+  setWrapAll: (paths: string[], wrap: boolean) => void
   /** ask the tree to expand and show a folder (the status bar's path) */
   revealDir: { repoId: number; dir: string } | null
   openDir: (repoId: number, dir: string) => Promise<void>
@@ -1506,6 +1512,15 @@ export const useReview = create<ReviewState>((set, get) => {
         wrapOverrides: {
           ...wrapOverrides,
           [path]: !wrapFor(path, wrapExtensions, wrapOverrides),
+        },
+      })
+    },
+
+    setWrapAll: (paths, wrap) => {
+      set({
+        wrapOverrides: {
+          ...get().wrapOverrides,
+          ...Object.fromEntries(paths.map((path) => [path, wrap])),
         },
       })
     },

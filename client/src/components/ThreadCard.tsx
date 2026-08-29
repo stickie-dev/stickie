@@ -121,19 +121,31 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
             post now
           </button>
         )}
-        {thread.status === 'open' ? (
-          <button
-            className="text-xs text-emerald-600 hover:underline dark:text-emerald-400"
-            onClick={() => void resolveThread(thread.id)}
-          >
-            resolve
-          </button>
-        ) : (
+        {/*
+          Anything not resolved can be resolved, detached included. Everything
+          that counts unresolved notes counts a detached one — the status bar,
+          the comments panel, and the export, which sends every note that is
+          not resolved — so a note whose code has gone has to be closable or it
+          rides along in every export from here on.
+        */}
+        {thread.status === 'resolved' ? (
           <button
             className="text-xs text-amber-600 hover:underline dark:text-amber-400"
             onClick={() => void reopenThread(thread.id)}
           >
             reopen
+          </button>
+        ) : (
+          <button
+            className="text-xs text-emerald-600 hover:underline dark:text-emerald-400"
+            title={
+              thread.status === 'detached'
+                ? 'close this note as history — the code it was written against is gone'
+                : undefined
+            }
+            onClick={() => void resolveThread(thread.id)}
+          >
+            resolve
           </button>
         )}
         <button

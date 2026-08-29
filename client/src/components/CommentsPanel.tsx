@@ -119,15 +119,14 @@ export function CommentsPanel() {
     node?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [threads, arranging])
 
+  // what each filter would show, so the choice does not have to be made blind
+  const unresolved = threads.filter((t) => t.status !== 'resolved').length
   const total = visible.length
 
   return (
     <aside className="flex w-96 shrink-0 flex-col border-l border-edge bg-surface">
       <div className="flex items-center gap-2 border-b border-edge px-3 py-2">
         <h2 className="text-sm font-semibold text-ink">Comments</h2>
-        <span className="rounded-full bg-overlay px-1.5 py-0.5 text-[11px] text-soft tabular-nums">
-          {total}
-        </span>
         <span className="grow" />
         <button
           className="rounded px-1.5 py-0.5 text-xs text-soft hover:bg-overlay hover:text-ink"
@@ -139,15 +138,23 @@ export function CommentsPanel() {
       </div>
       <div className="flex items-center gap-1 border-b border-edge px-3 py-1.5 text-xs">
         <div className="flex overflow-hidden rounded border border-edge">
-          {([true, false] as const).map((only) => (
-            <button
-              key={String(only)}
-              className={`px-2 py-0.5 ${openOnly === only ? 'bg-accent text-white' : 'text-soft hover:bg-overlay hover:text-ink'}`}
-              onClick={() => setOpenOnly(only)}
-            >
-              {only ? 'Unresolved' : 'All'}
-            </button>
-          ))}
+          {([true, false] as const).map((only) => {
+            const active = openOnly === only
+            return (
+              <button
+                key={String(only)}
+                className={`flex items-center gap-1.5 px-2 py-0.5 ${active ? 'bg-accent text-white' : 'text-soft hover:bg-overlay hover:text-ink'}`}
+                onClick={() => setOpenOnly(only)}
+              >
+                {only ? 'Unresolved' : 'All'}
+                <span
+                  className={`tabular-nums ${active ? 'text-white/70' : 'text-faint'}`}
+                >
+                  {only ? unresolved : threads.length}
+                </span>
+              </button>
+            )
+          })}
         </div>
         <span className="grow" />
         <button

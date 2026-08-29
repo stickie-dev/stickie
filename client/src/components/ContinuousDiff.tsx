@@ -14,6 +14,7 @@ import {
 import { languageFor } from '../languages'
 import { useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
+import { FileName } from './FileName'
 
 type Attach = (
   instance: editor.IStandaloneCodeEditor,
@@ -184,8 +185,8 @@ function DiffSection({
   return (
     <section ref={containerRef} className="border-b border-edge">
       <div className="sticky top-0 z-20 flex items-center gap-3 border-y border-edge bg-panel px-3 py-1.5 text-xs">
-        <span className="truncate font-mono text-ink">{file.path}</span>
-        <span className="rounded bg-overlay px-1.5 py-0.5 text-soft">
+        <FileName path={file.path} />
+        <span className="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-soft">
           {file.status}
         </span>
         <label className="flex shrink-0 cursor-pointer items-center gap-1 text-soft hover:text-ink">

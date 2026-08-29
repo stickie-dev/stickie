@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import type { SettingsSection } from '../../routes'
 import { formatRoute, settings_sections } from '../../routes'
 import { AgentsSection } from './AgentsSection'
+import { AppSection } from './AppSection'
 import { AppearanceSection } from './AppearanceSection'
 import { GitLabSection } from './GitLabSection'
 import { IdentitySection } from './IdentitySection'
@@ -18,6 +19,7 @@ const titles: Record<SettingsSection, string> = {
   prompt: 'Copy prompt',
   appearance: 'Appearance',
   agents: 'Agents',
+  app: 'App',
 }
 
 const sections: Record<
@@ -31,6 +33,7 @@ const sections: Record<
   prompt: (access) => <PromptSection {...access} />,
   appearance: (access) => <AppearanceSection {...access} />,
   agents: (access) => <AgentsSection {...access} />,
+  app: () => <AppSection />,
 }
 
 export function SettingsPage({ section }: { section: SettingsSection }) {
