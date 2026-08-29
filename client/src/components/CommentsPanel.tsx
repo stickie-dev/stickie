@@ -211,7 +211,7 @@ export function CommentsPanel() {
                 </span>
               )}
             </div>
-            <ThreadCard thread={thread} />
+            <ThreadCard thread={thread} surface="panel" />
           </div>
         ))}
 

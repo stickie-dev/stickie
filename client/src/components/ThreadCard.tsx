@@ -48,7 +48,16 @@ const status_styles: Record<Thread['status'], string> = {
   detached: 'bg-rose-500/15 text-rose-700 dark:text-rose-300',
 }
 
-export function ThreadCard({ thread }: { thread: Thread | undefined }) {
+/** Where the card is rendered; the same note appears in both. */
+type Surface = 'zone' | 'panel'
+
+export function ThreadCard({
+  thread,
+  surface = 'zone',
+}: {
+  thread: Thread | undefined
+  surface?: Surface
+}) {
   const reply = useReview((s) => s.reply)
   /**
    * A note address marks the note it named. Landing on its line is not enough
@@ -75,12 +84,16 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
   const [showReply, setShowReply] = useState(false)
   /**
    * A resolved note is history, and a file holding eleven of them is mostly
-   * history standing in front of the code. So it folds to its first line and
-   * opens on ask — except the note a link pointed at, which opens itself,
-   * being the one somebody was sent to read.
+   * history standing in front of the code. So in the diff it folds to its first
+   * line and opens on ask — except the note a link pointed at, which opens
+   * itself, being the one somebody was sent to read.
+   *
+   * Not in the comments panel: there the notes *are* the content, nothing is
+   * standing in front of anything, and the Unresolved filter above them already
+   * puts the history out of the way for anyone who wants it gone.
    */
   const [opened, setOpened] = useState(false)
-  const folds = thread?.status === 'resolved'
+  const folds = surface === 'zone' && thread?.status === 'resolved'
   const open = !folds || opened || linked
   const first = thread?.messages[0]
 
