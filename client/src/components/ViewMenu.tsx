@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { activeFiles, useReview, wrapFor } from '../store'
+import { Kebab } from '../icons'
 import { btn, button_on, eyebrow, motion } from '../ui'
 
 /**
@@ -110,7 +111,7 @@ export function ViewMenu() {
         aria-label="view options"
         onClick={() => setOpen(!open)}
       >
-        ⋮
+        <Kebab className="h-4 w-4" />
       </button>
       {open && (
         <div

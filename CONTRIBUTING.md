@@ -156,8 +156,13 @@ press.
 
 **An icon replaces a word only where the shape is the more recognisable of the
 two.** `client/src/icons.tsx` holds them — drawn on a 24 grid, stroked in
-`currentColor`, sized for an 11–12px line, because an installed set arrives
-with its own stroke, its own grid and its own idea of how big an icon is.
+`currentColor`, because an installed set arrives with its own stroke, its own
+grid and its own idea of how big an icon is. Two sizes: 14px beside a word,
+where the icon is as tall as the text it accompanies, and 16px in an
+icon-only button (`icon_button` sets it), where the icon *is* the button.
+That second size makes a 28px target — what a browser draws its own title-bar
+buttons at, which matters because ours sit next to those in an installed
+window.
 Settings, the theme, reload, close and the arrows that move you about are
 shapes. `Comments (3)`, `Activity`, `Import MR` stay words, because the word
 carries what the shape cannot; sending gets both, since the label counts what
@@ -167,7 +172,14 @@ just quieter about what it does — and an icon-only button still needs its
 
 **All three headers wear the same bar.** `title_bar`: the overview, settings
 and the review sit on `surface` under a half-pixel rule, with the same
-controls in the same order at the right end. The review's used to be a
+controls in the same order at the right end. Installed, that bar *is* the
+window's title bar — the manifest asks for `window-controls-overlay`, so there
+is no strip of browser chrome above it; `.stickie-titlebar` makes it draggable and
+`.stickie-titlebar-pad` keeps its contents out from under the window buttons at
+either end. The padding goes inside the frame rather than around it, so the
+header's frame still lines up with the content below. Chrome's own menu and
+extensions button stay in that band — they are not the page's to remove — but
+they now sit on stickie's surface rather than on a blue strip. The review's used to be a
 panel-filled strip of its own with a full hairline under it, a few pixels
 above the tab strip's own — two lines, and moving between the three pages read
 as moving between three applications. Half a pixel is one device pixel on a 2×

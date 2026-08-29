@@ -147,6 +147,17 @@ export function ChevronDown(props: IconProps) {
   )
 }
 
+/** The menu at the end of the tabs: three dots, the shape everyone reads. */
+export function Kebab(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="5.5" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="18.5" r="1.5" fill="currentColor" stroke="none" />
+    </Icon>
+  )
+}
+
 export function Close(props: IconProps) {
   return (
     <Icon {...props}>

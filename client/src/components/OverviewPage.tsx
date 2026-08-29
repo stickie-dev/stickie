@@ -545,7 +545,9 @@ export function OverviewPage() {
         across empty space to reach the numbers on the right.
       */}
       <header className={`sticky top-0 z-10 py-2.5 text-xs ${title_bar}`}>
-        <div className={`flex items-center gap-2.5 ${page}`}>
+        <div
+          className={`stickie-titlebar-pad [--titlebar-pad:1.5rem] flex items-center gap-2.5 ${page}`}
+        >
         <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
         <span className="font-semibold tracking-tight text-ink">stickie</span>
         <span className="text-faint">overview</span>

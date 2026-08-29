@@ -138,7 +138,7 @@ export function TopBar() {
   // chrome is the tab strip's, below this.
   return (
     <header
-      className={`flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-3 py-2 text-xs ${title_bar}`}
+      className={`stickie-titlebar-pad flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-3 py-2 text-xs ${title_bar}`}
     >
       <Link
         to="/"

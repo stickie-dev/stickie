@@ -63,11 +63,12 @@ export function btn(kind: ButtonKind = 'text', extra = ''): string {
 export const button_on = `${button_base} bg-accent-soft text-accent ${motion}`
 
 /**
- * Square rather than wide, for a single glyph. The padding is what makes it a
- * button: a 14px icon in 4px of padding is a 22px target, which is smaller
- * than the text buttons beside it and smaller than a pointer expects.
+ * Square rather than wide, for a single glyph — and the glyph is bigger here
+ * than one sitting beside a word, because here it is the whole button. 16px in
+ * 6px of padding is a 28px target, which is what a browser draws its own
+ * title-bar buttons at, and these sit next to those in an installed window.
  */
-export const icon_button = `rounded-sm p-1.5 text-soft hover:bg-overlay hover:text-ink disabled:text-faint ${motion}`
+export const icon_button = `rounded-sm p-1.5 text-soft hover:bg-overlay hover:text-ink disabled:text-faint [&>svg]:h-4 [&>svg]:w-4 ${motion}`
 
 /**
  * Text entry and selects, filled rather than outlined, with the focus ring
@@ -122,7 +123,8 @@ export const page = 'mx-auto w-full max-w-[100rem] px-6'
  * what a full `border-edge` did here, especially on the review, where the tab
  * strip's own rule sits a few pixels below it.
  */
-export const title_bar = 'border-b-[0.5px] border-edge bg-surface'
+export const title_bar =
+  'stickie-titlebar border-b-[0.5px] border-edge bg-surface'
 
 /** Content arriving: a short rise, once, rather than a fade on every render. */
 export const enter = 'animate-rise'
