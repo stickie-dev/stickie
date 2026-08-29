@@ -277,6 +277,7 @@ const overview_schema = z
     repos: z.array(
       repo_info_schema.extend({
         latestSessionId: z.number().int().nullable(),
+        defaultBranch: z.string(),
       }),
     ),
     reviews: z.array(review_overview_schema),
@@ -1071,7 +1072,10 @@ export function createApp(
         {
           repos: await Promise.all(
             repos.map(async (repo) => {
-              const status = await gitStatus(repo.path)
+              const [status, default_branch] = await Promise.all([
+                gitStatus(repo.path),
+                defaultBranch(repo.path),
+              ])
               return {
                 id: repo.id,
                 name: names.get(repo.id) ?? repo.path,
@@ -1080,6 +1084,7 @@ export function createApp(
                 clean: status.clean,
                 changedFiles: status.changedFiles,
                 latestSessionId: latest.get(repo.id) ?? null,
+                defaultBranch: default_branch,
               }
             }),
           ),

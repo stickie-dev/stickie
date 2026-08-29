@@ -223,6 +223,12 @@ export interface RepoOverview {
   changedFiles: number
   /** the newest review of this repo, if it has one */
   latestSessionId: number | null
+  /**
+   * What a review of this repository compares against by default — from
+   * `origin/HEAD`, then a local master or main. The overview says so on the
+   * row, since clicking it starts that review.
+   */
+  defaultBranch: string
 }
 
 export interface Overview {

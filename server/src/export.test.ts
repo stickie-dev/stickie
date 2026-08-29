@@ -96,16 +96,29 @@ describe('buildPrompt', () => {
   })
 
   it('reports an unanchored note by its scope instead of a line', async () => {
-    const whole_file = thread({ id: 2, startLine: 0, endLine: 0, snippet: '' })
-    const review = thread({ id: 3, path: '', startLine: 0, endLine: 0, snippet: '' })
+    const whole_file = thread({
+      id: 2,
+      number: 1,
+      startLine: 0,
+      endLine: 0,
+      snippet: '',
+    })
+    const review = thread({
+      id: 3,
+      number: 2,
+      path: '',
+      startLine: 0,
+      endLine: 0,
+      snippet: '',
+    })
     const text = await buildPrompt(
       session,
       [whole_file, review],
       'http://x',
       noSource,
     )
-    expect(text).toContain('](http://x/r/1/t/2) — app/main.py (whole file)')
-    expect(text).toContain('](http://x/r/1/t/3) — whole review')
+    expect(text).toContain('](http://x/r/1/n/1) — app/main.py (whole file)')
+    expect(text).toContain('](http://x/r/1/n/2) — whole review')
     expect(text).not.toContain('Code at capture time')
   })
 
@@ -134,13 +147,13 @@ describe('buildPrompt', () => {
 describe('the heading of a note', () => {
   it('names the blob the code came from, so it can be read back', async () => {
     const text = await buildPrompt(session, [thread({})], 'http://x', noSource)
-    expect(text).toContain('## [note 0](http://x/r/1/t/1) — app/main.py:L4 @ blob ab12cd34')
+    expect(text).toContain('## [note 0](http://x/r/1/n/0) — app/main.py:L4 @ blob ab12cd34')
   })
 
   it('says nothing about a blob for a note with no code', async () => {
     const whole_file = thread({ startLine: 0, endLine: 0, snippet: '' })
     const text = await buildPrompt(session, [whole_file], 'http://x', noSource)
-    expect(text).toContain('## [note 0](http://x/r/1/t/1) — app/main.py (whole file)')
+    expect(text).toContain('## [note 0](http://x/r/1/n/0) — app/main.py (whole file)')
     expect(text).not.toContain('blob')
   })
 

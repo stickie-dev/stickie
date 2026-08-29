@@ -50,6 +50,14 @@ const status_styles: Record<Thread['status'], string> = {
 
 export function ThreadCard({ thread }: { thread: Thread | undefined }) {
   const reply = useReview((s) => s.reply)
+  /**
+   * A note address marks the note it named. Landing on its line is not enough
+   * on its own — a line can carry several notes, and a whole-file note has no
+   * line at all — so the card says which one the link meant.
+   */
+  const linked = useReview(
+    (s) => thread !== undefined && s.noteHighlight === thread.id,
+  )
   const postThread = useReview((s) => s.postThread)
   const resolveThread = useReview((s) => s.resolveThread)
   const reopenThread = useReview((s) => s.reopenThread)
@@ -81,7 +89,11 @@ export function ThreadCard({ thread }: { thread: Thread | undefined }) {
   }
 
   return (
-    <div className="min-w-0 rounded-md border border-edge bg-panel text-sm shadow-lg">
+    <div
+      className={`min-w-0 rounded-md border bg-panel text-sm shadow-lg ${
+        linked ? 'border-accent ring-1 ring-accent' : 'border-edge'
+      }`}
+    >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-edge px-3 py-1.5">
         <span
           className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${status_styles[thread.status]}`}

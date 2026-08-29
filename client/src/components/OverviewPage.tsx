@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import type { NoteCounts, Overview, ReviewOverview } from '@stickie/shared'
+import type {
+  NoteCounts,
+  Overview,
+  RepoOverview,
+  ReviewOverview,
+} from '@stickie/shared'
 import { api } from '../api'
 import { formatRoute } from '../routes'
 import { timeValue } from '../time'
@@ -279,9 +284,12 @@ function ReviewsTable({ reviews }: { reviews: ReviewRow[] }) {
       <tbody>
         {sorted.map((review) => {
           const status = statusOf(review)
+          // the newest session of the group: the base this review is pinned
+          // to now. Its own address, so following it cannot land in a
+          // different review of the same repository
           const to = formatRoute({
             kind: 'review',
-            repoId: review.repoId,
+            reviewId: review.current.sessionId,
             tab: { kind: 'diff' },
           })
           return (
@@ -350,6 +358,44 @@ export function OverviewPage() {
       setError(e instanceof Error ? e.message : String(e))
     }
   }, [])
+
+  /**
+   * What clicking a repository does: review its working tree against the
+   * default branch — every commit on the branch you are on plus whatever is
+   * not committed yet, which is what "what have I done here" means. On the
+   * default branch itself that resolves to the working tree against HEAD,
+   * which is browsing rather than reviewing, and is the right answer there.
+   *
+   * No base is passed: the server's own default is the merge-base with the
+   * default branch, which is what a merge request compares. Naming the branch
+   * outright would pin its *tip* instead, so anything that landed on it since
+   * you branched would read as your change, backwards.
+   *
+   * Resolved on the click rather than being a link, because the review may not
+   * exist yet and an address names one that does. `POST /api/sessions` is
+   * get-or-create, so a second visit lands in the same review with the same
+   * notes.
+   */
+  const openRepo = useCallback(
+    async (repo: RepoOverview) => {
+      try {
+        const review = await api.createSession(repo.id, {
+          kind: 'worktree',
+          value: repo.path,
+        })
+        await navigate(
+          formatRoute({
+            kind: 'review',
+            reviewId: review.id,
+            tab: { kind: 'diff' },
+          }),
+        )
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [navigate],
+  )
 
   useEffect(() => {
     void load()
@@ -449,17 +495,11 @@ export function OverviewPage() {
                 </tr>
               </thead>
               <tbody>
-                {repos.map((repo) => {
-                  const to = formatRoute({
-                    kind: 'review',
-                    repoId: repo.id,
-                    tab: { kind: 'diff' },
-                  })
-                  return (
+                {repos.map((repo) => (
                   <tr
                     key={repo.id}
                     className="cursor-pointer border-b border-edge last:border-b-0 hover:bg-overlay"
-                    onClick={() => void navigate(to)}
+                    onClick={() => void openRepo(repo)}
                   >
                     <td
                       className="px-2 py-2 font-semibold text-ink"
@@ -476,19 +516,22 @@ export function OverviewPage() {
                         : `${String(repo.changedFiles)} ${repo.changedFiles === 1 ? 'file' : 'files'} changed`}
                     </td>
                     <td className="px-2 py-2">
-                      <Link
-                        className="text-accent hover:underline"
-                        to={to}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {repo.latestSessionId === null
-                          ? 'start a review'
-                          : 'open review'}
-                      </Link>
+                      {/*
+                        A button rather than a link, because the address of
+                        what this opens is not known until it exists: which
+                        review it is depends on the repository's current branch
+                        and on its default branch. ⌘-click and the keyboard
+                        lose out here; the rows above, which name a review that
+                        already exists, keep real links.
+                      */}
+                      <span className="text-accent hover:underline">
+                        {repo.branch === repo.defaultBranch
+                          ? 'browse the working tree'
+                          : `review against ${repo.defaultBranch}`}
+                      </span>
                     </td>
                   </tr>
-                  )
-                })}
+                ))}
                 {overview !== null && repos.length === 0 && (
                   <tr>
                     <td className="px-2 py-2 text-faint" colSpan={4}>

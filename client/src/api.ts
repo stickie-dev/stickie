@@ -114,6 +114,12 @@ export const api = {
   thread: (threadId: number) =>
     fetch(`/api/threads/${String(threadId)}`).then(toJson<Thread>),
 
+  /** A note by the number it carries in its review, re-anchored server-side. */
+  noteByNumber: (reviewId: number, note: number) =>
+    fetch(`/api/reviews/${String(reviewId)}/notes/${String(note)}`).then(
+      toJson<Thread>,
+    ),
+
   repin: (sessionId: number, automatic = false) =>
     post(
       `/api/sessions/${sessionId}/repin${automatic ? '?automatic=1' : ''}`,

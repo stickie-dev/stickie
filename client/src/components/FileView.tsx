@@ -86,11 +86,14 @@ function refToActiveNote(startLine: number, endLine: number): void {
  */
 async function copyLineLink(line: number, side: Side): Promise<void> {
   const state = useReview.getState()
-  const { activeRepoId, selectedPath } = state
-  if (activeRepoId === null || selectedPath === null) return
+  const { session, selectedPath } = state
+  if (session === null || selectedPath === null) return
+  // the review, not the repository: a repository has one address per (source,
+  // base) pair it is reviewed under, and the recipient's own pickers must not
+  // decide which of them this link opens
   const link = `${window.location.origin}${formatRoute({
     kind: 'review',
-    repoId: activeRepoId,
+    reviewId: session.id,
     tab: { kind: 'file', path: selectedPath, line, side },
   })}`
   try {

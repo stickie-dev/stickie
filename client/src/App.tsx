@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
-import type { ClientEvent } from '@stickie/shared'
+import type { ClientEvent, Thread } from '@stickie/shared'
 import { api } from './api'
 import './monacoSetup'
 import { AddRepo } from './components/AddRepo'
@@ -15,7 +15,7 @@ import { useReview } from './store'
 
 /** Where the store currently is, in the terms an address is written in. */
 interface Here {
-  repoId: number
+  reviewId: number
   tab: TabRef
 }
 
@@ -30,18 +30,25 @@ function tabRef(tab: Tab): TabRef | null {
 function useHere(): Here | null {
   const tabs = useReview((s) => s.tabs)
   const activeTabId = useReview((s) => s.activeTabId)
+  const repoSessions = useReview((s) => s.repoSessions)
   return useMemo(() => {
     const tab = tabs.find((entry) => entry.id === activeTabId)
     if (tab === undefined) return null
     const ref = tabRef(tab)
-    return ref === null ? null : { repoId: tab.repoId, tab: ref }
-  }, [tabs, activeTabId])
+    // a tab belongs to a repository; which of that repository's reviews it is
+    // showing is whichever one it currently has open, so the address follows
+    // the source and base pickers without them knowing about addresses
+    const reviewId = repoSessions[tab.repoId]?.sessionId
+    return ref === null || reviewId === undefined
+      ? null
+      : { reviewId, tab: ref }
+  }, [tabs, activeTabId, repoSessions])
 }
 
 function signature(here: Here | null): string {
   if (here === null) return ''
   const path = here.tab.kind === 'file' ? here.tab.path : ''
-  return `${here.repoId}|${here.tab.kind}|${path}`
+  return `${here.reviewId}|${here.tab.kind}|${path}`
 }
 
 /**
@@ -50,11 +57,16 @@ function signature(here: Here | null): string {
  * in the app opened a different tab. One effect and one record of what was
  * last synced, because two independent effects on the same pair ping-pong.
  */
-function useRouteSync(page: Page | null, here: Here | null): void {
+function useRouteSync(
+  page: Page | null,
+  here: Here | null,
+  noteHere: Here | null,
+): void {
   const location = useLocation()
   const navigate = useNavigate()
   const repos = useReview((s) => s.repos)
   const openAddress = useReview((s) => s.openAddress)
+  const clearNoteHighlight = useReview((s) => s.clearNoteHighlight)
   const synced = useRef<{ address: string; here: string }>({
     address: '',
     here: '',
@@ -67,6 +79,8 @@ function useRouteSync(page: Page | null, here: Here | null): void {
   const owed = useRef<Here | null>(null)
   /** The last thing asked of the store, so an in-flight open is not re-asked. */
   const asked = useRef('')
+  /** The note address the reader has actually arrived at; see below. */
+  const at_note = useRef('')
 
   const address = `${location.pathname}${location.search}`
 
@@ -76,26 +90,50 @@ function useRouteSync(page: Page | null, here: Here | null): void {
     if (address !== last.address) {
       synced.current = { address, here: signature(here) }
       owed.current =
-        page?.kind === 'review' ? { repoId: page.repoId, tab: page.tab } : null
+        page?.kind === 'review'
+          ? { reviewId: page.reviewId, tab: page.tab }
+          : null
       asked.current = ''
+    }
+
+    // A note address is opened by `useNoteAddress`, not from here, and it keeps
+    // its address while the reader is on it. Two things must not happen: the
+    // store writing over the link before the note has been read, and the
+    // address still claiming to be a note once the reader has moved on. So
+    // nothing is mirrored until the store is at the note, and after that any
+    // move away turns the address into the file it moved to.
+    if (page?.kind === 'note' || page?.kind === 'note-by-id') {
+      if (noteHere === null) return
+      if (signature(here) === signature(noteHere)) {
+        at_note.current = address
+        synced.current = { address, here: signature(here) }
+        return
+      }
+      if (at_note.current !== address) return
+      synced.current = { address, here: signature(here) }
+      clearNoteHighlight()
+      if (here !== null) navigate(formatRoute({ kind: 'review', ...here }))
+      return
     }
 
     const wanted = owed.current
     if (wanted !== null) {
-      if (!repos.some((repo) => repo.id === wanted.repoId)) {
-        owed.current = null
-        navigate('/', { replace: true })
-        return
-      }
       const arrived =
         here !== null &&
-        here.repoId === wanted.repoId &&
+        here.reviewId === wanted.reviewId &&
         sameTab(here.tab, wanted.tab)
       if (!arrived) {
         const key = signature(wanted)
         if (asked.current !== key) {
           asked.current = key
-          void openAddress(wanted.repoId, wanted.tab)
+          void openAddress(wanted.reviewId, wanted.tab).then((opened) => {
+            // the review is gone — a deleted repository, or a link from
+            // another machine's database
+            if (!opened) {
+              owed.current = null
+              navigate('/', { replace: true })
+            }
+          })
         }
         return
       }
@@ -113,57 +151,91 @@ function useRouteSync(page: Page | null, here: Here | null): void {
       synced.current = { address, here: signature(here) }
       if (here !== null) navigate(formatRoute({ kind: 'review', ...here }))
     }
-  }, [address, page, here, repos, openAddress, navigate])
+  }, [
+    address,
+    page,
+    here,
+    noteHere,
+    repos,
+    openAddress,
+    clearNoteHighlight,
+    navigate,
+  ])
+}
+
+/** The tab a note reads on: its own file and line, or the diff if it has none. */
+function noteTab(note: Thread): TabRef {
+  return note.startLine > 0 && note.path !== ''
+    ? { kind: 'file', path: note.path, line: note.startLine, side: note.side }
+    : { kind: 'diff' }
 }
 
 /**
- * Turns `/r/1/t/7` into the address of wherever that note is now, and replaces
- * it — so a link to a note is a permalink and the view it lands on has one
- * address, not two. The server re-anchors before answering, so a note whose
- * code has moved lands on the code, not on the line it used to be at.
+ * Lands a note address, and answers with where it landed so `useRouteSync`
+ * knows when the reader has moved off it.
+ *
+ * `/r/631/n/3` opens the file note 3 sits on and marks the note. The server
+ * re-anchors before answering, so it lands on the code rather than on the line
+ * the note was written against. The address stays: a note link goes on reading
+ * as one until the reader moves.
+ *
+ * `/t/34` names a note by row id — global, so no review is needed to find it —
+ * and replaces itself with that note's number form, which is the address worth
+ * having. Note links in prompts sent before this carry an id, some of them
+ * under `/r/<repo>/t/34`, and both still resolve.
  */
-function useNotePermalink(page: Page | null): void {
+function useNoteAddress(page: Page | null, address: string): Here | null {
   const navigate = useNavigate()
   const pushToast = useReview((s) => s.pushToast)
+  const openNote = useReview((s) => s.openNote)
+  const [landed, setLanded] = useState<{ address: string; here: Here } | null>(
+    null,
+  )
   const resolving = useRef('')
 
   useEffect(() => {
-    if (page?.kind !== 'note') return
-    const key = `${String(page.repoId)}:${String(page.threadId)}`
-    if (resolving.current === key) return
-    resolving.current = key
+    if (page === null) return
+    if (page.kind === 'note-by-id') {
+      const key = `id:${String(page.threadId)}`
+      if (resolving.current === key) return
+      resolving.current = key
+      void (async () => {
+        try {
+          const note = await api.thread(page.threadId)
+          navigate(
+            formatRoute({
+              kind: 'note',
+              reviewId: note.sessionId,
+              note: note.number,
+            }),
+            { replace: true },
+          )
+        } catch {
+          pushToast('error', `no note ${String(page.threadId)}`)
+          navigate('/', { replace: true })
+        }
+      })()
+      return
+    }
+    if (page.kind !== 'note') return
+    if (resolving.current === address) return
+    resolving.current = address
+    const { reviewId, note: number } = page
     void (async () => {
-      try {
-        const note = await api.thread(page.threadId)
-        navigate(
-          formatRoute({
-            kind: 'review',
-            repoId: page.repoId,
-            tab:
-              note.startLine > 0 && note.path !== ''
-                ? {
-                    kind: 'file',
-                    path: note.path,
-                    line: note.startLine,
-                    side: note.side,
-                  }
-                : { kind: 'diff' },
-          }),
-          { replace: true },
+      const note = await openNote(reviewId, number)
+      if (note === null) {
+        pushToast(
+          'error',
+          `no note ${String(number)} in review ${String(reviewId)}`,
         )
-      } catch {
-        pushToast('error', `no note ${String(page.threadId)}`)
-        navigate(
-          formatRoute({
-            kind: 'review',
-            repoId: page.repoId,
-            tab: { kind: 'diff' },
-          }),
-          { replace: true },
-        )
+        navigate('/', { replace: true })
+        return
       }
+      setLanded({ address, here: { reviewId, tab: noteTab(note) } })
     })()
-  }, [page, navigate, pushToast])
+  }, [page, address, openNote, navigate, pushToast])
+
+  return landed?.address === address ? landed.here : null
 }
 
 /**
@@ -202,8 +274,9 @@ export function App() {
   )
   const here = useHere()
   const on_review = isReviewRoute(page)
-  useRouteSync(page, here)
-  useNotePermalink(page)
+  const address = `${location.pathname}${location.search}`
+  const note_here = useNoteAddress(page, address)
+  useRouteSync(page, here, note_here)
 
   // the workspace is expensive to build and cheap to keep, so it mounts on
   // the first review address and is never taken down again
@@ -224,7 +297,7 @@ export function App() {
   // so restoring tabs does not settle somewhere else first
   const start = useRef(
     page?.kind === 'review'
-      ? { repoId: page.repoId, tab: page.tab }
+      ? { reviewId: page.reviewId, tab: page.tab }
       : undefined,
   )
   useEffect(() => {

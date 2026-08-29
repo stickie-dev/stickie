@@ -111,6 +111,12 @@ interface ReviewState {
   promptCopied: boolean
   theme: Theme
   reveal: { path: string; line: number; side?: Side } | null
+  /**
+   * The note a note address asked for, by row id, marked until the reader
+   * moves. Landing on its line is not enough on its own: a line can carry
+   * several notes, and a whole-file note has no line at all.
+   */
+  noteHighlight: number | null
   usages: { name: string; scope: 'repo' | 'workspace'; hits: NavHit[] } | null
   toasts: Toast[]
   navHistory: NavEntry[]
@@ -168,9 +174,17 @@ interface ReviewState {
   navForward: () => Promise<void>
   /**
    * Lands on what an address names. Nothing here reads the address itself —
-   * the shell hands over the repository and the tab it asked for.
+   * the shell hands over the review and the tab it asked for. False when that
+   * review no longer exists, which is the shell's cue to send the reader home.
    */
-  openAddress: (repoId: number, tab: TabRef) => Promise<void>
+  openAddress: (reviewId: number, tab: TabRef) => Promise<boolean>
+  /**
+   * Lands on one note of a review, by the number it carries there, and marks
+   * it so the reader can see which note the link meant. Answers with the note,
+   * so the shell knows which tab the address settled on.
+   */
+  openNote: (reviewId: number, note: number) => Promise<Thread | null>
+  clearNoteHighlight: () => void
   openFileInRepo: (
     repoId: number,
     path: string,
@@ -193,7 +207,7 @@ interface ReviewState {
    * `start` is what the address asked for, so restoring tabs settles there
    * instead of fighting the router for it.
    */
-  init: (start?: { repoId: number; tab: TabRef }) => Promise<void>
+  init: (start?: { reviewId: number; tab: TabRef }) => Promise<void>
   addRepo: (path: string) => Promise<void>
   selectRepo: (repoId: number) => Promise<void>
   setSource: (source: ReviewSource, baseRef?: string) => Promise<void>
@@ -412,6 +426,38 @@ export const useReview = create<ReviewState>((set, get) => {
     }
   }
 
+  /**
+   * Points a repository at one particular review, named by id, and answers
+   * with it. An address names the review, so following a link has to be able
+   * to move a repo onto a (source, base) pair the reader was not on — the
+   * pickers' choice is remembered in `perRepo`, and this is what overrides it.
+   *
+   * `createSession` inside `selectRepo` is get-or-create keyed on exactly that
+   * pair, so it finds this review again rather than starting another.
+   */
+  async function openReview(reviewId: number): Promise<Session | null> {
+    const already = get().session
+    if (already?.id === reviewId) return already
+    let review: Session
+    try {
+      review = await api.session(reviewId)
+    } catch {
+      return null
+    }
+    set({
+      perRepo: {
+        ...get().perRepo,
+        [review.repoId]: {
+          ...get().perRepo[review.repoId],
+          source: review.source,
+          baseRef: review.baseRef,
+        },
+      },
+    })
+    await get().selectRepo(review.repoId)
+    return get().session
+  }
+
   /** Brings back notes that were being written when the page went away. */
   function restoreDrafts(repos: RepoInfo[]): void {
     const drafts = restoredDrafts(
@@ -435,7 +481,7 @@ export const useReview = create<ReviewState>((set, get) => {
    */
   async function restoreTabs(
     repos: RepoInfo[],
-    addressed?: { repoId: number; tab: TabRef },
+    addressed?: { reviewId: number; tab: TabRef },
   ): Promise<boolean> {
     const stored = previous_tabs
     const restored: Tab[] = []
@@ -453,8 +499,9 @@ export const useReview = create<ReviewState>((set, get) => {
     }
     if (restored.length > 0) set({ tabs: restored })
     if (addressed !== undefined) {
-      await get().openAddress(addressed.repoId, addressed.tab)
-      return true
+      // false only if that review is gone, in which case fall through to the
+      // tabs that were open, rather than landing on nothing
+      if (await get().openAddress(addressed.reviewId, addressed.tab)) return true
     }
     const wanted = restored[stored?.active ?? 0] ?? restored[0]
     if (wanted === undefined) return false
@@ -582,6 +629,7 @@ export const useReview = create<ReviewState>((set, get) => {
     promptCopied: false,
     theme: initialTheme(),
     reveal: null,
+    noteHighlight: null,
     usages: null,
     toasts: [],
     navHistory: [],
@@ -741,11 +789,7 @@ export const useReview = create<ReviewState>((set, get) => {
         set({ repos })
         await Promise.all(repos.map((r) => ensureRepoSession(r.id)))
         restoreDrafts(repos)
-        const addressed =
-          start !== undefined && repos.some((repo) => repo.id === start.repoId)
-            ? start
-            : undefined
-        if (await restoreTabs(repos, addressed)) return
+        if (await restoreTabs(repos, start)) return
         const first = repos[0]
         if (first !== undefined) {
           await get().selectRepo(first.id)
@@ -755,24 +799,26 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
 
-    openAddress: async (repoId, tab) => {
-      if (repoId !== get().activeRepoId) await get().selectRepo(repoId)
+    openAddress: async (reviewId, tab) => {
+      const review = await openReview(reviewId)
+      if (review === null) return false
+      const repoId = review.repoId
       if (tab.kind === 'diff') {
         set({ viewMode: 'flow', activeTabId: ensureFlowTab(repoId).id })
-        return
+        return true
       }
       if (tab.kind === 'commits') {
         // an address names the commits tab, never which commits are in it:
         // that stays the sidebar's choice
         set({ viewMode: 'commits', activeTabId: ensureCommitsTab(repoId).id })
-        return
+        return true
       }
       try {
         await get().openFile(tab.path)
       } catch (error) {
         // a pasted link can name a file this review does not have
         get().pushToast('error', `${tab.path}: ${message(error)}`)
-        return
+        return true
       }
       if (tab.line !== undefined) {
         set({
@@ -783,6 +829,43 @@ export const useReview = create<ReviewState>((set, get) => {
           },
         })
       }
+      return true
+    },
+
+    openNote: async (reviewId, number) => {
+      const review = await openReview(reviewId)
+      if (review === null) return null
+      let note: Thread
+      try {
+        note = await api.noteByNumber(reviewId, number)
+      } catch {
+        return null
+      }
+      // a note with no code anchor belongs to the whole file or the whole
+      // review; there is no line to land on, so the diff is where it reads
+      if (note.startLine === 0 || note.path === '') {
+        set({
+          viewMode: 'flow',
+          activeTabId: ensureFlowTab(review.repoId).id,
+          noteHighlight: note.id,
+        })
+        return note
+      }
+      try {
+        await get().openFile(note.path)
+      } catch (error) {
+        get().pushToast('error', `${note.path}: ${message(error)}`)
+        return note
+      }
+      set({
+        reveal: { path: note.path, line: note.startLine, side: note.side },
+        noteHighlight: note.id,
+      })
+      return note
+    },
+
+    clearNoteHighlight: () => {
+      if (get().noteHighlight !== null) set({ noteHighlight: null })
     },
 
     openFileInRepo: async (repoId, path, status) => {

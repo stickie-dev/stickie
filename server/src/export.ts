@@ -178,12 +178,12 @@ export async function buildPrompt(
         ? ` @ blob ${shortSha(thread.blobSha)}`
         : ''
     // one identifier, and the one every route and MCP tool takes — a second
-    // number for the same note would be a number that cannot act on it. This
-    // one counts from 0 inside the review named in the heading above, which is
-    // what an agent can read off a review rather than hold globally. As a link
-    // it opens where the note is now, since that address resolves rather than
-    // being stored.
-    const link = `${apiBase}/r/${String(session.repoId)}/t/${String(thread.id)}`
+    // number for the same note would be a number that cannot act on it. It
+    // counts from 0 inside the review named in the heading above, and the link
+    // is written the same way, so the number in the address and the number to
+    // act on are one number. The address resolves rather than being stored, so
+    // it opens where the note is now.
+    const link = `${apiBase}/r/${String(session.id)}/n/${String(thread.number)}`
     lines.push(`## [note ${thread.number}](${link}) — ${where}${blob}${state}`)
     lines.push('')
     if (anchored) {

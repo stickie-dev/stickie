@@ -27,17 +27,17 @@ describe('parseRoute', () => {
   it('reads the diff and commits tabs', () => {
     expect(parseRoute('/r/3/diff')).toEqual({
       kind: 'review',
-      repoId: 3,
+      reviewId: 3,
       tab: { kind: 'diff' },
     })
     expect(parseRoute('/r/3')).toEqual({
       kind: 'review',
-      repoId: 3,
+      reviewId: 3,
       tab: { kind: 'diff' },
     })
     expect(parseRoute('/r/3/commits')).toEqual({
       kind: 'review',
-      repoId: 3,
+      reviewId: 3,
       tab: { kind: 'commits' },
     })
   })
@@ -46,7 +46,7 @@ describe('parseRoute', () => {
     expect(parseRoute('/r/12/file/src/db/store.ts', '?line=42&side=base')).toEqual(
       {
         kind: 'review',
-        repoId: 12,
+        reviewId: 12,
         tab: { kind: 'file', path: 'src/db/store.ts', line: 42, side: 'base' },
       },
     )
@@ -55,7 +55,7 @@ describe('parseRoute', () => {
   it('leaves line and side out when the query is junk', () => {
     expect(parseRoute('/r/1/file/a.ts', '?line=0&side=both')).toEqual({
       kind: 'review',
-      repoId: 1,
+      reviewId: 1,
       tab: { kind: 'file', path: 'a.ts' },
     })
   })
@@ -63,7 +63,7 @@ describe('parseRoute', () => {
   it('decodes path segments', () => {
     expect(parseRoute('/r/1/file/src/a%20b/c%23d.ts')).toEqual({
       kind: 'review',
-      repoId: 1,
+      reviewId: 1,
       tab: { kind: 'file', path: 'src/a b/c#d.ts' },
     })
   })
@@ -73,7 +73,7 @@ describe('parseRoute', () => {
     expect(parseRoute('/r/1/file/')).toBeNull()
   })
 
-  it('rejects a repo id that is not a positive integer', () => {
+  it('rejects a review id that is not a positive integer', () => {
     expect(parseRoute('/r/0/diff')).toBeNull()
     expect(parseRoute('/r/3x/diff')).toBeNull()
     expect(parseRoute('/r/-1/diff')).toBeNull()
@@ -89,16 +89,16 @@ describe('formatRoute', () => {
   const cases: [Page, string][] = [
     [{ kind: 'home' }, '/'],
     [{ kind: 'settings', section: 'agents' }, '/settings/agents'],
-    [{ kind: 'review', repoId: 3, tab: { kind: 'diff' } }, '/r/3/diff'],
-    [{ kind: 'review', repoId: 3, tab: { kind: 'commits' } }, '/r/3/commits'],
+    [{ kind: 'review', reviewId: 3, tab: { kind: 'diff' } }, '/r/3/diff'],
+    [{ kind: 'review', reviewId: 3, tab: { kind: 'commits' } }, '/r/3/commits'],
     [
-      { kind: 'review', repoId: 3, tab: { kind: 'file', path: 'src/a.ts' } },
+      { kind: 'review', reviewId: 3, tab: { kind: 'file', path: 'src/a.ts' } },
       '/r/3/file/src/a.ts',
     ],
     [
       {
         kind: 'review',
-        repoId: 3,
+        reviewId: 3,
         tab: { kind: 'file', path: 'src/a b.ts', line: 7, side: 'source' },
       },
       '/r/3/file/src/a%20b.ts?line=7&side=source',
@@ -121,7 +121,7 @@ describe('formatRoute', () => {
 
 describe('isReviewRoute', () => {
   it('is true only for the review workspace', () => {
-    expect(isReviewRoute({ kind: 'review', repoId: 1, tab: { kind: 'diff' } })).toBe(
+    expect(isReviewRoute({ kind: 'review', reviewId: 1, tab: { kind: 'diff' } })).toBe(
       true,
     )
     expect(isReviewRoute({ kind: 'home' })).toBe(false)
@@ -149,28 +149,61 @@ describe('sameTab', () => {
 })
 
 describe('a note address', () => {
-  it('reads as a note, not as a tab', () => {
-    expect(parseRoute('/r/1/t/7')).toEqual({
+  it('reads as a note of a review, numbered from 0', () => {
+    expect(parseRoute('/r/631/n/3')).toEqual({
       kind: 'note',
-      repoId: 1,
-      threadId: 7,
+      reviewId: 631,
+      note: 3,
+    })
+    // the first note of a review is note 0, which the id parser would reject
+    expect(parseRoute('/r/631/n/0')).toEqual({
+      kind: 'note',
+      reviewId: 631,
+      note: 0,
     })
   })
 
   it('writes and reads back the same', () => {
-    const page: Page = { kind: 'note', repoId: 3, threadId: 12 }
-    expect(formatRoute(page)).toBe('/r/3/t/12')
-    expect(parseRoute('/r/3/t/12')).toEqual(page)
+    const page: Page = { kind: 'note', reviewId: 3, note: 12 }
+    expect(formatRoute(page)).toBe('/r/3/n/12')
+    expect(parseRoute('/r/3/n/12')).toEqual(page)
   })
 
-  it('rejects a thread id that is not a positive integer', () => {
-    expect(parseRoute('/r/1/t/0')).toBeNull()
-    expect(parseRoute('/r/1/t/abc')).toBeNull()
-    expect(parseRoute('/r/1/t')).toBeNull()
-    expect(parseRoute('/r/1/t/7/extra')).toBeNull()
+  it('rejects a note number that is not a whole number', () => {
+    expect(parseRoute('/r/1/n/abc')).toBeNull()
+    expect(parseRoute('/r/1/n/-1')).toBeNull()
+    expect(parseRoute('/r/1/n')).toBeNull()
+    expect(parseRoute('/r/1/n/7/extra')).toBeNull()
+  })
+
+  it('keeps the workspace on screen', () => {
+    expect(isReviewRoute({ kind: 'note', reviewId: 1, note: 7 })).toBe(true)
+  })
+})
+
+describe('a note address by row id', () => {
+  it('needs no review, since an id is global', () => {
+    expect(parseRoute('/t/34')).toEqual({ kind: 'note-by-id', threadId: 34 })
+    expect(formatRoute({ kind: 'note-by-id', threadId: 34 })).toBe('/t/34')
+  })
+
+  it('still reads the older form, ignoring what leads it', () => {
+    // links in prompts sent before addresses named the review carry the repo
+    // there; the id says which review on its own, so the segment is spare
+    expect(parseRoute('/r/5/t/34')).toEqual({
+      kind: 'note-by-id',
+      threadId: 34,
+    })
+  })
+
+  it('rejects an id that is not a positive integer', () => {
+    expect(parseRoute('/t/0')).toBeNull()
+    expect(parseRoute('/t/abc')).toBeNull()
+    expect(parseRoute('/t')).toBeNull()
+    expect(parseRoute('/t/34/extra')).toBeNull()
   })
 
   it('keeps the workspace on screen while it resolves', () => {
-    expect(isReviewRoute({ kind: 'note', repoId: 1, threadId: 7 })).toBe(true)
+    expect(isReviewRoute({ kind: 'note-by-id', threadId: 7 })).toBe(true)
   })
 })

@@ -18,7 +18,11 @@ the only output.
   commit subject rather than forty characters of hex. Re-pinning the base as a
   branch moves keeps the same row. Plus one activity feed across every
   repository. A draft review in another repository used to be invisible until
-  you switched to it
+  you switched to it. Clicking a registered repository below the reviews starts
+  a review of its working tree against the default branch — every commit on the
+  branch you are on plus what is not committed yet, compared from where the
+  branch left the default one, the way a merge request does — or, when you are
+  already on that branch, browses the working tree
 - **Continuous review flow** — every changed file stacked in one scroll
   (GitLab-style), sections mounting as they approach the viewport; or open
   any file on its own
@@ -32,11 +36,16 @@ the only output.
 - **Status bar** — the current path as clickable segments: each one opens
   what sits beside it (folders and files at that level) or copies the path,
   beside the review's tally — files changed, viewed, unresolved, draft
-- **Linkable** — every tab has an address (`/r/1/file/src/store.ts?line=42`),
-  so a file at a line can be pasted to someone else, or bookmarked; browser
-  back and forward walk the tabs you opened. A note has one too — `/r/1/t/7`
-  resolves to wherever that note is *now* and becomes that file and line, so a
-  link keeps working as the code under it moves
+- **Linkable** — every tab has an address, and it names the *review*:
+  `/r/631/file/src/store.ts?line=42` is that file at that line in review 631,
+  so a link opens the same review for whoever follows it. Naming the repository
+  instead meant a link opened whichever of its reviews the reader's own pickers
+  had left active. Browser back and forward walk the tabs you opened. A note
+  has an address too — `/r/631/n/3` is note 3 of that review: it opens the file
+  the note sits on, marks the note, and keeps saying it is a note link until
+  you move off it, while `?line=` on its own is just a line. Both resolve
+  through the note's code rather than its stored line numbers, so a link keeps
+  working as the code under it moves
 - **Nothing lost on reload** — open tabs, viewed files, scroll position and
   half-written notes all come back, and leaving the review for settings never
   tears it down
