@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import type { NoteCounts, Overview, ReviewOverview } from '@stickie/shared'
 import { api } from '../api'
 import { formatRoute } from '../routes'
@@ -246,6 +246,7 @@ function Th({
 }
 
 function ReviewsTable({ reviews }: { reviews: ReviewRow[] }) {
+  const navigate = useNavigate()
   const sorted = [...reviews].sort((a, b) => {
     const by_status = status_rank[statusOf(a)] - status_rank[statusOf(b)]
     if (by_status !== 0) return by_status
@@ -278,10 +279,19 @@ function ReviewsTable({ reviews }: { reviews: ReviewRow[] }) {
       <tbody>
         {sorted.map((review) => {
           const status = statusOf(review)
+          const to = formatRoute({
+            kind: 'review',
+            repoId: review.repoId,
+            tab: { kind: 'diff' },
+          })
           return (
+            // the whole row opens the review; the repository name stays a real
+            // link so ⌘-click, middle-click and the keyboard all still work,
+            // which a click handler on its own would take away
             <tr
               key={review.key}
-              className="border-b border-edge last:border-b-0 hover:bg-overlay"
+              className="cursor-pointer border-b border-edge last:border-b-0 hover:bg-overlay"
+              onClick={() => void navigate(to)}
             >
               <td className="px-2 py-2">
                 <span
@@ -294,11 +304,8 @@ function ReviewsTable({ reviews }: { reviews: ReviewRow[] }) {
               <td className="px-2 py-2 font-semibold text-ink">
                 <Link
                   className="hover:underline"
-                  to={formatRoute({
-                    kind: 'review',
-                    repoId: review.repoId,
-                    tab: { kind: 'diff' },
-                  })}
+                  to={to}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   {review.repoName}
                 </Link>
@@ -329,6 +336,7 @@ function ReviewsTable({ reviews }: { reviews: ReviewRow[] }) {
 }
 
 export function OverviewPage() {
+  const navigate = useNavigate()
   const repos_in_store = useReview((s) => s.repos)
   const [overview, setOverview] = useState<Overview | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -441,10 +449,17 @@ export function OverviewPage() {
                 </tr>
               </thead>
               <tbody>
-                {repos.map((repo) => (
+                {repos.map((repo) => {
+                  const to = formatRoute({
+                    kind: 'review',
+                    repoId: repo.id,
+                    tab: { kind: 'diff' },
+                  })
+                  return (
                   <tr
                     key={repo.id}
-                    className="border-b border-edge last:border-b-0 hover:bg-overlay"
+                    className="cursor-pointer border-b border-edge last:border-b-0 hover:bg-overlay"
+                    onClick={() => void navigate(to)}
                   >
                     <td
                       className="px-2 py-2 font-semibold text-ink"
@@ -463,11 +478,8 @@ export function OverviewPage() {
                     <td className="px-2 py-2">
                       <Link
                         className="text-accent hover:underline"
-                        to={formatRoute({
-                          kind: 'review',
-                          repoId: repo.id,
-                          tab: { kind: 'diff' },
-                        })}
+                        to={to}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         {repo.latestSessionId === null
                           ? 'start a review'
@@ -475,7 +487,8 @@ export function OverviewPage() {
                       </Link>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
                 {overview !== null && repos.length === 0 && (
                   <tr>
                     <td className="px-2 py-2 text-faint" colSpan={4}>

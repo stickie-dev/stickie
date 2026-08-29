@@ -18,6 +18,13 @@ export type RepinMode = 'always' | 'when-clear' | 'never'
 /** Which keystroke posts a comment; the other one makes a new line. */
 export type SubmitKey = 'enter' | 'mod-enter'
 
+/**
+ * Everything this client does, a person did. The routes that change something
+ * cannot tell an agent from a reviewer, and now record no actor rather than
+ * guessing at one — so every call from the UI says which it is.
+ */
+const as_user = 'author=user'
+
 export interface SettingsState {
   gitlabUrl: string | null
   gitlabTokenEnv: string | null
@@ -126,18 +133,18 @@ export const api = {
     ).then(toJson<Thread[]>),
 
   submitReview: (sessionId: number) =>
-    post(`/api/sessions/${sessionId}/submit-review`, {}).then(
+    post(`/api/sessions/${sessionId}/submit-review?${as_user}`, {}).then(
       toJson<{ posted: number }>,
     ),
 
   postThread: (threadId: number) =>
-    post(`/api/threads/${threadId}/post`, {}).then(toJson<Thread>),
+    post(`/api/threads/${threadId}/post?${as_user}`, {}).then(toJson<Thread>),
 
   viewed: (sessionId: number) =>
     fetch(`/api/sessions/${sessionId}/viewed`).then(toJson<string[]>),
 
   setViewed: (sessionId: number, path: string, viewed: boolean) =>
-    post(`/api/sessions/${sessionId}/viewed`, { path, viewed }).then(
+    post(`/api/sessions/${sessionId}/viewed?${as_user}`, { path, viewed }).then(
       toJson<{ ok: boolean }>,
     ),
 
@@ -166,7 +173,7 @@ export const api = {
     }).then(toJson<Thread>),
 
   deleteThread: (threadId: number) =>
-    fetch(`/api/threads/${threadId}`, { method: 'DELETE' }).then(
+    fetch(`/api/threads/${threadId}?${as_user}`, { method: 'DELETE' }).then(
       toJson<{ ok: boolean }>,
     ),
 
@@ -176,10 +183,14 @@ export const api = {
     ),
 
   resolve: (threadId: number) =>
-    post(`/api/threads/${threadId}/resolve`, {}).then(toJson<Thread>),
+    post(`/api/threads/${threadId}/resolve?${as_user}`, {}).then(
+      toJson<Thread>,
+    ),
 
   reopen: (threadId: number) =>
-    post(`/api/threads/${threadId}/reopen`, {}).then(toJson<Thread>),
+    post(`/api/threads/${threadId}/reopen?${as_user}`, {}).then(
+      toJson<Thread>,
+    ),
 
   activity: (sessionId: number, limit?: number) =>
     fetch(
@@ -247,7 +258,8 @@ export const api = {
     ).then(toJson<NavHit[]>),
 
   prompt: async (sessionId: number, order: number[] = []) => {
-    const query = order.length === 0 ? '' : `?order=${order.join(',')}`
+    const query =
+      order.length === 0 ? `?${as_user}` : `?${as_user}&order=${order.join(',')}`
     const response = await fetch(`/api/sessions/${sessionId}/prompt${query}`)
     if (!response.ok) throw new Error(response.statusText)
     return response.text()

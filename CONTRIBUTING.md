@@ -96,6 +96,12 @@ existed. Its `detail` blob holds what the route already knew — path, lines,
 base sha, counts — so a row still says something once what it points at is
 gone.
 
+A route that changes something takes `?author=` (and `actor=` for an agent) and
+records **no actor** when it is not told. It must never fall back to the person
+at this machine: that is how every note an agent resolved and every export an
+agent pulled came to be credited to the reviewer. An honest blank reads as
+"someone"; a wrong name is a false record.
+
 Every mutation goes through `record` in `app.ts`, which appends and *then*
 emits the live frame. One call rather than two, so the record cannot be
 forgotten: forgetting it would break live refresh, which someone notices

@@ -313,6 +313,17 @@ const message_body = z.object({
 
 const repo_body = z.object({ path: z.string().min(1) })
 
+/**
+ * Who a caller says it is, on the routes that change something and cannot tell
+ * from the request itself. Optional, so nothing that worked before breaks —
+ * and when it is missing the change is recorded with no actor at all, because a
+ * name stickie guessed at is worse than an honest blank.
+ */
+const actor_query = z.object({
+  author: z.enum(['user', 'agent']).optional(),
+  actor: z.string().max(64).optional(),
+})
+
 const id_param = z.object({ id: z.coerce.number().int() })
 
 // z.coerce.boolean() reads "0" as true, which is the opposite of what any
@@ -421,6 +432,19 @@ export function createApp(
     author === 'agent'
       ? (await identity.agent(claimed)).id
       : (await identity.human(repoPath)).actor.id
+
+  /**
+   * What a caller claimed, or nothing. These routes used to record the person
+   * at this machine whoever asked, which quietly credited them with every note
+   * an agent resolved and every export an agent pulled for itself.
+   */
+  const claimedActor = async (
+    query: { author?: Author; actor?: string },
+    repoPath: string | null,
+  ): Promise<number | null> =>
+    query.author === undefined
+      ? null
+      : actorFor(query.author, query.actor, repoPath)
 
   /**
    * Every mutation goes through here: it appends to the record and *then*
@@ -1291,7 +1315,7 @@ export function createApp(
       path: '/api/threads/{id}',
       tags: ['threads'],
       summary: 'Delete a thread and its messages',
-      request: { params: id_param },
+      request: { params: id_param, query: actor_query },
       responses: {
         200: json_response(z.object({ ok: z.boolean() }), 'Deleted'),
         404: not_found,
@@ -1303,12 +1327,19 @@ export function createApp(
       await store.deleteThread(thread.id)
       // the note is gone; what it said and where is kept, because a record
       // that vanishes with its subject records nothing
-      await noteRecord('deleted', thread.sessionId, thread.id, 'human', {
-        path: thread.path,
-        startLine: thread.startLine,
-        endLine: thread.endLine,
-        messages: thread.messages.length,
-      })
+      const owner = await store.getSession(thread.sessionId)
+      await noteRecord(
+        'deleted',
+        owner ?? thread.sessionId,
+        thread.id,
+        await claimedActor(c.req.valid('query'), owner?.repoPath ?? null),
+        {
+          path: thread.path,
+          startLine: thread.startLine,
+          endLine: thread.endLine,
+          messages: thread.messages.length,
+        },
+      )
       return c.json({ ok: true }, 200)
     },
   )
@@ -1372,7 +1403,11 @@ export function createApp(
       path: `/api/threads/{id}/${action}`,
       tags: ['threads'],
       summary: action === 'resolve' ? 'Resolve a thread' : 'Reopen a thread',
-      request: { params: id_param },
+      description:
+        'Say who with `author` (and `actor` for an agent): an agent resolving ' +
+        'its own work and a human accepting it are different facts, and ' +
+        'without them the record says neither.',
+      request: { params: id_param, query: actor_query },
       responses: {
         200: json_response(thread_schema, 'Updated thread'),
         404: not_found,
@@ -1386,11 +1421,12 @@ export function createApp(
       await store.setThreadStatus(thread.id, action === 'resolve' ? 'resolved' : 'open')
       const updated = await store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
+      const owner = await store.getSession(thread.sessionId)
       await noteRecord(
         action === 'resolve' ? 'resolved' : 'reopened',
-        thread.sessionId,
+        owner ?? thread.sessionId,
         thread.id,
-        'human',
+        await claimedActor(c.req.valid('query'), owner?.repoPath ?? null),
         { path: thread.path },
       )
       return c.json(updated, 200)
@@ -1409,7 +1445,7 @@ export function createApp(
         'thread ids first, in that order; the rest follow by age.',
       request: {
         params: id_param,
-        query: z.object({
+        query: actor_query.extend({
           order: z.string().optional(),
           include_pending: flag_query,
         }),
@@ -1481,12 +1517,13 @@ export function createApp(
         source_cache.set(key, content)
         return content
       }
-      // handing the notes to an agent is itself part of the oversight story:
-      // this is the moment a human decided the review was ready to act on
+      // reading the notes out is part of the oversight story either way, but
+      // a human handing them over and an agent fetching them for itself are
+      // not the same event, so this records whoever said they were asking
       await record({
         subject: 'review',
         action: 'exported',
-        actorId: (await identity.human(session.repoPath)).actor.id,
+        actorId: await claimedActor(c.req.valid('query'), session.repoPath),
         repoId: session.repoId,
         sessionId: session.id,
         detail: {
@@ -1515,7 +1552,7 @@ export function createApp(
       path: '/api/sessions/{id}/submit-review',
       tags: ['threads'],
       summary: 'Post every pending note of the session to the agent',
-      request: { params: id_param },
+      request: { params: id_param, query: actor_query },
       responses: {
         200: json_response(
           z.object({ posted: z.number().int() }),
@@ -1534,7 +1571,7 @@ export function createApp(
         await record({
           subject: 'review',
           action: 'submitted',
-          actorId: (await identity.human(session.repoPath)).actor.id,
+          actorId: await claimedActor(c.req.valid('query'), session.repoPath),
           repoId: session.repoId,
           sessionId: session.id,
           detail: { posted },
@@ -1552,7 +1589,7 @@ export function createApp(
       path: '/api/threads/{id}/post',
       tags: ['threads'],
       summary: 'Post a single pending note immediately',
-      request: { params: id_param },
+      request: { params: id_param, query: actor_query },
       responses: {
         200: json_response(thread_schema, 'Updated thread'),
         404: not_found,
@@ -1564,9 +1601,14 @@ export function createApp(
       await store.setThreadPending(thread.id, false)
       const updated = await store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
-      await noteRecord('posted', thread.sessionId, thread.id, 'human', {
-        path: thread.path,
-      })
+      const owner = await store.getSession(thread.sessionId)
+      await noteRecord(
+        'posted',
+        owner ?? thread.sessionId,
+        thread.id,
+        await claimedActor(c.req.valid('query'), owner?.repoPath ?? null),
+        { path: thread.path },
+      )
       return c.json(updated, 200)
     },
   )
@@ -1600,6 +1642,7 @@ export function createApp(
       summary: 'Mark or unmark a file as viewed',
       request: {
         params: id_param,
+        query: actor_query,
         body: json_body(
           z.object({ path: z.string().min(1), viewed: z.boolean() }),
         ),
@@ -1621,7 +1664,7 @@ export function createApp(
       await record({
         subject: 'file',
         action: body.viewed ? 'viewed' : 'unviewed',
-        actorId: (await identity.human(session.repoPath)).actor.id,
+        actorId: await claimedActor(c.req.valid('query'), session.repoPath),
         repoId: session.repoId,
         sessionId: session.id,
         detail: { path: body.path, baseSha: session.baseSha },

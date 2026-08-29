@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { Fetcher } from './mcp.js'
-import { handleMessage, protocol_version, toolDefinitions } from './mcp.js'
+import {
+  handleMessage,
+  protocol_version,
+  toolDefinitions,
+  tools,
+} from './mcp.js'
 
 const recorder = () => {
   const calls: unknown[] = []
@@ -111,5 +116,43 @@ describe('mcp', () => {
     const { fetcher } = recorder()
     const answer = await ask({ jsonrpc: '2.0', id: 6, method: 'nope' }, fetcher)
     expect(answer?.error.code).toBe(-32601)
+  })
+})
+
+describe('who a tool says it is', () => {
+  const call = (name: string, args: Record<string, unknown>) => {
+    const tool = tools.find((t) => t.name === name)
+    if (tool === undefined) throw new Error(`no tool ${name}`)
+    return tool.request(args)
+  }
+
+  it('resolves as the agent, not as whoever runs the server', () => {
+    expect(call('resolve_note', { threadId: 7 }).path).toBe(
+      '/api/threads/7/resolve?author=agent',
+    )
+  })
+
+  it('names the agent when it says who it is', () => {
+    expect(call('resolve_note', { threadId: 7, actor: 'claude-code' }).path).toBe(
+      '/api/threads/7/resolve?author=agent&actor=claude-code',
+    )
+  })
+
+  it('reads the notes as the agent that asked for them', () => {
+    expect(call('get_review_notes', { sessionId: 3, actor: 'codex' }).path).toBe(
+      '/api/sessions/3/prompt?include_pending=0&author=agent&actor=codex',
+    )
+  })
+
+  it('escapes a name that would otherwise break the query', () => {
+    expect(call('resolve_note', { threadId: 1, actor: 'a&b c' }).path).toBe(
+      '/api/threads/1/resolve?author=agent&actor=a%26b%20c',
+    )
+  })
+
+  it('ignores a blank name rather than sending an empty one', () => {
+    expect(call('resolve_note', { threadId: 1, actor: '   ' }).path).toBe(
+      '/api/threads/1/resolve?author=agent',
+    )
   })
 })

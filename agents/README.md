@@ -24,7 +24,10 @@ model is specific to one provider.
 ## Naming yourself
 
 `author` is a role — `"user"` or `"agent"` — and it decides how a message is
-treated, so keep sending it. Alongside it, an optional `actor` says *which*
+treated, so keep sending it. Resolving, reopening, deleting and reading the
+notes out take the same pair as a query — `?author=agent&actor=claude-code` —
+because those routes cannot tell an agent from a reviewer, and record nobody at
+all rather than guessing. Alongside it, an optional `actor` says *which*
 agent: `{"author": "agent", "actor": "claude-code", "body": "..."}` on a reply
 or a note. Omitting it is fine and always will be — unnamed agent messages are
 recorded under one shared `agent` actor. Nothing is verified; it is a label on

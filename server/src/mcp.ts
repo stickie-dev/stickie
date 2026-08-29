@@ -32,6 +32,23 @@ const session_id = z.object({
   sessionId: z.number().int().describe('id from list_reviews'),
 })
 
+/**
+ * How a tool tells the record who is asking. Every one of these calls is an
+ * agent, so the author is not in question — only which agent, and that is
+ * optional so a runtime that passes nothing still gets attributed as an agent
+ * rather than as the person at the machine.
+ */
+function claiming(actor: unknown): string {
+  const name = typeof actor === 'string' ? actor.trim() : ''
+  return `author=agent${name === '' ? '' : `&actor=${encodeURIComponent(name)}`}`
+}
+
+const actor_input = z
+  .string()
+  .max(64)
+  .optional()
+  .describe('what to call yourself in the record, e.g. "claude-code"')
+
 export const tools: McpTool[] = [
   {
     name: 'list_reviews',
@@ -49,10 +66,17 @@ export const tools: McpTool[] = [
       'its location, the code as captured, referenced code, and the ' +
       'discussion so far. Line numbers are re-anchored at read time.',
     readOnly: true,
-    input: session_id,
+    input: z.object({
+      sessionId: z.number().int().describe('id from list_reviews'),
+      actor: actor_input,
+    }),
+    // reading the notes is recorded, and an agent fetching them for itself is
+    // not the human handing them over
     request: (args) => ({
       method: 'GET',
-      path: `/api/sessions/${String(args.sessionId)}/prompt?include_pending=0`,
+      path:
+        `/api/sessions/${String(args.sessionId)}/prompt` +
+        `?include_pending=0&${claiming(args.actor)}`,
       text: true,
     }),
   },
@@ -87,14 +111,7 @@ export const tools: McpTool[] = [
     input: z.object({
       threadId: z.number().int(),
       body: z.string().min(1).describe('what was done, or why it was not'),
-      actor: z
-        .string()
-        .max(64)
-        .optional()
-        .describe(
-          'what to call yourself in the record, e.g. "claude-code"; ' +
-            'omitted replies are recorded as a generic agent',
-        ),
+      actor: actor_input,
     }),
     request: (args) => ({
       method: 'POST',
@@ -112,10 +129,12 @@ export const tools: McpTool[] = [
       'Mark one note resolved, after replying to it. Only for notes actually ' +
       'addressed — the user reopens what they disagree with.',
     readOnly: false,
-    input: z.object({ threadId: z.number().int() }),
+    input: z.object({ threadId: z.number().int(), actor: actor_input }),
+    // an agent closing its own work and a human accepting it are different
+    // facts; without saying which, the record used to credit the human
     request: (args) => ({
       method: 'POST',
-      path: `/api/threads/${String(args.threadId)}/resolve`,
+      path: `/api/threads/${String(args.threadId)}/resolve?${claiming(args.actor)}`,
     }),
   },
 ]
