@@ -67,10 +67,12 @@ the only output.
   reads left to right through the commits that touched it
 - **Session continuity** — when HEAD moves past the pinned base (the agent
   committed), one click re-pins and carries open notes forward
-- **Who wrote what** — notes carry a name, not just a role: yours from
-  `git config user.name` (or Settings → Identity), and an agent's from what it
-  calls itself when it posts. There is no login and nothing is verified — it is
-  a label on the record, which is all a local tool can honestly claim
+- **Who wrote what** — notes carry a name, not just a role: yours as the
+  reviewed repository's own git config knows you (local over global, the way a
+  commit there would be attributed), or one name everywhere from Settings →
+  Identity; an agent's from what it calls itself when it posts. There is no
+  login and nothing is verified — it is a label on the record, which is all a
+  local tool can honestly claim
 - **Keyboard flow** — j/k files, n/p changes (across the whole flow, not just
   the open file), v viewed, ? for help; viewed files persist per session, and
   open tabs come back after a reload

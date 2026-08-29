@@ -31,6 +31,7 @@ interface ActorRow {
   id: number
   kind: string
   name: string
+  email: string | null
 }
 
 interface ThreadRow {
@@ -166,37 +167,32 @@ export class Store {
 
   /**
    * The actor for a (kind, name) pair, creating it the first time it is seen.
-   * `externalKey` is the seam for a later identity provider — nothing reads it
-   * yet, and it is only written when the row is created, so a name that later
-   * gains an email does not silently rewrite history.
+   * The email is written only on creation: a name that later gains one keeps
+   * pointing at the same actor rather than quietly restating the past.
    */
   async getOrCreateActor(
     kind: ActorKind,
     name: string,
-    externalKey?: string | null,
+    email?: string | null,
   ): Promise<Actor> {
     await this.db.run(
-      'insert into actors (kind, name, external_key) values (?, ?, ?) on conflict do nothing',
-      [kind, name, externalKey ?? null],
+      'insert into actors (kind, name, email) values (?, ?, ?) on conflict do nothing',
+      [kind, name, email ?? null],
     )
     const row = await this.db.get<ActorRow>(
-      'select id, kind, name from actors where kind = ? and name = ?',
+      'select id, kind, name, email from actors where kind = ? and name = ?',
       [kind, name],
     )
     if (row === undefined) throw new Error('actor insert failed')
-    return { id: row.id, kind: row.kind as ActorKind, name: row.name }
+    return actorFromRow(row)
   }
 
   listActors(): Promise<Actor[]> {
     return this.db
-      .all<ActorRow>('select id, kind, name from actors order by kind, name')
-      .then((rows) =>
-        rows.map((row) => ({
-          id: row.id,
-          kind: row.kind as ActorKind,
-          name: row.name,
-        })),
+      .all<ActorRow>(
+        'select id, kind, name, email from actors order by kind, name',
       )
+      .then((rows) => rows.map(actorFromRow))
   }
 
   createThread(
@@ -444,6 +440,15 @@ export class Store {
       actorName: row.actor_name,
       messages,
     }
+  }
+}
+
+function actorFromRow(row: ActorRow): Actor {
+  return {
+    id: row.id,
+    kind: row.kind as ActorKind,
+    name: row.name,
+    email: row.email,
   }
 }
 

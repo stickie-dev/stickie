@@ -23,9 +23,15 @@ export interface SettingsState {
   /** the command that points an MCP client at this server */
   mcpCommand: string
   identity: {
-    name: string
     chosenName: string
-    source: string
+    perRepo: {
+      repoId: number
+      repoName: string
+      name: string
+      email: string | null
+      source: string
+    }[]
+    fallback: { name: string; email: string | null; source: string }
   }
   storage: {
     active: string

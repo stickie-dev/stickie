@@ -52,6 +52,11 @@ broken. There is no authentication: a human's name comes from git config or
 Settings and an agent's from what it claims, so nothing in the interface may
 present an actor as verified.
 
+A human is resolved *per repository* — `git config user.name` read inside the
+repo, which is local-over-global and so the identity a commit made there would
+carry. Someone whose global config is their employer's may well review a
+personal repository under a different name, and the record should say which.
+
 ## Conventions
 
 - comments state constraints the code cannot, nothing else

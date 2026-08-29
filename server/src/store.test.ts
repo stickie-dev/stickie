@@ -141,6 +141,7 @@ describe('Store actors', () => {
     const first = await store.getOrCreateActor('human', 'Jane Doe', 'jane@doe.com')
     const again = await store.getOrCreateActor('human', 'Jane Doe')
     expect(again.id).toBe(first.id)
+    expect(again.email).toBe('jane@doe.com')
     expect(await store.listActors()).toHaveLength(1)
   })
 

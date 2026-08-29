@@ -101,6 +101,8 @@ export interface Actor {
   id: number
   kind: ActorKind
   name: string
+  /** from git config, for humans; agents have none */
+  email: string | null
 }
 
 export interface ThreadMessage {

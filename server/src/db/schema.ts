@@ -60,7 +60,7 @@ create table if not exists actors (
   id integer primary key autoincrement,
   kind text not null,
   name text not null,
-  external_key text unique,
+  email text,
   created_at text not null default (datetime('now')),
   unique (kind, name)
 );
@@ -120,7 +120,7 @@ create table if not exists actors (
   id serial primary key,
   kind text not null,
   name text not null,
-  external_key text unique,
+  email text,
   created_at timestamptz not null default now(),
   unique (kind, name)
 );
@@ -149,6 +149,10 @@ const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
   messages: {
     sqlite: [['actor_id', 'actor_id integer references actors(id)']],
     postgres: [['actor_id', 'actor_id integer references actors(id)']],
+  },
+  actors: {
+    sqlite: [['email', 'email text']],
+    postgres: [['email', 'email text']],
   },
 }
 

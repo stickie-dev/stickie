@@ -282,18 +282,20 @@ export function createApp(
 ): OpenAPIHono {
   const app = new OpenAPIHono()
 
-  const identity = new Identity(store, async () =>
-    (await store.listRepos()).map((repo) => repo.path),
-  )
+  const identity = new Identity(store)
 
-  /** The actor a write is attributed to: the person here, or the agent asking. */
+  /**
+   * The actor a write is attributed to: the agent asking, or the person as the
+   * reviewed repository knows them.
+   */
   const actorFor = async (
     author: Author,
     claimed: string | undefined,
+    repoPath: string | null,
   ): Promise<number> =>
     author === 'agent'
       ? (await identity.agent(claimed)).id
-      : (await identity.current()).actor.id
+      : (await identity.human(repoPath)).actor.id
 
   const threadChanged = (
     action: ThreadEvent['action'],
@@ -806,7 +808,7 @@ export function createApp(
           body.body,
           {
             pending: body.pending ?? body.author === 'user',
-            actorId: await actorFor(body.author, body.actor),
+            actorId: await actorFor(body.author, body.actor, session.repoPath),
           },
         )
         threadChanged('created', note.sessionId, note.id)
@@ -838,7 +840,7 @@ export function createApp(
         body.body,
         {
           pending: body.pending ?? body.author === 'user',
-          actorId: await actorFor(body.author, body.actor),
+          actorId: await actorFor(body.author, body.actor, session.repoPath),
         },
       )
       threadChanged('created', thread.sessionId, thread.id)
@@ -862,11 +864,14 @@ export function createApp(
       const thread = await store.getThread(c.req.valid('param').id)
       if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
       const body = c.req.valid('json')
+      // a reply is attributed as the reviewed repository would attribute it,
+      // so the session has to be in hand
+      const owner = await store.getSession(thread.sessionId)
       await store.addMessage(
         thread.id,
         body.author,
         body.body,
-        await actorFor(body.author, body.actor),
+        await actorFor(body.author, body.actor, owner?.repoPath ?? null),
       )
       const updated = await store.getThread(thread.id)
       if (updated === undefined) return c.json({ error: 'unknown thread' }, 404)
@@ -1217,12 +1222,28 @@ export function createApp(
             /** the command that points an MCP client at this server */
             mcpCommand: z.string(),
             identity: z.object({
-              /** the name notes are recorded under */
-              name: z.string(),
               /** '' when nothing was set by hand and git config decides */
               chosenName: z.string(),
-              /** settings | git-global | git-repo | environment | fallback */
-              source: z.string(),
+              /**
+               * How a note would be attributed in each registered repository.
+               * Per repository because that is how git resolves an identity.
+               */
+              perRepo: z.array(
+                z.object({
+                  repoId: z.number().int(),
+                  repoName: z.string(),
+                  name: z.string(),
+                  email: z.string().nullable(),
+                  /** settings | git (as the repo resolves it) | git-global | environment | fallback */
+                  source: z.string(),
+                }),
+              ),
+              /** used when no repository is in hand */
+              fallback: z.object({
+                name: z.string(),
+                email: z.string().nullable(),
+                source: z.string(),
+              }),
             }),
             storage: z.object({
               /** what the running server is using */
@@ -1256,9 +1277,15 @@ export function createApp(
             default_wrap_extensions,
           mcpCommand: mcpCommand(),
           identity: {
-            name: (await identity.current()).resolved.name,
             chosenName: (await store.getSetting('actor_name')) ?? '',
-            source: (await identity.current()).resolved.source,
+            perRepo: await Promise.all(
+              (await store.listRepos()).map(async (repo) => ({
+                repoId: repo.id,
+                repoName: repo.path.split('/').at(-1) ?? repo.path,
+                ...(await identity.human(repo.path)).resolved,
+              })),
+            ),
+            fallback: (await identity.human(null)).resolved,
           },
           storage: {
             active: store.describe,
