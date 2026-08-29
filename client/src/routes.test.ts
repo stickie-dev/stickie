@@ -147,3 +147,30 @@ describe('sameTab', () => {
     ).toBe(false)
   })
 })
+
+describe('a note address', () => {
+  it('reads as a note, not as a tab', () => {
+    expect(parseRoute('/r/1/t/7')).toEqual({
+      kind: 'note',
+      repoId: 1,
+      threadId: 7,
+    })
+  })
+
+  it('writes and reads back the same', () => {
+    const page: Page = { kind: 'note', repoId: 3, threadId: 12 }
+    expect(formatRoute(page)).toBe('/r/3/t/12')
+    expect(parseRoute('/r/3/t/12')).toEqual(page)
+  })
+
+  it('rejects a thread id that is not a positive integer', () => {
+    expect(parseRoute('/r/1/t/0')).toBeNull()
+    expect(parseRoute('/r/1/t/abc')).toBeNull()
+    expect(parseRoute('/r/1/t')).toBeNull()
+    expect(parseRoute('/r/1/t/7/extra')).toBeNull()
+  })
+
+  it('keeps the workspace on screen while it resolves', () => {
+    expect(isReviewRoute({ kind: 'note', repoId: 1, threadId: 7 })).toBe(true)
+  })
+})

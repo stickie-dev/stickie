@@ -34,7 +34,9 @@ the only output.
   beside the review's tally — files changed, viewed, unresolved, draft
 - **Linkable** — every tab has an address (`/r/1/file/src/store.ts?line=42`),
   so a file at a line can be pasted to someone else, or bookmarked; browser
-  back and forward walk the tabs you opened
+  back and forward walk the tabs you opened. A note has one too — `/r/1/t/7`
+  resolves to wherever that note is *now* and becomes that file and line, so a
+  link keeps working as the code under it moves
 - **Nothing lost on reload** — open tabs, viewed files, scroll position and
   half-written notes all come back, and leaving the review for settings never
   tears it down
@@ -163,6 +165,7 @@ spec is generated from the code and cannot drift.
 | GET | `/api/sessions/:id/file?path=&side=` | full file content per side |
 | GET | `/api/sessions/:id/threads?status=open` | notes, re-anchored |
 | POST | `/api/sessions/:id/threads` | create a note |
+| GET | `/api/threads/:id` | one note, re-anchored; no review id needed |
 | POST | `/api/threads/:id/reply` | `{author, body, actor?}` |
 | POST | `/api/threads/:id/resolve` · `/reopen` | close / reopen |
 | GET | `/api/sessions/:id/prompt` | self-contained markdown export |

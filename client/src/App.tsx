@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import type { ClientEvent } from '@stickie/shared'
+import { api } from './api'
 import './monacoSetup'
 import { AddRepo } from './components/AddRepo'
 import { OverviewPage } from './components/OverviewPage'
@@ -116,6 +117,56 @@ function useRouteSync(page: Page | null, here: Here | null): void {
 }
 
 /**
+ * Turns `/r/1/t/7` into the address of wherever that note is now, and replaces
+ * it — so a link to a note is a permalink and the view it lands on has one
+ * address, not two. The server re-anchors before answering, so a note whose
+ * code has moved lands on the code, not on the line it used to be at.
+ */
+function useNotePermalink(page: Page | null): void {
+  const navigate = useNavigate()
+  const pushToast = useReview((s) => s.pushToast)
+  const resolving = useRef('')
+
+  useEffect(() => {
+    if (page?.kind !== 'note') return
+    const key = `${String(page.repoId)}:${String(page.threadId)}`
+    if (resolving.current === key) return
+    resolving.current = key
+    void (async () => {
+      try {
+        const note = await api.thread(page.threadId)
+        navigate(
+          formatRoute({
+            kind: 'review',
+            repoId: page.repoId,
+            tab:
+              note.startLine > 0 && note.path !== ''
+                ? {
+                    kind: 'file',
+                    path: note.path,
+                    line: note.startLine,
+                    side: note.side,
+                  }
+                : { kind: 'diff' },
+          }),
+          { replace: true },
+        )
+      } catch {
+        pushToast('error', `no note ${String(page.threadId)}`)
+        navigate(
+          formatRoute({
+            kind: 'review',
+            repoId: page.repoId,
+            tab: { kind: 'diff' },
+          }),
+          { replace: true },
+        )
+      }
+    })()
+  }, [page, navigate, pushToast])
+}
+
+/**
  * What a non-review address shows. Drawn over the workspace rather than in
  * place of it, so the review surface behind keeps its editors and its scroll.
  */
@@ -152,6 +203,7 @@ export function App() {
   const here = useHere()
   const on_review = isReviewRoute(page)
   useRouteSync(page, here)
+  useNotePermalink(page)
 
   // the workspace is expensive to build and cheap to keep, so it mounts on
   // the first review address and is never taken down again

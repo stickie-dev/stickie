@@ -1,4 +1,5 @@
 import type { Session, Thread } from '@stickie/shared'
+import { shortSha } from './git.js'
 
 export interface CodeRef {
   /** null = the session's own repo */
@@ -140,7 +141,7 @@ export async function buildPrompt(
   lines.push('')
   lines.push(
     `Repo: ${session.repoPath} — reviewing ${describeSource(session)} ` +
-      `against ${session.baseRef} (${session.baseSha.slice(0, 10)})`,
+      `against ${session.baseRef} (${shortSha(session.baseSha)})`,
   )
   if (threads.some((t) => t.startLine > 0 && t.blobSha !== null)) {
     lines.push('')
@@ -151,7 +152,7 @@ export async function buildPrompt(
     )
   }
   lines.push('')
-  for (const [index, thread] of threads.entries()) {
+  for (const thread of threads) {
     const anchored = thread.startLine > 0
     const range =
       thread.startLine === thread.endLine
@@ -170,11 +171,14 @@ export async function buildPrompt(
     // retrieving it — the claim below says exactly that and no more.
     const blob =
       anchored && thread.blobSha !== null
-        ? ` @ blob ${thread.blobSha.slice(0, 12)}`
+        ? ` @ blob ${shortSha(thread.blobSha)}`
         : ''
-    lines.push(
-      `## ${index + 1}. ${where}${blob} [thread ${thread.id}]${state}`,
-    )
+    // one identifier, and the one every route and MCP tool takes. An ordinal
+    // beside it was a second number for the same note, and the only number
+    // that could not be used to act on it. As a link it also opens where the
+    // note is now, since that address resolves rather than being stored.
+    const link = `${apiBase}/r/${String(session.repoId)}/t/${String(thread.id)}`
+    lines.push(`## [thread ${thread.id}](${link}) — ${where}${blob}${state}`)
     lines.push('')
     if (anchored) {
       const snippet_lines = thread.snippet.split('\n')

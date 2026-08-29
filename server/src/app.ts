@@ -1192,6 +1192,32 @@ export function createApp(
 
   app.openapi(
     createRoute({
+      method: 'get',
+      path: '/api/threads/{id}',
+      tags: ['threads'],
+      summary: 'One note by id, re-anchored to where its code is now',
+      description:
+        'A note id is global, so this needs no review: it answers which one ' +
+        'the note belongs to. Lines are re-anchored first, so the answer is ' +
+        'where the code is now rather than where it was written.',
+      request: { params: id_param },
+      responses: {
+        200: json_response(thread_schema, 'The note'),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const thread = await store.getThread(c.req.valid('param').id)
+      if (thread === undefined) return c.json({ error: 'unknown thread' }, 404)
+      const session = await store.getSession(thread.sessionId)
+      if (session === undefined) return c.json({ error: 'unknown thread' }, 404)
+      const [current] = await reanchorThreads(store, session, [thread])
+      return c.json(current ?? thread, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
       method: 'post',
       path: '/api/threads/{id}/reply',
       tags: ['threads'],

@@ -34,10 +34,16 @@ export type TabRef =
   | { kind: 'commits' }
   | { kind: 'file'; path: string; line?: number; side?: Side }
 
+/**
+ * A note is a location, not a view: `/r/1/t/7` resolves to wherever that note
+ * currently sits and the address becomes that file and line. One address per
+ * view, and a link that survives the note moving as the code around it does.
+ */
 export type Page =
   | { kind: 'home' }
   | { kind: 'settings'; section: SettingsSection }
   | { kind: 'review'; repoId: number; tab: TabRef }
+  | { kind: 'note'; repoId: number; threadId: number }
 
 /** Path segments are encoded one at a time so the slashes stay readable. */
 function encodePath(path: string): string {
@@ -92,6 +98,12 @@ export function parseRoute(pathname: string, search = ''): Page | null {
         ? { kind: 'review', repoId: id, tab: { kind: 'diff' } }
         : null
     }
+    if (kind === 't') {
+      const threadId = repoId(segments[3] ?? '')
+      return threadId === null || segments.length !== 4
+        ? null
+        : { kind: 'note', repoId: id, threadId }
+    }
     if (kind === 'commits') {
       return segments.length === 3
         ? { kind: 'review', repoId: id, tab: { kind: 'commits' } }
@@ -130,6 +142,7 @@ export function formatRoute(page: Page): string {
   if (page.kind === 'home') return '/'
   if (page.kind === 'settings') return `/settings/${page.section}`
   const base = `/r/${page.repoId}`
+  if (page.kind === 'note') return `${base}/t/${page.threadId}`
   const { tab } = page
   if (tab.kind === 'diff') return `${base}/diff`
   if (tab.kind === 'commits') return `${base}/commits`
@@ -152,7 +165,11 @@ export function sameTab(a: TabRef, b: TabRef): boolean {
   return b.kind === 'file' && a.path === b.path
 }
 
-/** Whether the review workspace is the thing on screen at this address. */
+/**
+ * Whether the review workspace is the thing on screen at this address. A note
+ * address counts: it is about to become one, and covering the workspace only
+ * to uncover it again would flash.
+ */
 export function isReviewRoute(page: Page | null): boolean {
-  return page?.kind === 'review'
+  return page?.kind === 'review' || page?.kind === 'note'
 }

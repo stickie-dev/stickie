@@ -103,8 +103,8 @@ describe('buildPrompt', () => {
       'http://x',
       noSource,
     )
-    expect(text).toContain('## 1. app/main.py (whole file) [thread 2]')
-    expect(text).toContain('## 2. whole review [thread 3]')
+    expect(text).toContain('](http://x/r/1/t/2) — app/main.py (whole file)')
+    expect(text).toContain('](http://x/r/1/t/3) — whole review')
     expect(text).not.toContain('Code at capture time')
   })
 
@@ -133,13 +133,13 @@ describe('buildPrompt', () => {
 describe('the heading of a note', () => {
   it('names the blob the code came from, so it can be read back', async () => {
     const text = await buildPrompt(session, [thread({})], 'http://x', noSource)
-    expect(text).toContain('app/main.py:L4 @ blob ab12cd34ef56 [thread 1]')
+    expect(text).toContain('## [thread 1](http://x/r/1/t/1) — app/main.py:L4 @ blob ab12cd34')
   })
 
   it('says nothing about a blob for a note with no code', async () => {
     const whole_file = thread({ startLine: 0, endLine: 0, snippet: '' })
     const text = await buildPrompt(session, [whole_file], 'http://x', noSource)
-    expect(text).toContain('app/main.py (whole file) [thread 1]')
+    expect(text).toContain('## [thread 1](http://x/r/1/t/1) — app/main.py (whole file)')
     expect(text).not.toContain('blob')
   })
 

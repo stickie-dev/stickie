@@ -97,6 +97,9 @@ export const api = {
   session: (sessionId: number) =>
     fetch(`/api/sessions/${sessionId}`).then(toJson<Session>),
 
+  thread: (threadId: number) =>
+    fetch(`/api/threads/${String(threadId)}`).then(toJson<Thread>),
+
   repin: (sessionId: number, automatic = false) =>
     post(
       `/api/sessions/${sessionId}/repin${automatic ? '?automatic=1' : ''}`,

@@ -77,11 +77,22 @@ function truncate(subject: string): string {
     : `${subject.slice(0, subject_max - 1).trimEnd()}…`
 }
 
+/**
+ * How much of a sha is ever shown. Eight is what stickie settled on everywhere,
+ * and every one of these is read to compare against another rather than to
+ * look something up, so there is no namespace for it to be ambiguous in.
+ */
+export const short_sha = 8
+
+export function shortSha(sha: string): string {
+  return sha.slice(0, short_sha)
+}
+
 /** A 40-hex sha, optionally with git's parent suffix. */
 export function shortenRev(rev: string): string | null {
   const match = /^([0-9a-f]{40})(\^*)$/.exec(rev)
   if (match === null) return null
-  return `${(match[1] ?? '').slice(0, 8)}${match[2] ?? ''}`
+  return `${shortSha(match[1] ?? '')}${match[2] ?? ''}`
 }
 
 /**

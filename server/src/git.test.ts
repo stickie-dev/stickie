@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { parseNameStatus, parseWorktrees, shortenRev } from './git.js'
+import {
+  parseNameStatus,
+  parseWorktrees,
+  shortenRev,
+  shortSha,
+} from './git.js'
 
 describe('parseNameStatus', () => {
   it('maps status letters', () => {
@@ -73,5 +78,17 @@ describe('shortenRev', () => {
     expect(shortenRev('HEAD')).toBeNull()
     expect(shortenRev('feature/b5d063d6')).toBeNull()
     expect(shortenRev(sha.slice(0, 12))).toBeNull()
+  })
+})
+
+describe('shortSha', () => {
+  it('shows the same amount everywhere', () => {
+    expect(shortSha('c45e78221bb7009e8e54c6598f6530a04cd992b2')).toBe('c45e7822')
+    expect(shortSha('c45e78221bb7009e8e54c6598f6530a04cd992b2')).toHaveLength(8)
+  })
+
+  it('agrees with what shortenRev abbreviates to', () => {
+    const sha = 'c45e78221bb7009e8e54c6598f6530a04cd992b2'
+    expect(shortenRev(sha)).toBe(shortSha(sha))
   })
 })
