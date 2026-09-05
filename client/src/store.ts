@@ -197,6 +197,12 @@ interface ReviewState {
     number,
     {
       sessionId: number
+      /**
+       * The review itself, not only its id: a tab has to be able to say which
+       * review it is showing — which branch, read against what — and only the
+       * active one is held at the root of the store.
+       */
+      session: Session
       files: ChangedFile[]
       openCount: number
       allFiles: string[] | null
@@ -329,6 +335,12 @@ interface ReviewState {
   cancelDraft: (id: number) => void
   submitDraft: (id: number, as?: NoteDefault) => Promise<void>
   repin: (automatic?: boolean) => Promise<void>
+  /**
+   * Puts the base back where it was before the last move. The base is a lens
+   * on this branch's work rather than part of what the review *is*, so moving
+   * it is an edit — and an edit wants an undo.
+   */
+  undoBase: () => Promise<void>
   importMr: (mr: string) => Promise<void>
   submitReview: () => Promise<void>
   postThread: (threadId: number) => Promise<void>
@@ -513,6 +525,7 @@ export const useReview = create<ReviewState>((set, get) => {
           ...get().repoSessions,
           [activeRepoId]: {
             sessionId: session.id,
+            session,
             files,
             openCount: threads.filter((t) => t.status === 'open').length,
             allFiles: entry?.allFiles ?? null,
@@ -534,7 +547,10 @@ export const useReview = create<ReviewState>((set, get) => {
         }
       }
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : String(error) })
+      const text = message(error)
+      set({ error: text })
+      // a working tree with no branch is refused, and the reason is the fix
+      get().pushToast('error', text)
     }
   }
 
@@ -576,6 +592,7 @@ export const useReview = create<ReviewState>((set, get) => {
           ...get().repoSessions,
           [repoId]: {
             sessionId: session.id,
+            session,
             files,
             openCount: threads.filter((t) => t.status === 'open').length,
             allFiles: existing?.allFiles ?? null,
@@ -1832,6 +1849,37 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
 
+    undoBase: async () => {
+      const session = get().session
+      if (session === null || session.prevBaseRef == null) return
+      try {
+        const next = await api.undoBase(session.id)
+        const [files, threads, viewed] = await Promise.all([
+          api.diff(next.id),
+          api.threads(next.id, true),
+          api.viewed(next.id),
+        ])
+        set({ session: next, threads, viewed: new Set(viewed) })
+        const repoId = get().activeRepoId
+        // the picker reads this, and it has to say where the base actually is
+        set({ baseRef: next.baseRef })
+        const remembered = repoId === null ? undefined : get().perRepo[repoId]
+        if (repoId !== null && remembered !== undefined) {
+          updateRepoSession(repoId, { session: next, files })
+          set({
+            perRepo: {
+              ...get().perRepo,
+              [repoId]: { ...remembered, baseRef: next.baseRef },
+            },
+          })
+        }
+        set({ contentEpoch: get().contentEpoch + 1 })
+        get().pushToast('info', `base back to ${next.baseRef}`)
+      } catch (error) {
+        get().pushToast('error', `undo base: ${message(error)}`)
+      }
+    },
+
     repin: async (automatic = false) => {
       const { session, selectedPath, threads: before } = get()
       if (session === null) return
@@ -1845,7 +1893,7 @@ export const useReview = create<ReviewState>((set, get) => {
         set({ session: next, threads, viewed: new Set(viewed) })
         const repoId = get().activeRepoId
         if (repoId !== null) {
-          updateRepoSession(repoId, { sessionId: next.id, files })
+          updateRepoSession(repoId, { sessionId: next.id, session: next, files })
         }
         // moving the base can leave a note without the code it was written
         // against, and a pin that moved on its own must not do that quietly
@@ -1894,6 +1942,7 @@ export const useReview = create<ReviewState>((set, get) => {
       if (repoId !== null) updateRepoSession(repoId, { files })
       if (fresh !== null && get().session?.id === session.id) {
         set({ session: fresh })
+        if (repoId !== null) updateRepoSession(repoId, { session: fresh })
       }
       if (selectedPath !== null) {
         const status = statusOf(files, selectedPath)

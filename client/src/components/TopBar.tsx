@@ -23,6 +23,7 @@ export function TopBar() {
   const baseRef = useReview((s) => s.baseRef)
   const setBase = useReview((s) => s.setBase)
   const repin = useReview((s) => s.repin)
+  const undoBase = useReview((s) => s.undoBase)
   const importMr = useReview((s) => s.importMr)
   const connected = useReview((s) => s.connected)
   const threads = useReview((s) => s.threads)
@@ -60,15 +61,18 @@ export function TopBar() {
   }
 
   /**
-   * Changing the source or the base opens a *different* review: which pair is
-   * being compared is what a review is. The notes stay with the review they
-   * were written in, which is right — but walking away from them silently is
+   * Changing the source moves to a *different* review: a review is of a
+   * branch, and another branch is other work. The notes stay in the review
+   * they were written in, which is right — walking away from them silently is
    * not, so this asks first.
    *
    * It does not ask when the new ref already contains the old one. There the
    * code the notes were written against is still present, the notes will
    * re-anchor onto it, and moving forward onto a branch that has your work in
    * it is not leaving anything behind.
+   *
+   * The *base* is not this question: it is a lens on the same branch and it
+   * slides, taking the notes with it. See `changeBase`.
    */
   const leavingNotes = async (next: ReviewSource | null): Promise<boolean> => {
     const notes = threads.length
@@ -85,8 +89,8 @@ export function TopBar() {
     return ask({
       title: `Leave ${String(notes)} ${notes === 1 ? 'note' : 'notes'} behind?`,
       detail:
-        `They stay with ${from ?? 'this review'} — comparing something else ` +
-        'opens a different review, with its own notes. Nothing is deleted.',
+        `They stay with ${from ?? 'this review'} — another branch is another ` +
+        'review, with its own notes. Nothing is deleted.',
       confirmLabel: 'Switch anyway',
     })
   }
@@ -101,10 +105,15 @@ export function TopBar() {
     })()
   }
 
+  /**
+   * The base slides: the same review of the same branch, read against
+   * something else. Nothing is left behind and nothing is forked, so there is
+   * no question to ask — except when the new base is on another line of
+   * history, where the notes' code is not in it and they will detach. That is
+   * worth a word before it happens; the move is undoable either way.
+   */
   const changeBase = (value: string) => {
     void (async () => {
-      // the base moving is the same question with the same answer: a base that
-      // already contains the old one leaves the notes' code where it was
       const next = value === 'auto' ? undefined : value
       const from = baseRef ?? session?.baseRef ?? null
       const notes = threads.length
@@ -115,12 +124,12 @@ export function TopBar() {
         if (
           !answer.ancestor &&
           !(await ask({
-            title: `Leave ${String(notes)} ${notes === 1 ? 'note' : 'notes'} behind?`,
+            title: `${String(notes)} ${notes === 1 ? 'note' : 'notes'} may lose ${notes === 1 ? 'its' : 'their'} anchor`,
             detail:
-              `They were written against ${from}. Comparing to ${next} ` +
-              'instead opens a different review, with its own notes. Nothing ' +
-              'is deleted.',
-            confirmLabel: 'Switch anyway',
+              `They were written against ${from}, and ${next} is not on that ` +
+              'line of history. They stay in this review either way, and the ' +
+              'base can be moved back.',
+            confirmLabel: `Read against ${next}`,
           }))
         ) {
           return
@@ -232,6 +241,16 @@ export function TopBar() {
           </option>
         ))}
       </select>
+
+      {session?.prevBaseRef != null && (
+        <button
+          className={btn('outline')}
+          title={`read against ${session.prevBaseRef} again — the base is a lens on this branch, not another review`}
+          onClick={() => void undoBase()}
+        >
+          ↩ {session.prevBaseRef}
+        </button>
+      )}
 
       {session !== null && (
         <span className="text-faint">@ {session.baseSha.slice(0, 8)}</span>

@@ -24,6 +24,7 @@ export function TabBar() {
   const activateTab = useReview((s) => s.activateTab)
   const closeTab = useReview((s) => s.closeTab)
   const repos = useReview((s) => s.repos)
+  const reviews = useReview((s) => s.repoSessions)
   const navBack = useReview((s) => s.navBack)
   const navForward = useReview((s) => s.navForward)
   const canBack = useReview((s) => s.navIndex > 0)
@@ -36,6 +37,24 @@ export function TabBar() {
   const repoName = (repoId: number) =>
     repos.find((r) => r.id === repoId)?.name ?? '?'
 
+  /**
+   * Which review a tab is showing. A repo has a review per branch, and several
+   * of a repo's tabs can be open at once, so "repo · diff" was not enough to
+   * tell two of them apart — nor to say what the one you are looking at is of.
+   */
+  const reviewOf = (repoId: number) => reviews[repoId]?.session ?? null
+
+  const whichReview = (repoId: number): string => {
+    const review = reviewOf(repoId)
+    if (review === null) return repoName(repoId)
+    const where =
+      review.source.kind === 'worktree' ? 'working tree' : 'branch'
+    return (
+      `${repoName(repoId)} — ${review.branch} (${where}), ` +
+      `read against ${review.baseRef} @ ${review.baseSha.slice(0, 8)}`
+    )
+  }
+
   const file_labels = tabLabels(
     tabs.flatMap((tab) =>
       tab.kind === 'file' && tab.path !== undefined
@@ -45,19 +64,21 @@ export function TabBar() {
     repoName,
   )
 
+  // the branch, not the word "diff": what a diff tab shows is one branch's
+  // work, and the repo alone does not say which
   const labelOf = (tab: Tab) =>
     tab.kind === 'flow'
-      ? `${repoName(tab.repoId)} · diff`
+      ? `${repoName(tab.repoId)} · ${reviewOf(tab.repoId)?.branch ?? 'diff'}`
       : tab.kind === 'commits'
         ? `${repoName(tab.repoId)} · commits`
         : (file_labels.get(tab.id) ?? tab.path ?? '')
 
   const titleOf = (tab: Tab) =>
     tab.kind === 'flow'
-      ? `${repoName(tab.repoId)} — continuous diff review`
+      ? `continuous diff review of ${whichReview(tab.repoId)}`
       : tab.kind === 'commits'
-        ? `${repoName(tab.repoId)} — selected commits as a timeline`
-        : `${repoName(tab.repoId)}:${tab.path ?? ''}`
+        ? `selected commits as a timeline — ${whichReview(tab.repoId)}`
+        : `${tab.path ?? ''}\nin ${whichReview(tab.repoId)}`
 
   // widths are remembered per label, so a tab hidden in the dropdown still
   // counts for the same room when it comes back

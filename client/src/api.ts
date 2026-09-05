@@ -145,6 +145,10 @@ export const api = {
       toJson<Thread>,
     ),
 
+  /** Puts the base back where it was before the last move. One step. */
+  undoBase: (sessionId: number) =>
+    post(`/api/sessions/${sessionId}/base/undo`, {}).then(toJson<Session>),
+
   repin: (sessionId: number, automatic = false) =>
     post(
       `/api/sessions/${sessionId}/repin${automatic ? '?automatic=1' : ''}`,
