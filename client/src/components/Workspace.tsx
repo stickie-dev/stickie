@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import { paneWidth } from '../panes'
 import { useReview } from '../store'
 import { ActivityPanel } from './ActivityPanel'
 import { CommentsPanel } from './CommentsPanel'
@@ -12,6 +13,7 @@ import { TabBar } from './TabBar'
 import { TopBar } from './TopBar'
 import { UsagesPanel } from './UsagesPanel'
 import { FindBar } from './FindBar'
+import { PaneResizer } from './PaneResizer'
 
 /**
  * Shown while the active draft belongs to a file other than the open one —
@@ -140,17 +142,33 @@ export function Workspace({ active }: { active: boolean }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [active, setSearchOpen, openFind])
 
+  const row = useRef<HTMLDivElement>(null)
+  const bounds = useCallback(() => {
+    const el = row.current
+    if (el === null) return null
+    const box = el.getBoundingClientRect()
+    return { left: box.left, width: box.width }
+  }, [])
+
+  const treeRatio = useReview((s) => s.paneRatios.tree)
+
   return (
     <div className="flex h-full min-h-0 flex-col" inert={!active}>
       <TopBar />
       <div className="flex min-h-0 grow flex-col">
-        <div className="flex min-h-0 grow">
-          <aside className="flex w-64 shrink-0 flex-col border-r border-edge">
+        {/* the row the pane fractions are of; measured here rather than from
+            the window, since that is what they are fractions of */}
+        <div className="flex min-h-0 grow" ref={row}>
+          <aside
+            className="flex shrink-0 flex-col"
+            style={{ width: paneWidth('tree', treeRatio) }}
+          >
             <div className="min-h-0 grow">
               <FileTree />
             </div>
             <CommitsPanel />
           </aside>
+          <PaneResizer pane="tree" side="left" bounds={bounds} />
           <main className="relative flex min-w-0 grow flex-col">
             <TabBar />
             <div className="min-h-0 grow">
@@ -166,7 +184,12 @@ export function Workspace({ active }: { active: boolean }) {
             {active && <FindBar />}
           </main>
           <SidePane />
-          {commentsOpen && <CommentsPanel />}
+          {commentsOpen && (
+            <>
+              <PaneResizer pane="comments" side="right" bounds={bounds} />
+              <CommentsPanel />
+            </>
+          )}
           {activityOpen && <ActivityPanel />}
         </div>
         <UsagesPanel />

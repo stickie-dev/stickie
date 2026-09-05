@@ -4,6 +4,7 @@ import { GrowingTextarea } from './GrowingTextarea'
 import { DraftForm } from './DraftForm'
 import { SubmitSplit } from './SubmitSplit'
 import { postsComment } from '../keys'
+import { paneWidth } from '../panes'
 import { orderedThreadIds, useReview } from '../store'
 import { ThreadCard } from './ThreadCard'
 import { Close } from '../icons'
@@ -98,6 +99,7 @@ function NoteComposer({ onDone }: { onDone: () => void }) {
  * arrangement Copy prompt uses, where notes can be moved by hand.
  */
 export function CommentsPanel() {
+  const width = useReview((s) => s.paneRatios.comments)
   const threads = useReview((s) => s.threads)
   const drafts = useReview((s) => s.drafts)
   const activeRepoId = useReview((s) => s.activeRepoId)
@@ -142,7 +144,10 @@ export function CommentsPanel() {
   const total = visible.length
 
   return (
-    <aside className="flex w-96 shrink-0 flex-col border-l border-edge bg-surface">
+    <aside
+      className="flex shrink-0 flex-col bg-surface"
+      style={{ width: paneWidth('comments', width) }}
+    >
       <div className="flex items-center gap-2 border-b border-edge px-3 py-2">
         <h2 className="text-sm font-semibold text-ink">Comments</h2>
         <span className="grow" />

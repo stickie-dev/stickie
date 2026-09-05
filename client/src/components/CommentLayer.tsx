@@ -31,20 +31,21 @@ export function CommentLayer({ editorInstance, threads, drafts }: Props) {
   const entriesRef = useRef<ZoneEntry[]>([])
   const resolvedNotes = useReview((s) => s.resolvedNotes)
   const shownResolved = useReview((s) => s.shownResolved)
-  const showResolved = useReview((s) => s.showResolved)
+  const toggleResolvedShown = useReview((s) => s.toggleResolvedShown)
 
   /**
    * A resolved note that has left the code: it is marked in the gutter on the
    * line it was written against, and opens from there. Under the other setting
    * it stays where it is and folds itself to one line.
    */
-  const inGutter = (thread: Thread) =>
-    resolvedNotes === 'gutter' &&
-    thread.status === 'resolved' &&
-    shownResolved[thread.id] !== true
+  const marked = threads.filter(
+    (thread) => resolvedNotes === 'gutter' && thread.status === 'resolved',
+  )
+  // the mark stays once its note is open, because it is also how to close it
+  const hidden = (thread: Thread) =>
+    marked.includes(thread) && shownResolved[thread.id] !== true
 
-  const shown = threads.filter((thread) => !inGutter(thread))
-  const marked = threads.filter(inGutter)
+  const shown = threads.filter((thread) => !hidden(thread))
 
   const items: { key: string; line: number }[] = [
     ...shown.map((t) => ({ key: `t${t.id}`, line: t.endLine })),
@@ -114,19 +115,29 @@ export function CommentLayer({ editorInstance, threads, drafts }: Props) {
    * so this is a decoration rather than anything React can render — and the
    * click has to be read off the editor for the same reason.
    */
-  const marks = marked.map((t) => `${String(t.id)}:${String(t.endLine)}`).join('|')
+  const marks = marked
+    .map(
+      (t) =>
+        `${String(t.id)}:${String(t.endLine)}:${shownResolved[t.id] === true ? 'open' : 'shut'}`,
+    )
+    .join('|')
   useEffect(() => {
     const instance = editorInstance
     if (instance === null || marked.length === 0) return
     const collection = instance.createDecorationsCollection(
-      marked.map((thread) => ({
-        range: new monaco.Range(thread.endLine, 1, thread.endLine, 1),
-        options: {
-          isWholeLine: false,
-          linesDecorationsClassName: 'stickie-resolved-mark',
-          linesDecorationsTooltip: 'a resolved note was written here — click to read it',
-        },
-      })),
+      marked.map((thread) => {
+        const open = shownResolved[thread.id] === true
+        return {
+          range: new monaco.Range(thread.endLine, 1, thread.endLine, 1),
+          options: {
+            isWholeLine: false,
+            linesDecorationsClassName: `stickie-resolved-mark${open ? ' is-open' : ''}`,
+            linesDecorationsTooltip: open
+              ? 'hide this resolved note again'
+              : 'a resolved note was written here — click to read it',
+          },
+        }
+      }),
     )
     const listener = instance.onMouseDown((event) => {
       if (
@@ -138,14 +149,14 @@ export function CommentLayer({ editorInstance, threads, drafts }: Props) {
       const line = event.target.position?.lineNumber
       if (line === undefined) return
       for (const thread of marked) {
-        if (thread.endLine === line) showResolved(thread.id)
+        if (thread.endLine === line) toggleResolvedShown(thread.id)
       }
     })
     return () => {
       collection.clear()
       listener.dispose()
     }
-  }, [editorInstance, marks, showResolved])
+  }, [editorInstance, marks, toggleResolvedShown])
 
   const relayout = (key: string, height: number) => {
     if (editorInstance === null) return

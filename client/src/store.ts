@@ -25,11 +25,16 @@ import { flowReveal } from './flowNav'
 import type { Haystack, Match } from './find'
 import { findMatches as scanForMatches } from './find'
 import type { TabRef } from './routes'
+import type { PaneName } from './panes'
 import {
+  previous_panes,
   previous_tabs,
   restoredDrafts,
+  restoredTree,
   storeDrafts,
+  storePanes,
   storeTabs,
+  storeTree,
 } from './persistence'
 
 /**
@@ -430,6 +435,21 @@ interface ReviewState {
   /** per-file wrap decisions taken from the editor's context menu */
   wrapOverrides: Record<string, boolean>
   /**
+   * How wide the file list and the comments are, each as a fraction of the
+   * workspace — see `panes.ts` for why a fraction and what the limits are.
+   */
+  paneRatios: Record<PaneName, number>
+  setPaneRatio: (pane: PaneName, ratio: number) => void
+  /**
+   * Folders the reader has collapsed in the tree, per repository. It was
+   * component state, which meant every tree rebuilt itself fully open —
+   * on a reload, and on anything that remounted the node.
+   */
+  collapsedDirs: Record<number, string[]>
+  toggleDir: (repoId: number, dir: string) => void
+  /** Opens a folder and everything above it, for the status bar's path. */
+  revealCollapsed: (repoId: number, dir: string) => void
+  /**
    * Where a resolved note goes in the diff — folded to one line where it was
    * written, or out of the code and onto a mark in the gutter. A file whose
    * notes are all resolved is a file that should read as code again, and a
@@ -439,7 +459,8 @@ interface ReviewState {
   setResolvedNotes: (mode: ResolvedNotes) => void
   /** resolved notes the reader has opened from the gutter, by note id */
   shownResolved: Record<number, boolean>
-  showResolved: (threadId: number) => void
+  /** The mark opens the note and closes it again: one control, both ways. */
+  toggleResolvedShown: (threadId: number) => void
   /** file names that open folded in the diff, from settings */
   collapsedFiles: string
   /** what the reader has folded or unfolded by hand, by path */
@@ -1034,6 +1055,9 @@ export const useReview = create<ReviewState>((set, get) => {
     submitKey: 'enter',
     noteDefault: 'draft',
     wrapOverrides: {},
+    paneRatios: previous_panes,
+    // the repositories are not known yet; `init` maps the stored paths on
+    collapsedDirs: {},
     repoSessions: {},
     perRepo: {},
     sessionsById: {},
@@ -1121,6 +1145,30 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     setSearchOpen: (open) => set({ searchOpen: open }),
+    setPaneRatio: (pane, ratio) =>
+      set({ paneRatios: { ...get().paneRatios, [pane]: ratio } }),
+
+    toggleDir: (repoId, dir) => {
+      const open = get().collapsedDirs[repoId] ?? []
+      set({
+        collapsedDirs: {
+          ...get().collapsedDirs,
+          [repoId]: open.includes(dir)
+            ? open.filter((path) => path !== dir)
+            : [...open, dir],
+        },
+      })
+    },
+
+    revealCollapsed: (repoId, dir) => {
+      const shut = get().collapsedDirs[repoId] ?? []
+      const opened = shut.filter(
+        (path) => dir !== path && !dir.startsWith(`${path}/`),
+      )
+      if (opened.length === shut.length) return
+      set({ collapsedDirs: { ...get().collapsedDirs, [repoId]: opened } })
+    },
+
     setWrapExtensions: (extensions) => set({ wrapExtensions: extensions }),
 
     setCollapsedFiles: (names) => set({ collapsedFiles: names }),
@@ -1132,8 +1180,13 @@ export const useReview = create<ReviewState>((set, get) => {
       void api.saveSettings({ resolvedNotes: mode }).catch(() => undefined)
     },
 
-    showResolved: (threadId) =>
-      set({ shownResolved: { ...get().shownResolved, [threadId]: true } }),
+    toggleResolvedShown: (threadId) =>
+      set({
+        shownResolved: {
+          ...get().shownResolved,
+          [threadId]: get().shownResolved[threadId] !== true,
+        },
+      }),
 
     showFileInFlow: (path) => {
       const { collapsedFiles, collapseFileOverrides } = get()
@@ -1209,6 +1262,8 @@ export const useReview = create<ReviewState>((set, get) => {
         const repos = await api.repos()
         set({ repos, reposLoaded: true })
         await Promise.all(repos.map((r) => ensureRepoSession(r.id)))
+        // stored by path, since repository ids differ between machines
+        set({ collapsedDirs: restoredTree(repos) })
         restoreDrafts(repos)
         if (await restoreTabs(repos, start)) return
         const first = repos[0]
@@ -2253,9 +2308,15 @@ export const useReview = create<ReviewState>((set, get) => {
 // that touches them, so no path can forget to persist
 let written_tabs = ''
 let written_drafts = ''
+let written_panes = ''
+let written_tree = ''
 useReview.subscribe((state) => {
   const tabs = storeTabs(state.tabs, state.activeTabId, state.repos)
   if (tabs !== written_tabs) written_tabs = tabs
   const drafts = storeDrafts(state.drafts, state.repos)
   if (drafts !== written_drafts) written_drafts = drafts
+  const ratios = storePanes(state.paneRatios)
+  if (ratios !== written_panes) written_panes = ratios
+  const tree = storeTree(state.collapsedDirs, state.repos)
+  if (tree !== written_tree) written_tree = tree
 })

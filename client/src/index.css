@@ -200,20 +200,40 @@
  */
 .stickie-resolved-mark {
   cursor: pointer;
+  color: color-mix(in srgb, var(--ink) 42%, transparent);
 }
 
+/*
+ * A speech bubble rather than a dot. A dot in a gutter is a modified-line
+ * marker, a breakpoint, a fold arrow — every editor has several, and none of
+ * them mean "somebody said something here". The shape has to carry it, since
+ * there is no room beside it for a word.
+ *
+ * Drawn as a mask so it takes `currentColor` and follows the theme, and so
+ * hover and open are colour changes rather than a second image.
+ */
 .stickie-resolved-mark::after {
   content: '';
   display: block;
-  width: 6px;
-  height: 6px;
-  margin: 6px auto 0;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--ink) 32%, transparent);
+  width: 13px;
+  height: 13px;
+  margin: 3px auto 0;
+  background: currentColor;
+  -webkit-mask: var(--speech-bubble) center / contain no-repeat;
+  mask: var(--speech-bubble) center / contain no-repeat;
 }
 
-.stickie-resolved-mark:hover::after {
-  background: var(--accent);
+:root {
+  --speech-bubble: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M21 4H3a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4v4l5-4h9a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z'/%3E%3C/svg%3E");
+}
+
+.stickie-resolved-mark:hover {
+  color: var(--accent);
+}
+
+/* open: the same mark, filled in, because it is also the way to close it */
+.stickie-resolved-mark.is-open {
+  color: var(--accent);
 }
 
 /*

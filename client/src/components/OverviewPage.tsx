@@ -216,7 +216,7 @@ function Comparing({ row }: { row: ReviewRow }) {
         {row.bases > 1 && (
           <span
             className="ml-2"
-            title="this review has been pinned to more than one base as the branch moved; the counts cover all of them"
+            title="this review has been read against more than one base — the branch moving on, or the base moved deliberately; the counts cover all of them"
           >
             (+{row.bases - 1} earlier {row.bases === 2 ? 'base' : 'bases'})
           </span>
@@ -607,11 +607,11 @@ export function OverviewPage() {
               <ReviewsTable reviews={listed} loading={loading} />
             </div>
             <p className="mt-2 max-w-3xl text-dense leading-relaxed text-faint">
-              A row is one thing being reviewed — a repository&rsquo;s working
-              tree, a branch, or a single commit — and its counts cover every
-              base it has been pinned to, so re-pinning after the branch moves
-              keeps the same row. Hover a status or a column heading for what it
-              means.
+              A row is one branch, read from a working tree or from the
+              branch itself, and its counts cover every base it has been read
+              against — moving the base moves the review rather than starting
+              another, and so does the branch moving between checkouts. Hover a
+              status or a column heading for what it means.
               {idle.length > 0 && (
                 <>
                   {' '}
@@ -623,8 +623,8 @@ export function OverviewPage() {
                       ? 'hide'
                       : `show ${String(idle.length)} more`}
                   </button>{' '}
-                  {showIdle ? '' : 'with no notes — opening a commit against '}
-                  {showIdle ? '' : 'its parent starts a review too.'}
+                  {showIdle ? '' : 'with no notes — branches opened but not '}
+                  {showIdle ? '' : 'written on yet.'}
                 </>
               )}
             </p>

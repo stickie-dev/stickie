@@ -11,12 +11,12 @@ the only output.
 
 ## Features
 
-- **Overview** — the landing page. One row per thing being reviewed — a
-  repository's working tree, a branch, or a single commit — sorted by what it
-  wants from you and labelled *needs you* / *with agent* / *draft* / *clear*,
-  with note counts, agent round-trips, and what it compares as a short sha and
-  commit subject rather than forty characters of hex. Re-pinning the base as a
-  branch moves keeps the same row. Plus one activity feed across every
+- **Overview** — the landing page. One row per branch under review — read
+  from a working tree or from the branch itself — sorted by what it wants from
+  you and labelled *needs you* / *with agent* / *draft* / *clear*, with note
+  counts, agent round-trips, and what it compares as a short sha and commit
+  subject rather than forty characters of hex. Moving the base keeps the same
+  row, and so does the branch moving between checkouts. Plus one activity feed across every
   repository. A draft review in another repository used to be invisible until
   you switched to it. Registered repositories are listed below the reviews:
   add one by path, and remove one you are done with — which deletes its reviews

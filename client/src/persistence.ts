@@ -1,4 +1,6 @@
 import type { RepoInfo, Side } from '@stickie/shared'
+import type { PaneName } from './panes'
+import { clampRatio, panes } from './panes'
 import type { Draft, DraftSurface, Tab } from './store'
 
 /**
@@ -10,6 +12,8 @@ import type { Draft, DraftSurface, Tab } from './store'
 
 const tabs_key = 'stickie-tabs'
 const drafts_key = 'stickie-drafts'
+const panes_key = 'stickie-panes'
+const tree_key = 'stickie-tree'
 
 interface StoredTab {
   kind: Tab['kind']
@@ -78,8 +82,78 @@ function readDrafts(): StoredDraft[] {
   )
 }
 
+/**
+ * How wide the reader dragged each panel. Clamped on the way back in as well
+ * as on the way out: the limits can change with a release, and a stored width
+ * from before one must not outlive it.
+ */
+function readPanes(): Record<PaneName, number> {
+  const parsed = parse<Partial<Record<PaneName, unknown>>>(panes_key) ?? {}
+  const ratios = {} as Record<PaneName, number>
+  for (const name of Object.keys(panes) as PaneName[]) {
+    const stored = parsed[name]
+    ratios[name] =
+      typeof stored === 'number' && Number.isFinite(stored)
+        ? clampRatio(name, stored, 0)
+        : panes[name].initial
+  }
+  return ratios
+}
+
+/**
+ * Which folders are shut, per repository path. A tree that reopens itself
+ * fully expanded on every reload is a tree the reader closes again every
+ * morning.
+ */
+function readTree(): { collapsed: Record<string, string[]> } {
+  const parsed = parse<{ collapsed?: unknown }>(tree_key)
+  const collapsed: Record<string, string[]> = {}
+  const stored = parsed?.collapsed
+  if (typeof stored === 'object' && stored !== null) {
+    for (const [repo, dirs] of Object.entries(stored)) {
+      if (!Array.isArray(dirs)) continue
+      collapsed[repo] = dirs.filter((dir): dir is string => typeof dir === 'string')
+    }
+  }
+  return { collapsed }
+}
+
 export const previous_tabs = readTabs()
 export const previous_drafts = readDrafts()
+export const previous_panes = readPanes()
+export const previous_tree = readTree()
+
+export function storePanes(ratios: Record<PaneName, number>): string {
+  const payload = JSON.stringify(ratios)
+  localStorage.setItem(panes_key, payload)
+  return payload
+}
+
+/** Repositories are keyed by path here for the same reason tabs are. */
+export function storeTree(
+  collapsedDirs: Record<number, string[]>,
+  repos: RepoInfo[],
+): string {
+  const collapsed: Record<string, string[]> = {}
+  for (const [repoId, dirs] of Object.entries(collapsedDirs)) {
+    const repo = repos.find((r) => r.id === Number(repoId))
+    if (repo === undefined || dirs.length === 0) continue
+    collapsed[repo.path] = dirs
+  }
+  const payload = JSON.stringify({ collapsed })
+  localStorage.setItem(tree_key, payload)
+  return payload
+}
+
+/** The stored folders as live ones, dropping any whose repository is gone. */
+export function restoredTree(repos: RepoInfo[]): Record<number, string[]> {
+  const collapsedDirs: Record<number, string[]> = {}
+  for (const [path, dirs] of Object.entries(previous_tree.collapsed)) {
+    const repo = repos.find((r) => r.path === path)
+    if (repo !== undefined) collapsedDirs[repo.id] = dirs
+  }
+  return collapsedDirs
+}
 
 export function storeTabs(
   tabs: Tab[],

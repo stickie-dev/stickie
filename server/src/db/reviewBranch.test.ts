@@ -46,7 +46,8 @@ async function legacyDatabase(): Promise<Db> {
       side text not null,
       start_line integer not null,
       end_line integer not null,
-      snippet text not null
+      snippet text not null,
+      number integer
     );
     create table viewed_files (
       session_id integer not null references sessions(id) on delete cascade,
@@ -247,5 +248,132 @@ describe('rekeyByBranch', () => {
     await applySchema(fresh)
     expect(await rekeyByBranch(fresh, resolve)).toBe(null)
     await fresh.close()
+  })
+})
+
+/**
+ * A database that has already been re-keyed, by a run whose resolver could not
+ * name a branch — the shape the migration leaves when it cannot reach git.
+ * Note numbers are already assigned and uniquely indexed, as they are on any
+ * database that has been through `numberNotes`.
+ */
+async function keyedButUnplaced(): Promise<Db> {
+  const db = openSqlite(':memory:')
+  await db.exec(`
+    create table repos (id integer primary key autoincrement, path text not null unique);
+    create table sessions (
+      id integer primary key autoincrement,
+      repo_id integer not null references repos(id) on delete cascade,
+      source_kind text not null,
+      source_value text not null,
+      branch text,
+      base_ref text not null,
+      base_sha text not null,
+      prev_base_ref text,
+      prev_base_sha text,
+      notes_issued integer not null default 0,
+      created_at text not null default (datetime('now')),
+      unique (repo_id, branch)
+    );
+    create table threads (
+      id integer primary key autoincrement,
+      session_id integer not null references sessions(id) on delete cascade,
+      path text not null,
+      side text not null,
+      start_line integer not null,
+      end_line integer not null,
+      snippet text not null,
+      number integer
+    );
+    create unique index threads_session_number on threads (session_id, number);
+    create table viewed_files (
+      session_id integer not null references sessions(id) on delete cascade,
+      path text not null,
+      primary key (session_id, path)
+    );
+    create table activity (
+      id integer primary key autoincrement,
+      subject text not null,
+      action text not null,
+      session_id integer,
+      detail text
+    );
+  `)
+  await db.run('insert into repos (path) values (?)', ['/repo'])
+  // 1: the old review, left unplaced, holding the notes
+  await db.run(
+    `insert into sessions (repo_id, source_kind, source_value, branch, base_ref, base_sha, notes_issued)
+     values (1, 'worktree', '/repo', null, 'master', 'aaa', 3)`,
+  )
+  // 2: the review a later visit started beside it, under the branch
+  await db.run(
+    `insert into sessions (repo_id, source_kind, source_value, branch, base_ref, base_sha, notes_issued)
+     values (1, 'worktree', '/repo', 'master', 'master', 'bbb', 2)`,
+  )
+  return db
+}
+
+const numbered = (db: Db, session: number, number: number) =>
+  db.run(
+    `insert into threads (session_id, path, side, start_line, end_line, snippet, number)
+     values (?, 'a.ts', 'source', 1, 1, 'x', ?)`,
+    [session, number],
+  )
+
+describe('placing reviews the re-key could not name', () => {
+  it('gives an unplaced review its branch when nothing else holds it', async () => {
+    const db = await keyedButUnplaced()
+    await db.run('delete from sessions where id = 2')
+    const result = await rekeyByBranch(db, resolve)
+    expect(result?.stamped).toBe(1)
+    const row = await db.get<{ branch: string }>(
+      'select branch from sessions where id = 1',
+    )
+    expect(row?.branch).toBe('master')
+    await db.close()
+  })
+
+  it('reunites it with the review that took its branch, keeping the notes', async () => {
+    const db = await keyedButUnplaced()
+    for (const n of [0, 1, 2]) await numbered(db, 1, n)
+    for (const n of [0, 1]) await numbered(db, 2, n)
+
+    const result = await rekeyByBranch(db, resolve)
+    // 1 holds more notes, so it keeps its id and takes the branch back
+    expect(result?.merged).toEqual([{ survivor: 1, absorbed: [2] }])
+    const rows = await db.all<{ id: number; branch: string | null }>(
+      'select id, branch from sessions order by id',
+    )
+    expect(rows).toEqual([{ id: 1, branch: 'master' }])
+    expect(
+      (await db.all('select id from threads')).length,
+    ).toBe(5)
+    await db.close()
+  })
+
+  it('renumbers what it absorbs, since both reviews counted from 0', async () => {
+    const db = await keyedButUnplaced()
+    for (const n of [0, 1, 2]) await numbered(db, 1, n)
+    for (const n of [0, 1]) await numbered(db, 2, n)
+    await rekeyByBranch(db, resolve)
+    const numbers = (
+      await db.all<{ number: number }>(
+        'select number from threads order by number',
+      )
+    ).map((r) => Number(r.number))
+    // no collision, and the incoming two carry on above what was issued
+    expect(numbers).toEqual([0, 1, 2, 3, 4])
+    const issued = await db.get<{ notes_issued: number }>(
+      'select notes_issued from sessions where id = 1',
+    )
+    expect(Number(issued?.notes_issued)).toBe(5)
+    await db.close()
+  })
+
+  it('does nothing on a database with nothing left to place', async () => {
+    const db = await keyedButUnplaced()
+    await db.run("update sessions set branch = 'other' where id = 1")
+    expect(await rekeyByBranch(db, resolve)).toBe(null)
+    await db.close()
   })
 })

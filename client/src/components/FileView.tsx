@@ -40,6 +40,7 @@ function editorOptions(
   width: number,
   wrap: boolean,
   shift: number,
+  markedGutter: boolean,
 ): editor.IStandaloneEditorConstructionOptions {
   // the ladder is the window's; the shift is the reader's, and 11 is the floor
   // — code is the content here, and it is the last thing that should be squinted
@@ -64,7 +65,10 @@ function editorOptions(
     rulers: wrap ? [] : [80, 100, 120],
     padding: { top: 10, bottom: 10 },
     lineNumbersMinChars: 3,
-    lineDecorationsWidth: 12,
+    // room for the resolved-note mark when resolved notes live out here; 12px
+    // fits a dot and nothing that reads as anything, and the column costs the
+    // code its width, so it is only wide while something is drawn in it
+    lineDecorationsWidth: markedGutter ? 20 : 12,
     overviewRulerBorder: false,
     hideCursorInOverviewRuler: true,
     scrollbar: {
@@ -404,6 +408,8 @@ export function FileView() {
   const sideBySideChoice = useReview((s) => s.sideBySide)
   const collapseUnchanged = useReview((s) => s.collapseUnchanged)
   const expanded = useReview((s) => s.expandFor === s.selectedPath)
+  // resolved notes are drawn in the gutter, so the gutter needs the room
+  const marked_gutter = useReview((s) => s.resolvedNotes === 'gutter')
   const setExpandFor = useReview((s) => s.setExpandFor)
   const [captureTarget, setCaptureTarget] = useState<CaptureTarget | null>(
     null,
@@ -668,7 +674,7 @@ export function FileView() {
     return (
       <CommitTimeline
         commits={commits}
-        options={editorOptions(width, false, shift)}
+        options={editorOptions(width, false, shift, marked_gutter)}
         theme={monaco_theme}
       />
     )
@@ -702,7 +708,7 @@ export function FileView() {
             files={files}
             sessionId={session.id}
             repoId={activeRepoId ?? -1}
-            options={editorOptions(width, false, shift)}
+            options={editorOptions(width, false, shift, marked_gutter)}
             sideBySide={sideBySide}
             theme={monaco_theme}
             attach={attachCapture}
@@ -806,7 +812,7 @@ export function FileView() {
               language={language}
               theme={monaco_theme}
               options={{
-                ...editorOptions(width, wrap, shift),
+                ...editorOptions(width, wrap, shift, marked_gutter),
                 renderSideBySide: sideBySide,
                 hideUnchangedRegions: {
                   enabled: collapseUnchanged && !expanded,
@@ -843,7 +849,7 @@ export function FileView() {
               value={single_content}
               language={language}
               theme={monaco_theme}
-              options={editorOptions(width, wrap, shift)}
+              options={editorOptions(width, wrap, shift, marked_gutter)}
               onMount={(instance) => {
                 setSingleEditor(instance)
                 attachCapture(instance, single_side)

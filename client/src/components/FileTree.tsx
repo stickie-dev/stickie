@@ -104,7 +104,12 @@ function RepoNode({ repoId }: { repoId: number }) {
   const toggleRepoShowAll = useReview((s) => s.toggleRepoShowAll)
   const threads = useReview((s) => s.threads)
   const viewed = useReview((s) => s.viewed)
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // in the store, and stored: a tree that reopens itself fully expanded on
+  // every reload is a tree the reader closes again every morning
+  const collapsedDirs = useReview((s) => s.collapsedDirs[repoId])
+  const toggleDirIn = useReview((s) => s.toggleDir)
+  const revealCollapsed = useReview((s) => s.revealCollapsed)
+  const collapsed = useMemo(() => new Set(collapsedDirs ?? []), [collapsedDirs])
   const revealDir = useReview((s) => s.revealDir)
   const clearRevealDir = useReview((s) => s.clearRevealDir)
 
@@ -112,14 +117,7 @@ function RepoNode({ repoId }: { repoId: number }) {
   useEffect(() => {
     if (revealDir === null || revealDir.repoId !== repoId) return
     const target = revealDir.dir
-    setCollapsed((prev) => {
-      const next = new Set(
-        [...prev].filter(
-          (path) => target !== path && !target.startsWith(`${path}/`),
-        ),
-      )
-      return next
-    })
+    revealCollapsed(repoId, target)
     // the folder may only appear once the all-files tree has loaded
     let attempts = 0
     let timer: ReturnType<typeof setTimeout>
@@ -147,7 +145,7 @@ function RepoNode({ repoId }: { repoId: number }) {
     }
     timer = setTimeout(show, 30)
     return () => clearTimeout(timer)
-  }, [revealDir, repoId, clearRevealDir])
+  }, [revealDir, repoId, clearRevealDir, revealCollapsed])
 
   const is_active = repoId === activeRepoId
 
@@ -177,14 +175,7 @@ function RepoNode({ repoId }: { repoId: number }) {
       ? threads.filter((t) => t.path === path && t.status === 'open').length
       : 0
 
-  const toggleDir = (path: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev)
-      if (next.has(path)) next.delete(path)
-      else next.add(path)
-      return next
-    })
-  }
+  const toggleDir = (path: string) => toggleDirIn(repoId, path)
 
   const renderFile = (file: TreeFile) => {
     const icon = fileIconUrl(file.name)
