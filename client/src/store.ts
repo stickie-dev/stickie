@@ -16,6 +16,7 @@ import type {
   NoteDefault,
   RemoveMode,
   RepinMode,
+  ResolvedNotes,
   SubmitKey,
 } from './api'
 import { cursorLine } from './cursor'
@@ -46,6 +47,13 @@ export interface Tab {
   id: number
   kind: 'flow' | 'file' | 'commits'
   repoId: number
+  /**
+   * The review this tab is of. A repository has a review per branch, and a tab
+   * is of one of them — not of the repository — so `master` and `feature/x`
+   * can be open beside each other instead of one silently replacing the other
+   * under the same tab when the pickers move.
+   */
+  reviewId: number
   /** file tabs only */
   path?: string
 }
@@ -211,6 +219,12 @@ interface ReviewState {
     }
   >
   perRepo: Record<number, { source: ReviewSource; baseRef?: string; selectedPath?: string }>
+  /**
+   * Every review this session has seen, by id. A tab names a review, and a tab
+   * that is not the open one still has to say what it is of — which branch,
+   * read against what — and only the open review is held anywhere else.
+   */
+  sessionsById: Record<number, Session>
 
   pushToast: (kind: Toast['kind'], text: string) => void
   dismissToast: (id: number) => void
@@ -402,6 +416,25 @@ interface ReviewState {
   rememberNoteDefault: (value: NoteDefault) => Promise<void>
   /** per-file wrap decisions taken from the editor's context menu */
   wrapOverrides: Record<string, boolean>
+  /**
+   * Where a resolved note goes in the diff — folded to one line where it was
+   * written, or out of the code and onto a mark in the gutter. A file whose
+   * notes are all resolved is a file that should read as code again, and a
+   * column of folded cards is not that.
+   */
+  resolvedNotes: ResolvedNotes
+  setResolvedNotes: (mode: ResolvedNotes) => void
+  /** resolved notes the reader has opened from the gutter, by note id */
+  shownResolved: Record<number, boolean>
+  showResolved: (threadId: number) => void
+  /** file names that open folded in the diff, from settings */
+  collapsedFiles: string
+  /** what the reader has folded or unfolded by hand, by path */
+  collapseFileOverrides: Record<string, boolean>
+  toggleFileCollapsed: (path: string) => void
+  /** Unfolds one file, for anything aiming the reader at a line inside it. */
+  showFileInFlow: (path: string) => void
+  setCollapsedFiles: (names: string) => void
   toggleWrap: (path: string) => void
   /**
    * One decision for every file on screen. The per-file toggle stays, and this
@@ -462,6 +495,11 @@ export function activeFiles(state: ReviewState): ChangedFile[] {
 /** Kept in step with the server's own default until settings are read. */
 const default_wrap_extensions = 'md,markdown,txt,rst,csv,log,json'
 
+/** Kept in step with the server's own default until settings are read. */
+const default_collapsed_files =
+  'uv.lock,poetry.lock,package-lock.json,pnpm-lock.yaml,yarn.lock,Cargo.lock,' +
+  'go.sum,Gemfile.lock,composer.lock,.min.js,.min.css,.snap'
+
 /** Whether a file opens soft-wrapped: the file's own choice, else its type. */
 export function wrapFor(
   path: string,
@@ -478,6 +516,30 @@ export function wrapFor(
     .split(',')
     .map((entry) => entry.trim().toLowerCase().replace(/^\./, ''))
     .includes(ext)
+}
+
+/**
+ * Whether a file opens folded: a name the settings list, unless the reader has
+ * said otherwise about this one.
+ *
+ * Matched on the whole file name and on its ending, so an entry is either a
+ * name (`uv.lock`) or a suffix (`.min.js`). Extensions alone would not do: a
+ * lockfile is `.lock` but so is a file someone wrote, and `package-lock.json`
+ * shares its extension with every other json.
+ */
+export function collapsedFor(
+  path: string,
+  names: string,
+  overrides: Record<string, boolean>,
+): boolean {
+  const chosen = overrides[path]
+  if (chosen !== undefined) return chosen
+  const name = (path.split('/').at(-1) ?? '').toLowerCase()
+  return names
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry !== '')
+    .some((entry) => name === entry || name.endsWith(entry))
 }
 
 /**
@@ -512,6 +574,7 @@ export const useReview = create<ReviewState>((set, get) => {
         api.viewed(session.id),
       ])
       const entry = get().repoSessions[activeRepoId]
+      rememberSession(session)
       set({
         session,
         threads,
@@ -534,7 +597,7 @@ export const useReview = create<ReviewState>((set, get) => {
           },
         },
       })
-      const flow_tab = ensureFlowTab(activeRepoId)
+      const flow_tab = ensureFlowTab(activeRepoId, session.id)
       if (get().viewMode === 'flow') {
         set({ activeTabId: flow_tab.id })
       }
@@ -586,6 +649,7 @@ export const useReview = create<ReviewState>((set, get) => {
         api.threads(session.id, true),
       ])
       const existing = get().repoSessions[repoId]
+      rememberSession(session)
       set({
         perRepo: { ...get().perRepo, [repoId]: { ...cached, source } },
         repoSessions: {
@@ -624,6 +688,7 @@ export const useReview = create<ReviewState>((set, get) => {
     } catch {
       return null
     }
+    rememberSession(review)
     set({
       perRepo: {
         ...get().perRepo,
@@ -665,15 +730,31 @@ export const useReview = create<ReviewState>((set, get) => {
   ): Promise<boolean> {
     const stored = previous_tabs
     const restored: Tab[] = []
+    // a review can have been deleted with its repository since the tabs were
+    // written; asked once per review rather than once per tab
+    const alive = new Map<number, boolean>()
     for (const entry of stored?.tabs ?? []) {
       const repo = repos.find((r) => r.path === entry.repo)
       if (repo === undefined) continue
       if (entry.kind === 'file' && entry.path === undefined) continue
+      let exists = alive.get(entry.review)
+      if (exists === undefined) {
+        exists = await api
+          .session(entry.review)
+          .then((review) => {
+            rememberSession(review)
+            return true
+          })
+          .catch(() => false)
+        alive.set(entry.review, exists)
+      }
+      if (!exists) continue
       tab_seq += 1
       restored.push({
         id: tab_seq,
         kind: entry.kind,
         repoId: repo.id,
+        reviewId: entry.review,
         ...(entry.path === undefined ? {} : { path: entry.path }),
       })
     }
@@ -760,35 +841,49 @@ export const useReview = create<ReviewState>((set, get) => {
     }
   }
 
-  function ensureFlowTab(repoId: number): Tab {
+  /** Keeps what a tab needs to describe its review, whether or not it is open. */
+  function rememberSession(session: Session): void {
+    set({ sessionsById: { ...get().sessionsById, [session.id]: session } })
+  }
+
+  /**
+   * The review a new tab belongs to: whichever one is open. Every caller of the
+   * three below is already looking at it.
+   */
+  function currentReview(): number | null {
+    return get().session?.id ?? null
+  }
+
+  function ensureFlowTab(repoId: number, reviewId: number): Tab {
     const existing = get().tabs.find(
-      (t) => t.kind === 'flow' && t.repoId === repoId,
+      (t) => t.kind === 'flow' && t.reviewId === reviewId,
     )
     if (existing !== undefined) return existing
     tab_seq += 1
-    const tab: Tab = { id: tab_seq, kind: 'flow', repoId }
+    const tab: Tab = { id: tab_seq, kind: 'flow', repoId, reviewId }
     set({ tabs: [...get().tabs, tab] })
     return tab
   }
 
-  function ensureCommitsTab(repoId: number): Tab {
+  function ensureCommitsTab(repoId: number, reviewId: number): Tab {
     const existing = get().tabs.find(
-      (t) => t.kind === 'commits' && t.repoId === repoId,
+      (t) => t.kind === 'commits' && t.reviewId === reviewId,
     )
     if (existing !== undefined) return existing
     tab_seq += 1
-    const tab: Tab = { id: tab_seq, kind: 'commits', repoId }
+    const tab: Tab = { id: tab_seq, kind: 'commits', repoId, reviewId }
     set({ tabs: [...get().tabs, tab] })
     return tab
   }
 
-  function ensureFileTab(repoId: number, path: string): Tab {
+  function ensureFileTab(repoId: number, reviewId: number, path: string): Tab {
     const existing = get().tabs.find(
-      (t) => t.kind === 'file' && t.repoId === repoId && t.path === path,
+      (t) =>
+        t.kind === 'file' && t.reviewId === reviewId && t.path === path,
     )
     if (existing !== undefined) return existing
     tab_seq += 1
-    const tab: Tab = { id: tab_seq, kind: 'file', repoId, path }
+    const tab: Tab = { id: tab_seq, kind: 'file', repoId, reviewId, path }
     set({ tabs: [...get().tabs, tab] })
     return tab
   }
@@ -917,6 +1012,10 @@ export const useReview = create<ReviewState>((set, get) => {
     contentEpoch: 0,
     revealDir: null,
     wrapExtensions: default_wrap_extensions,
+    resolvedNotes: 'folded',
+    shownResolved: {},
+    collapsedFiles: default_collapsed_files,
+    collapseFileOverrides: {},
     repinMode: null,
     removeMode: null,
     submitKey: 'enter',
@@ -924,6 +1023,7 @@ export const useReview = create<ReviewState>((set, get) => {
     wrapOverrides: {},
     repoSessions: {},
     perRepo: {},
+    sessionsById: {},
 
     pushToast: (kind, text) => {
       toast_seq += 1
@@ -1009,6 +1109,34 @@ export const useReview = create<ReviewState>((set, get) => {
 
     setSearchOpen: (open) => set({ searchOpen: open }),
     setWrapExtensions: (extensions) => set({ wrapExtensions: extensions }),
+
+    setCollapsedFiles: (names) => set({ collapsedFiles: names }),
+
+    setResolvedNotes: (mode) => {
+      set({ resolvedNotes: mode, shownResolved: {} })
+      // a preference, not a view state: it belongs to the reader across
+      // reloads, the way the setting it came from does
+      void api.saveSettings({ resolvedNotes: mode }).catch(() => undefined)
+    },
+
+    showResolved: (threadId) =>
+      set({ shownResolved: { ...get().shownResolved, [threadId]: true } }),
+
+    showFileInFlow: (path) => {
+      const { collapsedFiles, collapseFileOverrides } = get()
+      if (!collapsedFor(path, collapsedFiles, collapseFileOverrides)) return
+      set({ collapseFileOverrides: { ...collapseFileOverrides, [path]: false } })
+    },
+
+    toggleFileCollapsed: (path) => {
+      const { collapsedFiles, collapseFileOverrides } = get()
+      set({
+        collapseFileOverrides: {
+          ...collapseFileOverrides,
+          [path]: !collapsedFor(path, collapsedFiles, collapseFileOverrides),
+        },
+      })
+    },
     setRepinMode: (mode) => set({ repinMode: mode }),
     setSubmitKey: (key) => set({ submitKey: key }),
     setNoteDefault: (value) => set({ noteDefault: value }),
@@ -1056,6 +1184,8 @@ export const useReview = create<ReviewState>((set, get) => {
           .then((settings) =>
             set({
               wrapExtensions: settings.wrapExtensions,
+              collapsedFiles: settings.collapsedFiles,
+              resolvedNotes: settings.resolvedNotes,
               repinMode: settings.repinMode,
               removeMode: settings.removeMode,
               submitKey: settings.submitKey,
@@ -1082,13 +1212,16 @@ export const useReview = create<ReviewState>((set, get) => {
       if (review === null) return false
       const repoId = review.repoId
       if (tab.kind === 'diff') {
-        set({ viewMode: 'flow', activeTabId: ensureFlowTab(repoId).id })
+        set({ viewMode: 'flow', activeTabId: ensureFlowTab(repoId, review.id).id })
         return true
       }
       if (tab.kind === 'commits') {
         // an address names the commits tab, never which commits are in it:
         // that stays the sidebar's choice
-        set({ viewMode: 'commits', activeTabId: ensureCommitsTab(repoId).id })
+        set({
+          viewMode: 'commits',
+          activeTabId: ensureCommitsTab(repoId, review.id).id,
+        })
         return true
       }
       try {
@@ -1124,7 +1257,7 @@ export const useReview = create<ReviewState>((set, get) => {
       if (note.startLine === 0 || note.path === '') {
         set({
           viewMode: 'flow',
-          activeTabId: ensureFlowTab(review.repoId).id,
+          activeTabId: ensureFlowTab(review.repoId, review.id).id,
           noteHighlight: note.id,
         })
         return note
@@ -1154,6 +1287,7 @@ export const useReview = create<ReviewState>((set, get) => {
       // browsing, unchanged refs) opens the single-file view
       const changed = activeFiles(get()).some((f) => f.path === path)
       if (get().viewMode === 'flow' && changed) {
+        get().showFileInFlow(path)
         get().flowSelect(path)
       } else {
         await get().openFile(path, status)
@@ -1164,8 +1298,11 @@ export const useReview = create<ReviewState>((set, get) => {
       const { activeRepoId } = get()
       if (get().expandFor !== path) set({ expandFor: null })
       const files = activeFiles(get())
+      const review = currentReview()
       const flow_tab =
-        activeRepoId === null ? null : ensureFlowTab(activeRepoId)
+        activeRepoId === null || review === null
+          ? null
+          : ensureFlowTab(activeRepoId, review)
       set({
         viewMode: 'flow',
         selectedPath: path,
@@ -1203,7 +1340,8 @@ export const useReview = create<ReviewState>((set, get) => {
 
     selectCommits: async (shas) => {
       const repoId = get().activeRepoId
-      if (repoId === null) return
+      const review = currentReview()
+      if (repoId === null || review === null) return
       if (shas.length === 0) {
         set({ commitView: null })
         return
@@ -1211,7 +1349,7 @@ export const useReview = create<ReviewState>((set, get) => {
       set({
         commitView: { repoId, shas, files: [] },
         viewMode: 'commits',
-        activeTabId: ensureCommitsTab(repoId).id,
+        activeTabId: ensureCommitsTab(repoId, review).id,
       })
       let files: { path: string; shas: string[] }[]
       try {
@@ -1228,7 +1366,16 @@ export const useReview = create<ReviewState>((set, get) => {
     activateTab: async (id) => {
       const tab = get().tabs.find((t) => t.id === id)
       if (tab === undefined) return
-      if (tab.repoId !== get().activeRepoId) {
+      // a tab is of a review, so landing on it means landing on that review —
+      // which may be another branch of the repository already open
+      if (tab.reviewId !== get().session?.id) {
+        const review = await openReview(tab.reviewId)
+        if (review === null) {
+          // it has been deleted since the tab was opened
+          get().closeTab(tab.id)
+          return
+        }
+      } else if (tab.repoId !== get().activeRepoId) {
         await get().selectRepo(tab.repoId)
       }
       if (tab.kind === 'flow') {
@@ -1252,8 +1399,10 @@ export const useReview = create<ReviewState>((set, get) => {
       if (activeTabId === id) {
         const fallback =
           remaining.find(
-            (t) => t.kind === 'flow' && t.repoId === closing.repoId,
-          ) ?? remaining.at(-1)
+            (t) => t.kind === 'flow' && t.reviewId === closing.reviewId,
+          ) ??
+          remaining.find((t) => t.reviewId === closing.reviewId) ??
+          remaining.at(-1)
         if (fallback !== undefined) {
           void get().activateTab(fallback.id)
         } else {
@@ -1408,7 +1557,7 @@ export const useReview = create<ReviewState>((set, get) => {
         activeTabId:
           repo_for_tab === null
             ? get().activeTabId
-            : ensureFileTab(repo_for_tab, path).id,
+            : ensureFileTab(repo_for_tab, session.id, path).id,
       })
       const oldPath =
         files.find((f) => f.path === path)?.oldPath ?? path
@@ -1570,6 +1719,7 @@ export const useReview = create<ReviewState>((set, get) => {
         // the flow scrolls itself and its editors are its own, so it reveals
         // through flowNav rather than through the single view's `reveal`
         if (match.path !== get().selectedPath) get().flowSelect(match.path)
+        get().showFileInFlow(match.path)
         // after flowSelect, which clears the file it was holding open
         set({ expandFor: match.path })
         flowReveal(match.path, match.line, select)
@@ -1859,6 +2009,7 @@ export const useReview = create<ReviewState>((set, get) => {
           api.threads(next.id, true),
           api.viewed(next.id),
         ])
+        rememberSession(next)
         set({ session: next, threads, viewed: new Set(viewed) })
         const repoId = get().activeRepoId
         // the picker reads this, and it has to say where the base actually is
@@ -1890,6 +2041,7 @@ export const useReview = create<ReviewState>((set, get) => {
           api.threads(next.id, true),
           api.viewed(next.id),
         ])
+        rememberSession(next)
         set({ session: next, threads, viewed: new Set(viewed) })
         const repoId = get().activeRepoId
         if (repoId !== null) {
@@ -1941,6 +2093,7 @@ export const useReview = create<ReviewState>((set, get) => {
       const repoId = get().activeRepoId
       if (repoId !== null) updateRepoSession(repoId, { files })
       if (fresh !== null && get().session?.id === session.id) {
+        rememberSession(fresh)
         set({ session: fresh })
         if (repoId !== null) updateRepoSession(repoId, { session: fresh })
       }

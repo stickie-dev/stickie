@@ -474,8 +474,27 @@ const default_submit_key = 'enter'
 const note_defaults = ['draft', 'comment'] as const
 const default_note_default = 'draft'
 
+/**
+ * Where a resolved note goes. `folded` keeps it in the diff as one line that
+ * can be opened; `gutter` takes it out of the flow of the code entirely and
+ * marks its line, so a file that has been worked through reads as code again.
+ */
+const resolved_notes_modes = ['folded', 'gutter'] as const
+const default_resolved_notes = 'folded'
+
 // extensions whose files open soft-wrapped; prose and data, not code
 const default_wrap_extensions = 'md,markdown,txt,rst,csv,log,json'
+
+/**
+ * Files that open folded in the diff: machine-written, enormous, and read only
+ * to check that they changed at all. One name or suffix per entry, matched
+ * against the file name — a lockfile is not a file anyone reads line by line,
+ * and twenty thousand lines of it between two source files is the whole review
+ * scrolled past.
+ */
+const default_collapsed_files =
+  'uv.lock,poetry.lock,package-lock.json,pnpm-lock.yaml,yarn.lock,Cargo.lock,' +
+  'go.sum,Gemfile.lock,composer.lock,.min.js,.min.css,.snap'
 
 /** An unknown or unset stored value falls back to the default. */
 function repinMode(stored: string | null): (typeof repin_modes)[number] {
@@ -2211,6 +2230,8 @@ export function createApp(
             promptInstructions: z.string(),
             defaultPromptInstructions: z.string(),
             wrapExtensions: z.string(),
+            collapsedFiles: z.string(),
+            defaultCollapsedFiles: z.string(),
             /** the command that points an MCP client at this server */
             mcpCommand: z.string(),
             /** who moves a review's base pin when it goes stale */
@@ -2221,6 +2242,7 @@ export function createApp(
             submitKey: z.enum(submit_keys),
             /** whether a new note is a draft or goes straight to the agent */
             noteDefault: z.enum(note_defaults),
+            resolvedNotes: z.enum(resolved_notes_modes),
             identity: z.object({
               /** '' when nothing was set by hand and git config decides */
               chosenName: z.string(),
@@ -2262,6 +2284,7 @@ export function createApp(
       const settings = await gitlabSettings()
       const config = gitlabConfig(settings)
       const stored_note_default = await store.getSetting('note_default')
+      const stored_resolved_notes = await store.getSetting('resolved_notes')
       return c.json(
         {
           gitlabUrl: settings.url,
@@ -2276,6 +2299,10 @@ export function createApp(
           wrapExtensions:
             (await store.getSetting('wrap_extensions')) ??
             default_wrap_extensions,
+          collapsedFiles:
+            (await store.getSetting('collapsed_files')) ??
+            default_collapsed_files,
+          defaultCollapsedFiles: default_collapsed_files,
           mcpCommand: mcpCommand(),
           repinMode: repinMode(await store.getSetting('repin_mode')),
           removeMode: removeMode(await store.getSetting('repo_remove_mode')),
@@ -2284,6 +2311,10 @@ export function createApp(
             note_defaults.find(
               (value) => value === stored_note_default,
             ) ?? default_note_default,
+          resolvedNotes:
+            resolved_notes_modes.find(
+              (value) => value === stored_resolved_notes,
+            ) ?? default_resolved_notes,
           identity: {
             chosenName: (await store.getSetting('actor_name')) ?? '',
             perRepo: await Promise.all(
@@ -2324,6 +2355,7 @@ export function createApp(
             gitlabTokenEnv: z.string().optional(),
             promptInstructions: z.string().optional(),
             wrapExtensions: z.string().optional(),
+            collapsedFiles: z.string().optional(),
             /** a postgres url, or '' to go back to the local sqlite file */
             databaseUrl: z.string().optional(),
             /** '' falls back to git config */
@@ -2332,6 +2364,7 @@ export function createApp(
             removeMode: z.enum(remove_modes).optional(),
             submitKey: z.enum(submit_keys).optional(),
             noteDefault: z.enum(note_defaults).optional(),
+            resolvedNotes: z.enum(resolved_notes_modes).optional(),
           }),
         ),
       },
@@ -2360,6 +2393,9 @@ export function createApp(
       if (body.wrapExtensions !== undefined) {
         await store.setSetting('wrap_extensions', body.wrapExtensions.trim())
       }
+      if (body.collapsedFiles !== undefined) {
+        await store.setSetting('collapsed_files', body.collapsedFiles.trim())
+      }
       if (body.repinMode !== undefined) {
         await store.setSetting('repin_mode', body.repinMode)
       }
@@ -2368,6 +2404,9 @@ export function createApp(
       }
       if (body.submitKey !== undefined) {
         await store.setSetting('submit_key', body.submitKey)
+      }
+      if (body.resolvedNotes !== undefined) {
+        await store.setSetting('resolved_notes', body.resolvedNotes)
       }
       if (body.noteDefault !== undefined) {
         await store.setSetting('note_default', body.noteDefault)

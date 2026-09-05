@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { editor } from 'monaco-editor'
 import type { Thread } from '@stickie/shared'
+import { monaco } from '../monacoSetup'
 import type { Draft } from '../store'
+import { useReview } from '../store'
 import { DraftForm } from './DraftForm'
 import { ThreadCard } from './ThreadCard'
 
@@ -27,9 +29,25 @@ interface Props {
 export function CommentLayer({ editorInstance, threads, drafts }: Props) {
   const [entries, setEntries] = useState<ZoneEntry[]>([])
   const entriesRef = useRef<ZoneEntry[]>([])
+  const resolvedNotes = useReview((s) => s.resolvedNotes)
+  const shownResolved = useReview((s) => s.shownResolved)
+  const showResolved = useReview((s) => s.showResolved)
+
+  /**
+   * A resolved note that has left the code: it is marked in the gutter on the
+   * line it was written against, and opens from there. Under the other setting
+   * it stays where it is and folds itself to one line.
+   */
+  const inGutter = (thread: Thread) =>
+    resolvedNotes === 'gutter' &&
+    thread.status === 'resolved' &&
+    shownResolved[thread.id] !== true
+
+  const shown = threads.filter((thread) => !inGutter(thread))
+  const marked = threads.filter(inGutter)
 
   const items: { key: string; line: number }[] = [
-    ...threads.map((t) => ({ key: `t${t.id}`, line: t.endLine })),
+    ...shown.map((t) => ({ key: `t${t.id}`, line: t.endLine })),
     ...drafts.map((d) => ({ key: `d${d.id}`, line: d.endLine })),
   ]
   // only which zones exist and where they sit; message text reaches the cards
@@ -91,6 +109,44 @@ export function CommentLayer({ editorInstance, threads, drafts }: Props) {
     }
   }, [editorInstance])
 
+  /**
+   * The marks themselves, and the click that opens one. Monaco owns the gutter,
+   * so this is a decoration rather than anything React can render — and the
+   * click has to be read off the editor for the same reason.
+   */
+  const marks = marked.map((t) => `${String(t.id)}:${String(t.endLine)}`).join('|')
+  useEffect(() => {
+    const instance = editorInstance
+    if (instance === null || marked.length === 0) return
+    const collection = instance.createDecorationsCollection(
+      marked.map((thread) => ({
+        range: new monaco.Range(thread.endLine, 1, thread.endLine, 1),
+        options: {
+          isWholeLine: false,
+          linesDecorationsClassName: 'stickie-resolved-mark',
+          linesDecorationsTooltip: 'a resolved note was written here — click to read it',
+        },
+      })),
+    )
+    const listener = instance.onMouseDown((event) => {
+      if (
+        event.target.type !==
+        monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS
+      ) {
+        return
+      }
+      const line = event.target.position?.lineNumber
+      if (line === undefined) return
+      for (const thread of marked) {
+        if (thread.endLine === line) showResolved(thread.id)
+      }
+    })
+    return () => {
+      collection.clear()
+      listener.dispose()
+    }
+  }, [editorInstance, marks, showResolved])
+
   const relayout = (key: string, height: number) => {
     if (editorInstance === null) return
     const entry = entriesRef.current.find((e) => e.key === key)
@@ -110,7 +166,7 @@ export function CommentLayer({ editorInstance, threads, drafts }: Props) {
               />
             ) : (
               <ThreadCard
-                thread={threads.find((t) => `t${t.id}` === entry.key)}
+                thread={shown.find((t) => `t${t.id}` === entry.key)}
               />
             )}
           </Measured>,

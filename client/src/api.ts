@@ -25,6 +25,13 @@ export type SubmitKey = 'enter' | 'mod-enter'
 export type NoteDefault = 'draft' | 'comment'
 
 /**
+ * Where a resolved note goes. `folded` leaves it in the diff as one line that
+ * opens; `gutter` takes it out of the code entirely and marks its line, so a
+ * file that has been worked through reads as code again.
+ */
+export type ResolvedNotes = 'folded' | 'gutter'
+
+/**
  * What removing a repository does to the reviews in it: delete them with it,
  * or keep them and let re-adding the path bring them back.
  */
@@ -47,6 +54,9 @@ export interface SettingsState {
   defaultPromptInstructions: string
   /** comma-separated extensions that open soft-wrapped */
   wrapExtensions: string
+  collapsedFiles: string
+  resolvedNotes: ResolvedNotes
+  defaultCollapsedFiles: string
   /** the command that points an MCP client at this server */
   mcpCommand: string
   repinMode: RepinMode
@@ -251,6 +261,8 @@ export const api = {
     gitlabTokenEnv?: string
     promptInstructions?: string
     wrapExtensions?: string
+    collapsedFiles?: string
+    resolvedNotes?: ResolvedNotes
     databaseUrl?: string
     actorName?: string
     repinMode?: RepinMode

@@ -12,11 +12,12 @@ import {
   setFlowScroller,
 } from '../flowNav'
 import { languageFor } from '../languages'
-import { useReview, wrapFor } from '../store'
+import { collapsedFor, useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
 import { FileName } from './FileName'
 import { Loading, SkeletonCode } from './Skeleton'
-import { btn, card } from '../ui'
+import { ChevronDown, ChevronRight } from '../icons'
+import { btn, card, icon_button } from '../ui'
 
 type Attach = (
   instance: editor.IStandaloneCodeEditor,
@@ -143,6 +144,13 @@ function DiffSection({
     )
 
   const collapseUnchanged = useReview((s) => s.collapseUnchanged)
+  // folded away: a lockfile, or a file the reader has finished with. The
+  // editors are not mounted at all while it is folded, which is the point —
+  // twenty thousand lines of uv.lock cost nothing to skip
+  const folded = useReview((s) =>
+    collapsedFor(file.path, s.collapsedFiles, s.collapseFileOverrides),
+  )
+  const toggleFileCollapsed = useReview((s) => s.toggleFileCollapsed)
   // only the file a match or a reference landed in opens; moving on folds it
   const expanded = useReview((s) => s.expandFor === file.path)
   const binary = base?.binary === true || source?.binary === true
@@ -195,7 +203,22 @@ function DiffSection({
     // only thing saying where one ends and the next begins was a hairline,
     // and a sticky header sliding over it read as part of the file above
     <section ref={containerRef} className={`mb-3 ${card}`}>
-      <div className="sticky top-0 z-20 flex items-center gap-3 rounded-t-lg border-b border-edge bg-panel px-3 py-1.5 text-xs">
+      <div
+        className={`sticky top-0 z-20 flex items-center gap-3 rounded-t-lg bg-panel px-3 py-1.5 text-xs ${folded ? '' : 'border-b border-edge'}`}
+      >
+        {/* a real target, not a glyph: this is the control the reader reaches
+            for most in a long diff, and 6px of text was a dart board. The
+            negative margins lay its padding over the header's own, so the
+            target is 28px while the header stays the height of its text —
+            twenty file headers a row taller each is a screen of lost code */}
+        <button
+          className={`-my-1.5 -ml-1.5 shrink-0 ${icon_button}`}
+          title={folded ? 'show this file' : 'fold this file away'}
+          aria-expanded={!folded}
+          onClick={() => toggleFileCollapsed(file.path)}
+        >
+          {folded ? <ChevronRight /> : <ChevronDown />}
+        </button>
         <FileName path={file.path} />
         <span className="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-soft">
           {file.status}
@@ -217,7 +240,15 @@ function DiffSection({
           {wrap ? 'no wrap' : 'wrap'}
         </button>
       </div>
-      {!loaded && (
+      {folded && (
+        <button
+          className="w-full px-3 py-1.5 text-left text-xs text-faint hover:text-ink"
+          onClick={() => toggleFileCollapsed(file.path)}
+        >
+          folded — click to show
+        </button>
+      )}
+      {!folded && !loaded && (
         // only once it is near the viewport: a silhouette for each of twenty
         // files below the fold is twenty animations nobody is looking at
         <div className="h-24 overflow-hidden">
@@ -228,12 +259,12 @@ function DiffSection({
           )}
         </div>
       )}
-      {loaded && binary && (
+      {!folded && loaded && binary && (
         <div className="flex h-16 items-center justify-center text-xs text-faint">
           Binary file
         </div>
       )}
-      {loaded && !binary && has_both && (
+      {!folded && loaded && !binary && has_both && (
         <div className="overflow-hidden rounded-b-lg" style={{ height }}>
           <DiffEditor
             original={base?.content ?? ''}
@@ -277,7 +308,7 @@ function DiffSection({
           />
         </div>
       )}
-      {loaded && !binary && !has_both && single_content != null && (
+      {!folded && loaded && !binary && !has_both && single_content != null && (
         <div className="overflow-hidden rounded-b-lg" style={{ height }}>
           <Editor
             value={single_content}

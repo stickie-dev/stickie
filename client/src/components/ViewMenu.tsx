@@ -72,6 +72,8 @@ export function ViewMenu() {
   const copyPrompt = useReview((s) => s.copyPrompt)
   const promptCopied = useReview((s) => s.promptCopied)
   const session = useReview((s) => s.session)
+  const resolvedNotes = useReview((s) => s.resolvedNotes)
+  const setResolvedNotes = useReview((s) => s.setResolvedNotes)
   const ref = useRef<HTMLDivElement>(null)
 
   // a menu in normal document flow, so pointerdown outside it closes it —
@@ -152,6 +154,22 @@ export function ViewMenu() {
               onClick={() => setCollapseUnchanged(false)}
             >
               Shown
+            </Choice>
+          </Group>
+          <Group label="Resolved notes">
+            <Choice
+              on={resolvedNotes === 'folded'}
+              title="folded to one line, where they were written"
+              onClick={() => void setResolvedNotes('folded')}
+            >
+              In the diff
+            </Choice>
+            <Choice
+              on={resolvedNotes === 'gutter'}
+              title="out of the code, as a mark on the line they were written against — click one to read it"
+              onClick={() => void setResolvedNotes('gutter')}
+            >
+              In the gutter
             </Choice>
           </Group>
           <Group label="This review">

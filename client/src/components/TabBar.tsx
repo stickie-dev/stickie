@@ -24,7 +24,7 @@ export function TabBar() {
   const activateTab = useReview((s) => s.activateTab)
   const closeTab = useReview((s) => s.closeTab)
   const repos = useReview((s) => s.repos)
-  const reviews = useReview((s) => s.repoSessions)
+  const reviews = useReview((s) => s.sessionsById)
   const navBack = useReview((s) => s.navBack)
   const navForward = useReview((s) => s.navForward)
   const canBack = useReview((s) => s.navIndex > 0)
@@ -42,43 +42,49 @@ export function TabBar() {
    * of a repo's tabs can be open at once, so "repo · diff" was not enough to
    * tell two of them apart — nor to say what the one you are looking at is of.
    */
-  const reviewOf = (repoId: number) => reviews[repoId]?.session ?? null
+  const reviewOf = (reviewId: number) => reviews[reviewId] ?? null
 
-  const whichReview = (repoId: number): string => {
-    const review = reviewOf(repoId)
-    if (review === null) return repoName(repoId)
-    const where =
-      review.source.kind === 'worktree' ? 'working tree' : 'branch'
+  const whichReview = (tab: Tab): string => {
+    const review = reviewOf(tab.reviewId)
+    if (review === null) return repoName(tab.repoId)
+    const where = review.source.kind === 'worktree' ? 'working tree' : 'branch'
     return (
-      `${repoName(repoId)} — ${review.branch} (${where}), ` +
+      `${repoName(tab.repoId)} — ${review.branch} (${where}), ` +
       `read against ${review.baseRef} @ ${review.baseSha.slice(0, 8)}`
     )
   }
 
+  // grouped by review, not by repository: the same file open on two branches
+  // of one repository is two tabs, and "the repository" names both of them
   const file_labels = tabLabels(
     tabs.flatMap((tab) =>
       tab.kind === 'file' && tab.path !== undefined
-        ? [{ id: tab.id, repoId: tab.repoId, path: tab.path }]
+        ? [{ id: tab.id, groupId: tab.reviewId, path: tab.path }]
         : [],
     ),
-    repoName,
+    (reviewId) => {
+      const review = reviewOf(reviewId)
+      const repo = tabs.find((t) => t.reviewId === reviewId)?.repoId
+      const name = repo === undefined ? '?' : repoName(repo)
+      return review === null ? name : `${name} · ${review.branch}`
+    },
   )
 
   // the branch, not the word "diff": what a diff tab shows is one branch's
   // work, and the repo alone does not say which
   const labelOf = (tab: Tab) =>
     tab.kind === 'flow'
-      ? `${repoName(tab.repoId)} · ${reviewOf(tab.repoId)?.branch ?? 'diff'}`
+      ? `${repoName(tab.repoId)} · ${reviewOf(tab.reviewId)?.branch ?? 'diff'}`
       : tab.kind === 'commits'
         ? `${repoName(tab.repoId)} · commits`
         : (file_labels.get(tab.id) ?? tab.path ?? '')
 
   const titleOf = (tab: Tab) =>
     tab.kind === 'flow'
-      ? `continuous diff review of ${whichReview(tab.repoId)}`
+      ? `continuous diff review of ${whichReview(tab)}`
       : tab.kind === 'commits'
-        ? `selected commits as a timeline — ${whichReview(tab.repoId)}`
-        : `${tab.path ?? ''}\nin ${whichReview(tab.repoId)}`
+        ? `selected commits as a timeline — ${whichReview(tab)}`
+        : `${tab.path ?? ''}\nin ${whichReview(tab)}`
 
   // widths are remembered per label, so a tab hidden in the dropdown still
   // counts for the same room when it comes back

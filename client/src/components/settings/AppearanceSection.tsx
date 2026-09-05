@@ -28,11 +28,13 @@ export function AppearanceSection({ state, save, saving }: SettingsAccess) {
   const fontScale = useReview((s) => s.fontScale)
   const setFontScale = useReview((s) => s.setFontScale)
   const wrap = useFieldValue(state?.wrapExtensions)
+  const collapsed = useFieldValue(state?.collapsedFiles)
+  const setCollapsedFiles = useReview((s) => s.setCollapsedFiles)
 
   return (
     <Section
       title="Appearance"
-      blurb="Light and dark themes built for diffs, and which file types open soft-wrapped."
+      blurb="Light and dark themes built for diffs, which file types open soft-wrapped, and which open folded away."
     >
       <Field label="Theme">
         <button
@@ -84,6 +86,25 @@ export function AppearanceSection({ state, save, saving }: SettingsAccess) {
           onBlur={() => {
             if (wrap.dirty) {
               void save({ wrapExtensions: wrap.value }, { quiet: true })
+            }
+          }}
+        />
+      </Field>
+
+      <Field
+        label="Open these files folded (comma separated)"
+        hint="Machine-written files, matched by name or by ending — a lockfile is read to see that it changed, not line by line, and twenty thousand lines of one between two source files is the whole review scrolled past. Any file folds and unfolds from the arrow in its header."
+      >
+        <input
+          className={field_classes}
+          placeholder="uv.lock,pnpm-lock.yaml,.min.js"
+          value={collapsed.value}
+          onChange={(e) => collapsed.setValue(e.target.value)}
+          onBlur={() => {
+            if (collapsed.dirty) {
+              // the diff reads this from the store, not from the settings page
+              setCollapsedFiles(collapsed.value)
+              void save({ collapsedFiles: collapsed.value }, { quiet: true })
             }
           }}
         />

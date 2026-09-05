@@ -14,6 +14,13 @@ const drafts_key = 'stickie-drafts'
 interface StoredTab {
   kind: Tab['kind']
   repo: string
+  /**
+   * The review the tab was of. Repository ids differ between machines, which
+   * is why the repo is stored as a path — a review id does not: it names a row
+   * in the same local database the rest of this client talks to, and a tab
+   * whose review is gone is dropped on the way back in.
+   */
+  review: number
   path?: string
 }
 
@@ -46,7 +53,8 @@ function readTabs(): { tabs: StoredTab[]; active: number } | null {
       ((entry as StoredTab).kind === 'flow' ||
         (entry as StoredTab).kind === 'file' ||
         (entry as StoredTab).kind === 'commits') &&
-      typeof (entry as StoredTab).repo === 'string',
+      typeof (entry as StoredTab).repo === 'string' &&
+      typeof (entry as StoredTab).review === 'number',
   )
   return {
     tabs,
@@ -84,6 +92,9 @@ export function storeTabs(
         {
           kind: tab.kind,
           repo: repo.path,
+          // a tab is of one review, and a repository has one per branch: the
+          // path alone would reopen whichever of them happened to be current
+          review: tab.reviewId,
           ...(tab.path === undefined ? {} : { path: tab.path }),
         },
       ]

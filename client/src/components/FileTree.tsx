@@ -3,6 +3,7 @@ import type { ChangedFile } from '@stickie/shared'
 import { fileIconUrl, folderIconUrl } from '../fileIcons'
 import { repoFiles, useReview } from '../store'
 import { Loading, Skeleton } from './Skeleton'
+import { ChevronDown, ChevronRight } from '../icons'
 import { field, motion } from '../ui'
 
 const status_letter: Record<ChangedFile['status'], string> = {
@@ -233,8 +234,8 @@ function RepoNode({ repoId }: { repoId: number }) {
           className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-overlay"
           onClick={() => toggleDir(dir.path)}
         >
-          <span className="w-2 shrink-0 text-faint">
-            {collapsed.has(dir.path) ? '▸' : '▾'}
+          <span className="shrink-0 text-faint [&>svg]:h-3.5 [&>svg]:w-3.5">
+            {collapsed.has(dir.path) ? <ChevronRight /> : <ChevronDown />}
           </span>
           {(() => {
             const icon = folderIconUrl(dir.name, !collapsed.has(dir.path))
@@ -264,11 +265,12 @@ function RepoNode({ repoId }: { repoId: number }) {
         className={`group flex w-full items-center gap-1.5 px-2 py-1 ${is_active ? 'bg-overlay' : 'hover:bg-overlay'}`}
       >
         <button
-          className="w-2 shrink-0 text-faint hover:text-ink"
+          className={`-my-1 shrink-0 rounded-sm p-1 text-faint hover:bg-overlay hover:text-ink [&>svg]:h-3.5 [&>svg]:w-3.5 ${motion}`}
           title={expanded ? 'collapse' : 'expand'}
+          aria-expanded={expanded}
           onClick={() => toggleRepoExpanded(repoId)}
         >
-          {expanded ? '▾' : '▸'}
+          {expanded ? <ChevronDown /> : <ChevronRight />}
         </button>
         <button
           className="flex min-w-0 grow items-center gap-1.5 text-left"

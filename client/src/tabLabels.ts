@@ -2,12 +2,17 @@
  * Tab labels in the PyCharm manner: a bare file name until two open tabs
  * share one, and then only as much path as it takes to tell them apart —
  * the first segment where they diverge, the file's own folder when that is
- * still not enough, and a repository name when the paths are identical.
+ * still not enough, and the name of what holds it when the paths are identical.
+ *
+ * That last one is a *group*, not a repository: two reviews of one repository
+ * can both have the same file open — one branch each — and "the repository" is
+ * then the same answer twice.
  */
 
 export interface LabelledTab {
   id: number
-  repoId: number
+  /** what this tab belongs to: one review, named by `groupName` below */
+  groupId: number
   path: string
 }
 
@@ -61,7 +66,7 @@ function collisions(labels: Map<number, string>): Set<number> {
 
 export function tabLabels(
   tabs: LabelledTab[],
-  repoName: (repoId: number) => string,
+  groupName: (groupId: number) => string,
 ): Map<number, string> {
   const labels = new Map<number, string>()
   const groups = new Map<string, LabelledTab[]>()
@@ -88,19 +93,19 @@ export function tabLabels(
     }
     for (const members of clusters.values()) {
       if (members.length < 2) continue
-      // the same path in two repositories has no folder left to add
+      // the same path in two places has no folder left to add
       if (new Set(members.map((tab) => tab.path)).size === 1) continue
       for (const tab of members) {
         group_labels.set(tab.id, label(tab.path, at, true))
       }
     }
-    // identical paths in different repositories: the repository is the answer
+    // identical paths in two places: what holds them is the answer
     for (const id of collisions(group_labels)) {
       const tab = group.find((entry) => entry.id === id)
       if (tab === undefined) continue
       group_labels.set(
         id,
-        `${repoName(tab.repoId)}:${group_labels.get(id) ?? base}`,
+        `${groupName(tab.groupId)}:${group_labels.get(id) ?? base}`,
       )
     }
     for (const [id, text] of group_labels) labels.set(id, text)

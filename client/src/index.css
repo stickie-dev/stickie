@@ -190,6 +190,33 @@
 }
 
 /*
+ * A resolved note that has left the code, under the gutter setting: a mark on
+ * the line it was written against, which opens it.
+ *
+ * It is drawn in monaco's line-decorations column, which is the only place a
+ * mark can sit beside a line without taking a column of its own from the code.
+ * Muted rather than coloured: the note is answered, and this is a footnote to
+ * the line, not a thing demanding attention.
+ */
+.stickie-resolved-mark {
+  cursor: pointer;
+}
+
+.stickie-resolved-mark::after {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: 6px auto 0;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--ink) 32%, transparent);
+}
+
+.stickie-resolved-mark:hover::after {
+  background: var(--accent);
+}
+
+/*
  * A scrollbar appearing must not move a centred column.
  *
  * The overview and settings centre their content in the window, so when one of

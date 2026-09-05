@@ -9,7 +9,7 @@ import { setFileEditor } from '../cursor'
 import { flowJump, markFlowClick } from '../flowNav'
 import { languageFor } from '../languages'
 import { formatRoute } from '../routes'
-import { activeFiles, fontShift, useReview, wrapFor } from '../store'
+import { activeFiles, collapsedFor, fontShift, useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
 import { CommitTimeline } from './CommitTimeline'
 import { ContinuousDiff } from './ContinuousDiff'
@@ -488,9 +488,19 @@ export function FileView() {
         case 'n':
         case 'p': {
           if (state.viewMode === 'flow') {
+            // a folded file has no editors to step through, and skipping it
+            // is what folding it asked for
             flowJump(
               event.key === 'n' ? 'next' : 'prev',
-              paths,
+              paths.filter(
+                (path) =>
+                  path === state.selectedPath ||
+                  !collapsedFor(
+                    path,
+                    state.collapsedFiles,
+                    state.collapseFileOverrides,
+                  ),
+              ),
               state.selectedPath,
               (path) => state.flowSelect(path),
             )

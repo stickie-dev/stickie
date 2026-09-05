@@ -33,19 +33,15 @@ function tabRef(tab: Tab): TabRef | null {
 function useHere(): Here | null {
   const tabs = useReview((s) => s.tabs)
   const activeTabId = useReview((s) => s.activeTabId)
-  const repoSessions = useReview((s) => s.repoSessions)
   return useMemo(() => {
     const tab = tabs.find((entry) => entry.id === activeTabId)
     if (tab === undefined) return null
     const ref = tabRef(tab)
-    // a tab belongs to a repository; which of that repository's reviews it is
-    // showing is whichever one it currently has open, so the address follows
-    // the source and base pickers without them knowing about addresses
-    const reviewId = repoSessions[tab.repoId]?.sessionId
-    return ref === null || reviewId === undefined
-      ? null
-      : { reviewId, tab: ref }
-  }, [tabs, activeTabId, repoSessions])
+    // the tab says which review it is of, so the address is the tab's own —
+    // it used to be looked up by repository, which meant two tabs of one
+    // repository could only ever have the same address
+    return ref === null ? null : { reviewId: tab.reviewId, tab: ref }
+  }, [tabs, activeTabId])
 }
 
 function signature(here: Here | null): string {
