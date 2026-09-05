@@ -16,7 +16,7 @@ import { useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
 import { FileName } from './FileName'
 import { Loading, SkeletonCode } from './Skeleton'
-import { btn } from '../ui'
+import { btn, card } from '../ui'
 
 type Attach = (
   instance: editor.IStandaloneCodeEditor,
@@ -143,7 +143,8 @@ function DiffSection({
     )
 
   const collapseUnchanged = useReview((s) => s.collapseUnchanged)
-  const finding = useReview((s) => s.findOpen && s.findMatches.length > 0)
+  // only the file a match or a reference landed in opens; moving on folds it
+  const expanded = useReview((s) => s.expandFor === file.path)
   const binary = base?.binary === true || source?.binary === true
   const has_any = base?.content != null || source?.content != null
   // side-by-side renders one-sided files as a diff so added content sits
@@ -177,6 +178,9 @@ function DiffSection({
     wordWrap: wrap ? 'on' : 'off',
     rulers: wrap ? [] : [80, 100, 120],
     scrollBeyondLastLine: false,
+    // the card clips its bottom corners, which would take the context menu and
+    // the hover widgets with it; these render against the body instead
+    fixedOverflowWidgets: true,
     scrollbar: {
       vertical: 'hidden',
       horizontal: 'auto',
@@ -187,8 +191,11 @@ function DiffSection({
   }
 
   return (
-    <section ref={containerRef} className="border-b border-edge">
-      <div className="sticky top-0 z-20 flex items-center gap-3 border-y border-edge bg-panel px-3 py-1.5 text-xs">
+    // a card per file rather than one unbroken column: at twenty files the
+    // only thing saying where one ends and the next begins was a hairline,
+    // and a sticky header sliding over it read as part of the file above
+    <section ref={containerRef} className={`mb-3 ${card}`}>
+      <div className="sticky top-0 z-20 flex items-center gap-3 rounded-t-lg border-b border-edge bg-panel px-3 py-1.5 text-xs">
         <FileName path={file.path} />
         <span className="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-soft">
           {file.status}
@@ -227,7 +234,7 @@ function DiffSection({
         </div>
       )}
       {loaded && !binary && has_both && (
-        <div style={{ height }}>
+        <div className="overflow-hidden rounded-b-lg" style={{ height }}>
           <DiffEditor
             original={base?.content ?? ''}
             modified={source?.content ?? ''}
@@ -241,7 +248,7 @@ function DiffSection({
               hideUnchangedRegions: {
                 // a find match can sit in an unchanged region, and a region
                 // that is folded away cannot show it
-                enabled: collapseUnchanged && !finding,
+                enabled: collapseUnchanged && !expanded,
                 contextLineCount: 3,
                 minimumLineCount: 5,
                 revealLineCount: 20,
@@ -271,7 +278,7 @@ function DiffSection({
         </div>
       )}
       {loaded && !binary && !has_both && single_content != null && (
-        <div style={{ height }}>
+        <div className="overflow-hidden rounded-b-lg" style={{ height }}>
           <Editor
             value={single_content}
             language={language}
@@ -464,7 +471,7 @@ export function ContinuousDiff({
   return (
     <div
       ref={scrollerRef}
-      className="h-full overflow-y-auto"
+      className="h-full overflow-y-auto px-2 pt-2"
       onScroll={(e) => {
         if (!restoringRef.current) {
           flow_scroll.set(repoId, e.currentTarget.scrollTop)

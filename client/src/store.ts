@@ -18,6 +18,7 @@ import type {
   RepinMode,
   SubmitKey,
 } from './api'
+import { cursorLine } from './cursor'
 import { cachedFile, prefetchFile } from './fileCache'
 import { flowReveal } from './flowNav'
 import type { Haystack, Match } from './find'
@@ -62,6 +63,8 @@ export interface NavEntry {
   repoId: number
   path: string
   line: number
+  /** the view the reader was in; going back to the other one is not going back */
+  mode: 'flow' | 'file'
 }
 
 const nav_history_cap = 50
@@ -304,6 +307,15 @@ interface ReviewState {
   findAt: number
   findCapped: boolean
   findBusy: boolean
+  /**
+   * One file held open against `collapseUnchanged`, because a match or a
+   * reference landed in a region that is folded away and a folded region
+   * cannot show it. One path, not a flag: expanding every file to reach a
+   * match in one of them makes the reader scroll past twenty whole files, and
+   * moving on has to fold the last one back. It never writes
+   * `collapseUnchanged` — that is the reader's setting, not a scratch pad.
+   */
+  expandFor: string | null
   openFind: (open: boolean) => void
   setFindQuery: (query: string) => Promise<void>
   setFindCase: (on: boolean) => Promise<void>
@@ -311,6 +323,7 @@ interface ReviewState {
   goToMatch: (index: number) => Promise<void>
   collapseUnchanged: boolean
   setCollapseUnchanged: (collapse: boolean) => void
+  setExpandFor: (path: string | null) => void
   setActiveReply: (threadId: number | null) => void
   updateReplyDraft: (threadId: number, body: string) => void
   cancelDraft: (id: number) => void
@@ -763,22 +776,44 @@ export const useReview = create<ReviewState>((set, get) => {
     return tab
   }
 
+  /**
+   * Writes the reader's live cursor into the entry they are leaving. Entries
+   * are made when a file *opens*, which is before the reader has gone anywhere
+   * in it — so without this every entry says line 1 and going back lands at the
+   * top of a file the reader had read halfway down.
+   */
+  function stampCurrentNav(): void {
+    const { navHistory, navIndex } = get()
+    const current = navHistory[navIndex]
+    if (current === undefined) return
+    // asked of the entry's own file, not of `selectedPath`: both callers set
+    // the path they are moving *to* before recording, so a guard on the open
+    // file never matches. A file nothing is showing answers null.
+    const line = cursorLine(current.path, current.mode)
+    if (line === null || line === current.line) return
+    const entries = [...navHistory]
+    entries[navIndex] = { ...current, line }
+    set({ navHistory: entries })
+  }
+
   function recordNav(path: string, line: number): void {
     if (nav_restoring) return
     const { activeRepoId, navHistory, navIndex } = get()
     if (activeRepoId === null) return
-    const current = navHistory[navIndex]
+    stampCurrentNav()
+    const mode: NavEntry['mode'] = get().viewMode === 'flow' ? 'flow' : 'file'
+    const current = get().navHistory[navIndex]
     if (
       current !== undefined &&
       current.repoId === activeRepoId &&
       current.path === path &&
-      current.line === line
+      current.mode === mode
     ) {
       return
     }
     const entries = [
-      ...navHistory.slice(0, navIndex + 1),
-      { repoId: activeRepoId, path, line },
+      ...get().navHistory.slice(0, navIndex + 1),
+      { repoId: activeRepoId, path, line, mode },
     ].slice(-nav_history_cap)
     set({ navHistory: entries, navIndex: entries.length - 1 })
   }
@@ -788,13 +823,22 @@ export const useReview = create<ReviewState>((set, get) => {
     index: number,
   ): Promise<void> {
     if (entry === undefined) return
+    stampCurrentNav()
     nav_restoring = true
     try {
       if (entry.repoId !== get().activeRepoId) {
         await get().selectRepo(entry.repoId)
       }
-      await get().openFile(entry.path)
-      set({ reveal: { path: entry.path, line: entry.line }, navIndex: index })
+      // the flow and the single file are different places to be, and coming
+      // back to the other one is not coming back
+      if (entry.mode === 'flow') {
+        get().flowSelect(entry.path)
+        flowReveal(entry.path, entry.line)
+      } else {
+        await get().openFile(entry.path)
+        set({ reveal: { path: entry.path, line: entry.line } })
+      }
+      set({ navIndex: index })
     } finally {
       nav_restoring = false
     }
@@ -839,6 +883,7 @@ export const useReview = create<ReviewState>((set, get) => {
     findAt: 0,
     findCapped: false,
     findBusy: false,
+    expandFor: null,
     usages: null,
     toasts: [],
     navHistory: [],
@@ -1100,6 +1145,7 @@ export const useReview = create<ReviewState>((set, get) => {
 
     flowSelect: (path) => {
       const { activeRepoId } = get()
+      if (get().expandFor !== path) set({ expandFor: null })
       const files = activeFiles(get())
       const flow_tab =
         activeRepoId === null ? null : ensureFlowTab(activeRepoId)
@@ -1331,6 +1377,7 @@ export const useReview = create<ReviewState>((set, get) => {
     openFile: async (path, status) => {
       const { session, contentEpoch } = get()
       if (session === null) return
+      if (get().expandFor !== path) set({ expandFor: null })
       const files = activeFiles(get())
       const resolved = status ?? statusOf(files, path)
       // the draft survives navigation so other files can be browsed and
@@ -1475,7 +1522,7 @@ export const useReview = create<ReviewState>((set, get) => {
       set({ findOpen: open })
       // the query survives closing: reopening to look for the same thing again
       // is the common case, and it costs nothing to remember
-      if (!open) set({ findAt: 0 })
+      if (!open) set({ findAt: 0, expandFor: null })
     },
 
     setFindQuery: async (query) => {
@@ -1506,12 +1553,15 @@ export const useReview = create<ReviewState>((set, get) => {
         // the flow scrolls itself and its editors are its own, so it reveals
         // through flowNav rather than through the single view's `reveal`
         if (match.path !== get().selectedPath) get().flowSelect(match.path)
+        // after flowSelect, which clears the file it was holding open
+        set({ expandFor: match.path })
         flowReveal(match.path, match.line, select)
         return
       }
       if (match.path !== get().selectedPath) {
         await get().openFile(match.path).catch(() => undefined)
       }
+      set({ expandFor: match.path })
       set({
         reveal: {
           path: match.path,
@@ -1522,7 +1572,10 @@ export const useReview = create<ReviewState>((set, get) => {
       })
     },
 
-    setCollapseUnchanged: (collapse) => set({ collapseUnchanged: collapse }),
+    setCollapseUnchanged: (collapse) =>
+      set({ collapseUnchanged: collapse, expandFor: null }),
+
+    setExpandFor: (path) => set({ expandFor: path }),
 
     setActiveDraft: (id) => {
       if (get().drafts.some((d) => d.id === id)) {

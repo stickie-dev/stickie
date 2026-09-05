@@ -5,6 +5,7 @@ import { editor_font, monaco } from '../monacoSetup'
 import type { ChangedFile, Side } from '@stickie/shared'
 import { api } from '../api'
 import type { NavHit } from '../api'
+import { setFileEditor } from '../cursor'
 import { flowJump, markFlowClick } from '../flowNav'
 import { languageFor } from '../languages'
 import { formatRoute } from '../routes'
@@ -402,8 +403,8 @@ export function FileView() {
   const width = useWindowWidth()
   const sideBySideChoice = useReview((s) => s.sideBySide)
   const collapseUnchanged = useReview((s) => s.collapseUnchanged)
-  const finding = useReview((s) => s.findOpen && s.findMatches.length > 0)
-  const setCollapseUnchanged = useReview((s) => s.setCollapseUnchanged)
+  const expanded = useReview((s) => s.expandFor === s.selectedPath)
+  const setExpandFor = useReview((s) => s.setExpandFor)
   const [captureTarget, setCaptureTarget] = useState<CaptureTarget | null>(
     null,
   )
@@ -542,6 +543,15 @@ export function FileView() {
     return () => window.removeEventListener('keydown', onKey)
   }, [diffEditor])
 
+  // the nav history asks this view where the reader's cursor is; it cannot
+  // reach into a component's state, so the editor showing the file says so
+  useEffect(() => {
+    const instance = modifiedEditor ?? singleEditor
+    if (selectedPath === null || instance === null) return
+    setFileEditor(selectedPath, instance)
+    return () => setFileEditor(selectedPath, null)
+  }, [selectedPath, modifiedEditor, singleEditor])
+
   const sideBySide = sideBySideChoice ?? width >= side_by_side_min_width
   const monaco_theme = theme === 'dark' ? 'stickie-dark' : 'stickie-light'
 
@@ -565,10 +575,16 @@ export function FileView() {
     ) {
       return
     }
-    // a collapsed unchanged region swallows reveals into it; expand first
-    // and let the effect re-run once the option has applied
-    if (collapseUnchanged && (modifiedEditor !== null || originalEditor !== null)) {
-      setCollapseUnchanged(false)
+    // a collapsed unchanged region swallows reveals into it; hold this one
+    // file open and let the effect re-run once the option has applied. It used
+    // to turn `collapseUnchanged` off outright, which answered the reader's
+    // setting for them and never put it back
+    if (
+      collapseUnchanged &&
+      !expanded &&
+      (modifiedEditor !== null || originalEditor !== null)
+    ) {
+      setExpandFor(reveal.path)
       return
     }
     const timer = setTimeout(() => {
@@ -597,6 +613,8 @@ export function FileView() {
     content_ready,
     clearReveal,
     collapseUnchanged,
+    expanded,
+    setExpandFor,
     modifiedEditor,
     originalEditor,
   ])
@@ -781,7 +799,7 @@ export function FileView() {
                 ...editorOptions(width, wrap, shift),
                 renderSideBySide: sideBySide,
                 hideUnchangedRegions: {
-                  enabled: collapseUnchanged && !finding,
+                  enabled: collapseUnchanged && !expanded,
                   contextLineCount: 2,
                   minimumLineCount: 4,
                   revealLineCount: 20,

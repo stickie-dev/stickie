@@ -126,6 +126,12 @@ export function registerFlowEditors(
   }
 }
 
+/** The cursor's line in one file of the flow, if that file has mounted. */
+export function flowCursorLine(path: string): number | null {
+  const entry = entries.get(path)
+  return entry?.modified?.getPosition()?.lineNumber ?? null
+}
+
 /** Modified-side start line of every change; one-sided files count as one. */
 function changeStarts(entry: Entry): number[] {
   if (entry.diff === null) return entry.modified === null ? [] : [1]
