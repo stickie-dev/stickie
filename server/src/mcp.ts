@@ -43,6 +43,19 @@ function claiming(actor: unknown): string {
   return `author=agent${name === '' ? '' : `&actor=${encodeURIComponent(name)}`}`
 }
 
+/**
+ * Which shape an answer comes back in, where there are two of them.
+ *
+ * JSON by default: what reads this is not always the agent. A surface
+ * rendering a review's own list cannot get structure back out of prose, while
+ * an agent can read either — so the one that loses information is the one that
+ * has to be asked for.
+ */
+const format_input = z
+  .enum(['json', 'markdown'])
+  .optional()
+  .describe('markdown to read, json (the default) to render or filter')
+
 const actor_input = z
   .string()
   .max(64)
@@ -65,21 +78,60 @@ export const tools: McpTool[] = [
   {
     name: 'list_reviews',
     description:
-      'List review sessions, newest first, with the repository under review ' +
-      'and how many notes are waiting. Start here when no session id is known.',
+      'List reviews, newest first: the branch each is of, where its code is, ' +
+      'the base it is read against and how many notes are waiting. Start ' +
+      'here when no review id is known. The filters match loosely, so pass ' +
+      'the working directory you are in and the branch you are on rather ' +
+      'than listing everything and reading through it.',
     readOnly: true,
-    input: z.object({}),
-    request: () => ({ method: 'GET', path: '/api/sessions' }),
+    input: z.object({
+      repo: z
+        .string()
+        .optional()
+        .describe(
+          'part of a repository path or name — a working directory does, ' +
+            'including one inside a worktree',
+        ),
+      branch: z.string().optional().describe('part of a branch name'),
+      withNotes: z
+        .boolean()
+        .optional()
+        .describe('only reviews with notes waiting on them'),
+      format: format_input,
+    }),
+    request: (args) => {
+      const markdown = args.format === 'markdown'
+      const query = new URLSearchParams(markdown ? { format: 'markdown' } : {})
+      if (typeof args.repo === 'string') query.set('repo', args.repo)
+      if (typeof args.branch === 'string') query.set('branch', args.branch)
+      if (args.withNotes === true) query.set('with_notes', '1')
+      const search = query.toString()
+      return {
+        method: 'GET',
+        path: `/api/sessions${search === '' ? '' : `?${search}`}`,
+        ...(markdown ? { text: true } : {}),
+      }
+    },
   },
   {
     name: 'get_review_notes',
     description:
-      'The work order for one review as markdown: every unresolved note with ' +
-      'its location, the code as captured, referenced code, and the ' +
-      'discussion so far. Line numbers are re-anchored at read time.',
+      'One review as a work order to act on: every unresolved note — its ' +
+      'location, the code as captured, referenced code and the discussion so ' +
+      'far — merged with the reviewer\'s own instructions for how to answer ' +
+      'them. Markdown, because it is the two of those written into one ' +
+      'thing. Line numbers are re-anchored at read time. For the notes ' +
+      'alone, as data, use `list_notes`.',
     readOnly: true,
     input: z.object({
       sessionId: z.number().int().describe('id from list_reviews'),
+      includeResolved: z
+        .boolean()
+        .optional()
+        .describe(
+          'also the notes already answered; omit while working through what ' +
+            'is outstanding',
+        ),
       actor: actor_input,
     }),
     // reading the notes is recorded, and an agent fetching them for itself is
@@ -88,17 +140,21 @@ export const tools: McpTool[] = [
       method: 'GET',
       path:
         `/api/sessions/${String(args.sessionId)}/prompt` +
-        `?include_pending=0&${claiming(args.actor)}`,
+        `?include_pending=0${args.includeResolved === true ? '&include_resolved=1' : ''}` +
+        `&${claiming(args.actor)}`,
       text: true,
     }),
   },
   {
     name: 'list_notes',
     description:
-      'The same notes as structured JSON — numbers, paths, line ranges, ' +
-      'status, messages — for filtering or exact line work. `number` is what ' +
-      'the reply and resolve tools take. Status `detached` means the code a ' +
-      'note was written against is gone: ask, never guess.',
+      'The notes alone as structured JSON — numbers, paths, line ranges, ' +
+      'status, messages — re-anchored the same way, for rendering, filtering ' +
+      'or exact line work. It carries no instructions: `get_review_notes` is ' +
+      'the one that merges those in, and is what to read when the task is to ' +
+      'answer the review rather than to display it. `number` is what the ' +
+      'reply and resolve tools take. Status `detached` means the code a note ' +
+      'was written against is gone: ask, never guess.',
     readOnly: true,
     input: session_id.extend({
       status: z

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { NoteDefault } from '../api'
 import { postsComment } from '../keys'
-import type { Draft } from '../store'
+import type { Draft, DraftSurface } from '../store'
 import { useReview } from '../store'
 import { GrowingTextarea } from './GrowingTextarea'
 import { btn, field_flush } from '../ui'
@@ -86,6 +86,9 @@ export function DraftForm({
   const submitDraft = useReview((s) => s.submitDraft)
   const cancelDraft = useReview((s) => s.cancelDraft)
   const setActiveDraft = useReview((s) => s.setActiveDraft)
+  const noteDraftSurface = useReview((s) => s.noteDraftSurface)
+  // a zone belongs to whichever view drew it
+  const here = useReview((s): DraftSurface => (s.viewMode === 'flow' ? 'flow' : 'file'))
   const activeDraftId = useReview((s) => s.activeDraftId)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -158,7 +161,12 @@ export function DraftForm({
   return (
     <div
       className={`min-w-0 rounded-lg bg-panel p-2 text-note shadow-lifted ${active ? 'ring-1 ring-accent' : ''}`}
-      onFocusCapture={() => setActiveDraft(draft.id)}
+      // the same note has a form in the panel as well as in the code; writing
+      // in one of them is what "take me back to it" should mean afterwards
+      onFocusCapture={() => {
+        setActiveDraft(draft.id)
+        noteDraftSurface(draft.id, surface === 'panel' ? 'panel' : here)
+      }}
       onMouseDownCapture={() => setActiveDraft(draft.id)}
     >
       <div className="mb-1 flex flex-wrap items-center gap-x-1 text-xs text-soft">

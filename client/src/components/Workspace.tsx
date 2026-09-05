@@ -25,8 +25,7 @@ function DraftPill() {
   const selectedPath = useReview((s) => s.selectedPath)
   const activeRepoId = useReview((s) => s.activeRepoId)
   const repos = useReview((s) => s.repos)
-  const selectRepo = useReview((s) => s.selectRepo)
-  const openFile = useReview((s) => s.openFile)
+  const resumeDraft = useReview((s) => s.resumeDraft)
   const cancelDraft = useReview((s) => s.cancelDraft)
 
   const active = drafts.find((d) => d.id === activeDraftId) ?? drafts.at(-1)
@@ -54,12 +53,7 @@ function DraftPill() {
       </span>
       <button
         className="rounded bg-accent px-2 py-1 font-medium text-white hover:bg-accent-strong"
-        onClick={() => {
-          void (async () => {
-            if (cross_repo) await selectRepo(active.repoId)
-            await openFile(active.path)
-          })()
-        }}
+        onClick={() => void resumeDraft(active.id)}
       >
         back to note
       </button>

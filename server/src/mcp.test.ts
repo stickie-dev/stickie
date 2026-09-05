@@ -122,6 +122,50 @@ describe('mcp', () => {
   })
 })
 
+describe('asking for a listing', () => {
+  const call = (name: string, args: Record<string, unknown>) => {
+    const tool = tools.find((t) => t.name === name)
+    if (tool === undefined) throw new Error(`no tool ${name}`)
+    return tool.request(args)
+  }
+
+  it('asks for data by default, since prose cannot be rendered', () => {
+    const request = call('list_reviews', {})
+    expect(request.path).toBe('/api/sessions')
+    expect(request.text).toBeUndefined()
+  })
+
+  it('asks for prose only when told to, and reads it as text', () => {
+    const request = call('list_reviews', { format: 'markdown' })
+    expect(request.path).toBe('/api/sessions?format=markdown')
+    expect(request.text).toBe(true)
+  })
+
+  it('passes the filters through in either shape', () => {
+    expect(call('list_reviews', { repo: 'api', branch: 'main' }).path).toBe(
+      '/api/sessions?repo=api&branch=main',
+    )
+    expect(
+      call('list_reviews', { format: 'markdown', withNotes: true }).path,
+    ).toBe('/api/sessions?format=markdown&with_notes=1')
+  })
+
+  it('escapes a filter that would otherwise break the query', () => {
+    expect(call('list_reviews', { repo: 'a&b c' }).path).toBe(
+      '/api/sessions?repo=a%26b+c',
+    )
+  })
+
+  it('leaves resolved notes out unless they are asked for', () => {
+    expect(call('get_review_notes', { sessionId: 3 }).path).toBe(
+      '/api/sessions/3/prompt?include_pending=0&author=agent',
+    )
+    expect(
+      call('get_review_notes', { sessionId: 3, includeResolved: true }).path,
+    ).toBe('/api/sessions/3/prompt?include_pending=0&include_resolved=1&author=agent')
+  })
+})
+
 describe('who a tool says it is', () => {
   const call = (name: string, args: Record<string, unknown>) => {
     const tool = tools.find((t) => t.name === name)

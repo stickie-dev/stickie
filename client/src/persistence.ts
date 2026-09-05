@@ -1,5 +1,5 @@
 import type { RepoInfo, Side } from '@stickie/shared'
-import type { Draft, Tab } from './store'
+import type { Draft, DraftSurface, Tab } from './store'
 
 /**
  * What survives a reload, and how. Repositories are keyed by path rather than
@@ -31,6 +31,8 @@ interface StoredDraft {
   startLine: number
   endLine: number
   body: string
+  /** where it was being written; absent in anything stored before this */
+  surface?: DraftSurface
 }
 
 function parse<T>(key: string): T | null {
@@ -119,6 +121,7 @@ export function storeDrafts(drafts: Draft[], repos: RepoInfo[]): string {
           startLine: draft.startLine,
           endLine: draft.endLine,
           body: draft.body,
+          surface: draft.surface,
         },
       ]
     }),
@@ -148,6 +151,9 @@ export function restoredDrafts(
         startLine: entry.startLine,
         endLine: entry.endLine,
         body: entry.body,
+        // a draft written before this was stored has no surface; the single
+        // file is where "back to note" used to land, so nothing moves for it
+        surface: entry.surface ?? 'file',
       },
     ]
   })

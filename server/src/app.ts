@@ -25,7 +25,13 @@ import type {
   ActivityInput,
   ActivitySubject,
 } from './activity.js'
-import { buildPrompt, default_prompt_instructions } from './export.js'
+import type { ReviewListing } from './export.js'
+import {
+  buildPrompt,
+  default_prompt_instructions,
+  filterReviews,
+  renderReviewList,
+} from './export.js'
 import { Identity } from './identity.js'
 import type { Fetcher } from './mcp.js'
 import { handleMessage } from './mcp.js'
@@ -1253,26 +1259,50 @@ export function createApp(
       summary: 'Every review session, newest first',
       description:
         'For an agent handed no session id: one entry per review, with how ' +
-        'many notes are waiting on it.',
+        'many notes are waiting on it. `repo` and `branch` match loosely — a ' +
+        'substring of the path, the name or the branch — because the caller ' +
+        'knows where it is without knowing which of those the server would ' +
+        'compare. `format=markdown` answers in text instead of JSON.',
+      request: {
+        query: z.object({
+          repo: z.string().optional(),
+          branch: z.string().optional(),
+          with_notes: flag_query,
+          format: z.enum(['json', 'markdown']).optional(),
+        }),
+      },
       responses: {
-        200: json_response(
-          z.array(
-            session_schema.extend({ openNotes: z.number().int() }),
-          ),
-          'Sessions',
-        ),
+        200: {
+          content: {
+            'application/json': {
+              schema: z.array(session_schema.extend({ openNotes: z.number().int() })),
+            },
+            'text/plain': { schema: z.string() },
+          },
+          description: 'Sessions',
+        },
       },
     }),
     async (c) => {
+      const { repo, branch, with_notes, format } = c.req.valid('query')
       const sessions = await store.listSessions()
-      const listed = []
+      const listed: ReviewListing[] = []
       for (const session of sessions) {
         listed.push({
-          ...session,
+          session,
           openNotes: await store.countOpenThreads(session.id),
         })
       }
-      return c.json(listed, 200)
+      const wanted = filterReviews(listed, {
+        ...(repo === undefined ? {} : { repo }),
+        ...(branch === undefined ? {} : { branch }),
+        ...(with_notes === true ? { withNotes: true } : {}),
+      })
+      if (format === 'markdown') return c.text(renderReviewList(wanted))
+      return c.json(
+        wanted.map(({ session, openNotes }) => ({ ...session, openNotes })),
+        200,
+      )
     },
   )
 
@@ -1897,12 +1927,15 @@ export function createApp(
       description:
         'The manual paste path: every unresolved note, including the pending ' +
         'batch, with the instruction block from settings. `order` lists ' +
-        'thread ids first, in that order; the rest follow by age.',
+        'thread ids first, in that order; the rest follow by age. ' +
+        '`include_resolved` adds the notes already answered, for revisiting ' +
+        'one rather than working through what is outstanding.',
       request: {
         params: id_param,
         query: actor_query.extend({
           order: z.string().optional(),
           include_pending: flag_query,
+          include_resolved: flag_query,
         }),
       },
       responses: {
@@ -1918,11 +1951,16 @@ export function createApp(
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      const { order, include_pending } = c.req.valid('query')
+      const { order, include_pending, include_resolved } = c.req.valid('query')
       const with_pending = include_pending !== false
+      const with_resolved = include_resolved === true
       const unresolved = (
         await reanchorThreads(store, session, await store.listThreads(session.id))
-      ).filter((t) => t.status !== 'resolved' && (with_pending || !t.pending))
+      ).filter(
+        (t) =>
+          (with_resolved || t.status !== 'resolved') &&
+          (with_pending || !t.pending),
+      )
       const wanted =
         order === undefined
           ? []

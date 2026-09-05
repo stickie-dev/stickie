@@ -99,12 +99,28 @@ export function fenceLanguage(path: string): string {
   return fence_languages[name.slice(dot + 1)] ?? ''
 }
 
-/** The trailing instructions; `{api}` becomes the server's own address. */
+/**
+ * The trailing instructions; `{api}` becomes the server's own address.
+ *
+ * Two ways to answer, because this text is pasted into agents that have never
+ * heard of stickie as well as ones connected to it. The tools come first: an
+ * agent that has them should not be shelling out to curl, and this block was
+ * written before they existed and went on teaching curl alone long after.
+ */
 export const default_prompt_instructions = [
   'Address each note. The line numbers were correct at capture time;',
   'verify against the current file before editing. When done with a',
   'note, reply and resolve it — <review> is the number in the heading',
-  'above, <note> the number on the note:',
+  'above, <note> the number on the note.',
+  '',
+  "If you have stickie's MCP tools, use those:",
+  '',
+  '```',
+  'reply_to_note(sessionId=<review>, note=<note>, body="<what you did>")',
+  'resolve_note(sessionId=<review>, note=<note>)',
+  '```',
+  '',
+  'Otherwise the same two calls over HTTP:',
   '',
   '```bash',
   `curl -X POST {api}/api/reviews/<review>/notes/<note>/reply -H 'content-type: application/json' -d '{"author":"agent","body":"<what you did>"}'`,
@@ -240,4 +256,81 @@ export async function buildPrompt(
   lines.push('')
   lines.push(instructions.replaceAll('{api}', apiBase))
   return lines.join('\n')
+}
+
+/**
+ * A review in a listing: the review itself plus what an agent picking one
+ * needs to tell it from the others.
+ */
+export interface ReviewListing {
+  session: Session
+  openNotes: number
+}
+
+/**
+ * Does `needle` appear in `hay`, loosely? Case-insensitive substring, which is
+ * what "fuzzy" means at this size: an agent filtering by a repository knows
+ * some part of its path or name — `orbit-api`, `/worktrees/x` — and
+ * should not have to know which part the server would compare against.
+ */
+function loosely(hay: string, needle: string): boolean {
+  return hay.toLowerCase().includes(needle.trim().toLowerCase())
+}
+
+/**
+ * Which reviews a filter leaves. `repo` is matched against everything that
+ * names where the code is — the repository's path and name, and the review's
+ * own source, because an agent's working directory is often a worktree, whose
+ * path is the source rather than the repository.
+ */
+export function filterReviews(
+  listings: ReviewListing[],
+  filter: { repo?: string; branch?: string; withNotes?: boolean },
+): ReviewListing[] {
+  return listings.filter(({ session, openNotes }) => {
+    if (filter.withNotes === true && openNotes === 0) return false
+    if (filter.branch !== undefined && filter.branch !== '') {
+      if (!loosely(session.branch, filter.branch)) return false
+    }
+    if (filter.repo !== undefined && filter.repo !== '') {
+      const where = [
+        session.repoPath,
+        session.repoPath.split('/').at(-1) ?? '',
+        session.source.value,
+      ]
+      if (!where.some((hay) => loosely(hay, filter.repo ?? ''))) return false
+    }
+    return true
+  })
+}
+
+/**
+ * A listing as markdown, one block per review with its keys repeated rather
+ * than a table with them across the top.
+ *
+ * A table is denser but it reads by position: the fourth column of the ninth
+ * row means nothing without going back up to the header, and an agent quoting
+ * one row into its own reasoning takes the row without it. Repeating the key
+ * on every line costs a few tokens and makes every line say what it is.
+ */
+export function renderReviewList(listings: ReviewListing[]): string {
+  if (listings.length === 0) {
+    return 'No reviews match. Omit the filters to see every review.'
+  }
+  const lines = [
+    `${String(listings.length)} ${listings.length === 1 ? 'review' : 'reviews'}, newest first.`,
+    'Take `review` to get_review_notes, list_notes, reply_to_note and resolve_note.',
+    '',
+  ]
+  for (const { session, openNotes } of listings) {
+    lines.push(`- review: ${String(session.id)}`)
+    lines.push(`  repo: ${session.repoPath.split('/').at(-1) ?? session.repoPath}`)
+    lines.push(`  branch: ${session.branch}`)
+    lines.push(`  source: ${describeSource(session)}`)
+    lines.push(`  base: ${session.baseRef} @ ${shortSha(session.baseSha)}`)
+    lines.push(`  unresolved: ${String(openNotes)}`)
+    lines.push(`  path: ${session.repoPath}`)
+    lines.push('')
+  }
+  return lines.join('\n').trimEnd()
 }

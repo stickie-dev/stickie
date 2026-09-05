@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { Session, Thread } from '@stickie/shared'
-import { buildPrompt, fenceLanguage, parseRefs } from './export.js'
+import type { ReviewListing } from './export.js'
+import {
+  buildPrompt,
+  fenceLanguage,
+  filterReviews,
+  parseRefs,
+  renderReviewList,
+} from './export.js'
 
 describe('parseRefs', () => {
   it('finds @-prefixed single-line and range refs', () => {
@@ -179,5 +186,99 @@ describe('the heading of a note', () => {
   it('no longer claims a capture time it cannot substantiate', async () => {
     const text = await buildPrompt(session, [thread({})], 'http://x', noSource)
     expect(text).not.toContain('Code at capture time')
+  })
+})
+
+describe('filterReviews', () => {
+  const listing = (
+    id: number,
+    over: Partial<Session>,
+    openNotes = 0,
+  ): ReviewListing => ({
+    session: { ...session, id, ...over },
+    openNotes,
+  })
+
+  const all = [
+    listing(1, {
+      repoPath: '/src/orbit-api',
+      branch: 'master',
+      source: { kind: 'worktree', value: '/src/orbit-api' },
+    }),
+    listing(
+      2,
+      {
+        repoPath: '/src/orbit-api',
+        branch: 'feature/per-item-errors',
+        source: { kind: 'worktree', value: '/src/orbit-api/.worktrees/x' },
+      },
+      3,
+    ),
+    listing(3, {
+      repoPath: '/src/orbit-lib',
+      branch: 'master',
+      source: { kind: 'ref', value: 'master' },
+    }),
+  ]
+
+  const ids = (rows: ReviewListing[]) => rows.map((r) => r.session.id)
+
+  it('keeps everything when nothing is asked', () => {
+    expect(ids(filterReviews(all, {}))).toEqual([1, 2, 3])
+  })
+
+  it('matches a repository on part of its name', () => {
+    expect(ids(filterReviews(all, { repo: 'lib' }))).toEqual([3])
+  })
+
+  it('matches on a worktree path, which is where an agent actually is', () => {
+    // the worktree's path is the review's source, not the repository's path
+    expect(ids(filterReviews(all, { repo: '.worktrees/x' }))).toEqual([2])
+  })
+
+  it('ignores case and surrounding space', () => {
+    expect(ids(filterReviews(all, { repo: '  Orbit-API ' }))).toEqual([1, 2])
+  })
+
+  it('matches part of a branch name', () => {
+    expect(ids(filterReviews(all, { branch: 'per-item' }))).toEqual([2])
+  })
+
+  it('combines the filters', () => {
+    expect(ids(filterReviews(all, { repo: 'api', branch: 'master' }))).toEqual([1])
+  })
+
+  it('keeps only what has notes waiting', () => {
+    expect(ids(filterReviews(all, { withNotes: true }))).toEqual([2])
+  })
+
+  it('answers with nothing when nothing matches', () => {
+    expect(filterReviews(all, { repo: 'no-such-repo' })).toEqual([])
+  })
+})
+
+describe('renderReviewList', () => {
+  it('repeats the key on every line rather than heading a table', () => {
+    const text = renderReviewList([
+      {
+        session: {
+          ...session,
+          id: 631,
+          repoPath: '/src/orbit-api',
+          branch: 'feature/x',
+        },
+        openNotes: 2,
+      },
+    ])
+    expect(text).toContain('- review: 631')
+    expect(text).toContain('  repo: orbit-api')
+    expect(text).toContain('  branch: feature/x')
+    expect(text).toContain('  unresolved: 2')
+    // the full path as well as the name: one is for reading, one for matching
+    expect(text).toContain('  path: /src/orbit-api')
+  })
+
+  it('says so, and how to widen it, when a filter matches nothing', () => {
+    expect(renderReviewList([])).toContain('Omit the filters')
   })
 })

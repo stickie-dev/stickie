@@ -32,6 +32,14 @@ import {
   storeTabs,
 } from './persistence'
 
+/**
+ * Where a note is being written. A note is composed in one of three places —
+ * the continuous diff, a single file, or the comments panel — and "take me
+ * back to it" means the place, not the file: opening the file dropped a reader
+ * out of the flow they were reading it in.
+ */
+export type DraftSurface = 'flow' | 'file' | 'panel'
+
 export interface Draft {
   id: number
   repoId: number
@@ -41,6 +49,8 @@ export interface Draft {
   startLine: number
   endLine: number
   body: string
+  /** where it is being written; follows the reader if they move it */
+  surface: DraftSurface
 }
 
 export interface Tab {
@@ -287,6 +297,9 @@ interface ReviewState {
   openFile: (path: string, status?: ChangedFile['status'] | 'unchanged') => Promise<void>
   setShowAll: (showAll: boolean) => Promise<void>
   startDraft: (side: Side, startLine: number, endLine: number) => void
+  noteDraftSurface: (id: number, surface: DraftSurface) => void
+  /** Goes back to the note in progress, in the place it is being written. */
+  resumeDraft: (id: number) => Promise<void>
   updateDraftBody: (id: number, body: string) => void
   /** the lines a note is anchored to, corrected by hand after a selection */
   setDraftRange: (id: number, startLine: number, endLine: number) => void
@@ -1609,8 +1622,58 @@ export const useReview = create<ReviewState>((set, get) => {
         startLine,
         endLine,
         body: '',
+        surface: get().viewMode === 'flow' ? 'flow' : 'file',
       }
       set({ drafts: [...drafts, draft], activeDraftId: draft.id })
+    },
+
+    /**
+     * The reader has moved to another form for the same note — the panel keeps
+     * one for every note in progress, so a note begun in the diff can be
+     * carried on there. Going back should go where they are, not where they
+     * started.
+     */
+    /**
+     * Back to a note in progress, in the place it is being written — the diff
+     * it was begun in, the file it was begun in, or the comments panel if the
+     * reader moved to the form there. This used to open the file whatever the
+     * answer was, which took a reader out of the flow they were reading.
+     */
+    resumeDraft: async (id) => {
+      const draft = get().drafts.find((d) => d.id === id)
+      if (draft === undefined) return
+      set({ activeDraftId: id, activeReplyId: null })
+      if (draft.repoId !== get().activeRepoId) {
+        await get().selectRepo(draft.repoId)
+      }
+      if (draft.surface === 'panel') {
+        // the panel holds a form for every note in progress; nothing has to
+        // move in the diff behind it
+        set({ commentsOpen: true })
+        return
+      }
+      // a note with no line is on the whole file or the whole review; there is
+      // nowhere in the code to land, so the panel is where it can be read
+      if (draft.startLine === 0 || draft.path === '') {
+        set({ commentsOpen: true })
+        return
+      }
+      if (draft.surface === 'flow') {
+        get().showFileInFlow(draft.path)
+        get().flowSelect(draft.path)
+        flowReveal(draft.path, draft.endLine)
+        return
+      }
+      await get().openFile(draft.path)
+      set({ reveal: { path: draft.path, line: draft.endLine, side: draft.side } })
+    },
+
+    noteDraftSurface: (id, surface) => {
+      const drafts = get().drafts
+      if (!drafts.some((d) => d.id === id && d.surface !== surface)) return
+      set({
+        drafts: drafts.map((d) => (d.id === id ? { ...d, surface } : d)),
+      })
     },
 
     updateDraftBody: (id, body) => {
