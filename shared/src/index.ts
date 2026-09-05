@@ -51,9 +51,23 @@ export interface Session {
   id: number
   repoId: number
   repoPath: string
+  /**
+   * The branch under review — what identifies it, together with the repo.
+   *
+   * The *source* says where to read the files: a working tree, or the branch
+   * itself when nothing has it checked out. That is a location and it moves —
+   * a branch reviewed in a worktree and later checked out in the main clone is
+   * the same work, and the same review. The branch is the work.
+   */
+  branch: string
   source: ReviewSource
   baseRef: string
   baseSha: string
+  /**
+   * The base this review had before the current one, so sliding the base is
+   * one click to undo. Null when it has never moved.
+   */
+  prevBaseRef?: string | null
   /** the base ref has moved on from baseSha, and the pin can follow it */
   baseStale?: boolean
   /**

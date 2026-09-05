@@ -23,6 +23,7 @@ describe('Store', () => {
     const repo = await store.addRepo('/tmp/repo')
     const session = await store.getOrCreateSession(
       repo.id,
+      'master',
       { kind: 'worktree', value: '/tmp/repo' },
       'master',
       'abc123',
@@ -48,6 +49,7 @@ describe('Store', () => {
     const repo = await store.addRepo('/tmp/repo')
     const session = await store.getOrCreateSession(
       repo.id,
+      'master',
       { kind: 'worktree', value: '/tmp/repo' },
       'master',
       'abc123',
@@ -76,7 +78,9 @@ describe('Store', () => {
     const store = await freshStore()
     const repo = await store.addRepo('/tmp/repo')
     const source = { kind: 'worktree' as const, value: '/tmp/repo' }
-    const session = await store.getOrCreateSession(repo.id, source, 'master', 'aaa')
+    const session = await store.getOrCreateSession(
+      repo.id, 'master', source, 'master', 'aaa',
+    )
     const kept = await store.createThread(
       session.id, 'a.py', 'source', 1, 1, null, 'x', 'user', 'open one',
     )
@@ -98,6 +102,7 @@ describe('Store', () => {
     const repo = await store.addRepo('/tmp/repo')
     const session = await store.getOrCreateSession(
       repo.id,
+      'master',
       { kind: 'worktree', value: '/tmp/repo' },
       'master',
       'abc123',
@@ -125,6 +130,7 @@ describe('Store', () => {
     const repo = await store.addRepo('/tmp/repo')
     const session = await store.getOrCreateSession(
       repo.id,
+      'master',
       { kind: 'worktree', value: '/tmp/repo' },
       'master',
       'abc123',
@@ -160,6 +166,7 @@ describe('Store actors', () => {
     const repo = await store.addRepo('/tmp/repo')
     const session = await store.getOrCreateSession(
       repo.id,
+      'master',
       { kind: 'worktree', value: '/tmp/repo' },
       'master',
       'abc123',
@@ -193,6 +200,7 @@ describe('Store actors', () => {
     const repo = await store.addRepo('/tmp/repo')
     const session = await store.getOrCreateSession(
       repo.id,
+      'master',
       { kind: 'worktree', value: '/tmp/repo' },
       'master',
       'abc123',
@@ -220,6 +228,7 @@ describe('Store activity', () => {
     const repo = await store.addRepo('/tmp/repo')
     const session = await store.getOrCreateSession(
       repo.id,
+      'master',
       { kind: 'worktree', value: '/tmp/repo' },
       'master',
       'abc123',
@@ -318,6 +327,7 @@ describe('Store.summarizeSessions', () => {
     const repo = await store.addRepo('/tmp/repo')
     const session = await store.getOrCreateSession(
       repo.id,
+      'master',
       { kind: 'worktree', value: '/tmp/repo' },
       'master',
       'abc123',
@@ -420,6 +430,7 @@ describe('Store.summarizeSessions', () => {
     const { store, repo, session } = await seed()
     const other = await store.getOrCreateSession(
       repo.id,
+      'feature/x',
       { kind: 'ref', value: 'feature/x' },
       'master',
       'def456',
@@ -441,6 +452,7 @@ describe('session identity', () => {
   ) =>
     store.getOrCreateSession(
       repoId,
+      'master',
       { kind: 'worktree', value: '/tmp/repo' },
       'master',
       baseSha,
@@ -456,30 +468,89 @@ describe('session identity', () => {
     expect(await store.listSessions()).toHaveLength(1)
   })
 
-  it('keeps a different base ref apart when the commits differ', async () => {
+  it('is one review per branch, whatever base it is read against', async () => {
     const store = await freshStore()
     const repo = await store.addRepo('/tmp/repo')
     const against_master = await open(store, repo.id, 'aaa')
+    // the same branch read against HEAD instead: a lens on the same work, so
+    // the notes stay together rather than being stranded in a second review
     const against_head = await store.getOrCreateSession(
       repo.id,
+      'master',
       { kind: 'worktree', value: '/tmp/repo' },
       'HEAD',
       'bbb',
     )
-    expect(against_head.id).not.toBe(against_master.id)
+    expect(against_head.id).toBe(against_master.id)
+    expect(await store.listSessions()).toHaveLength(1)
   })
 
-  it('keeps two refs apart even when they point at the same commit', async () => {
+  it('keeps two branches apart', async () => {
     const store = await freshStore()
     const repo = await store.addRepo('/tmp/repo')
-    const against_master = await open(store, repo.id, 'aaa')
-    const against_head = await store.getOrCreateSession(
+    const on_master = await open(store, repo.id, 'aaa')
+    const on_feature = await store.getOrCreateSession(
       repo.id,
+      'feature/x',
       { kind: 'worktree', value: '/tmp/repo' },
-      'HEAD',
+      'master',
       'aaa',
     )
-    expect(against_head.id).not.toBe(against_master.id)
+    expect(on_feature.id).not.toBe(on_master.id)
+  })
+
+  it('follows the branch when its checkout moves, keeping the notes', async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const in_worktree = await store.getOrCreateSession(
+      repo.id,
+      'feature/x',
+      { kind: 'worktree', value: '/tmp/repo/.worktrees/x' },
+      'master',
+      'aaa',
+    )
+    await store.createThread(
+      in_worktree.id, 'a.ts', 'source', 1, 1, null, 'x', 'user', 'note',
+    )
+    // the worktree is gone and the branch is checked out in the main clone
+    const in_main = await store.getOrCreateSession(
+      repo.id,
+      'feature/x',
+      { kind: 'worktree', value: '/tmp/repo' },
+      'master',
+      'aaa',
+    )
+    expect(in_main.id).toBe(in_worktree.id)
+    expect(in_main.source.value).toBe('/tmp/repo')
+    expect(await store.listThreads(in_main.id)).toHaveLength(1)
+  })
+
+  it('slides the base and slides it back, once', async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const session = await open(store, repo.id, 'aaa')
+    await store.slideBase(session.id, 'HEAD', 'bbb')
+    const moved = await store.getSession(session.id)
+    expect([moved?.baseRef, moved?.baseSha]).toEqual(['HEAD', 'bbb'])
+    expect(moved?.prevBaseRef).toBe('master')
+
+    const back = await store.undoBase(session.id)
+    expect([back?.baseRef, back?.baseSha]).toEqual(['master', 'aaa'])
+    // undoing twice returns to where the undo started; it is one step, not a
+    // history
+    const forward = await store.undoBase(session.id)
+    expect([forward?.baseRef, forward?.baseSha]).toEqual(['HEAD', 'bbb'])
+    expect(await store.listSessions()).toHaveLength(1)
+  })
+
+  it('has no previous base until one is set', async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const session = await open(store, repo.id, 'aaa')
+    expect(session.prevBaseRef).toBe(null)
+    // sliding onto the base it already has is not a move
+    await store.slideBase(session.id, 'master', 'aaa')
+    expect((await store.getSession(session.id))?.prevBaseRef).toBe(null)
   })
 
   it('answers with the base a review is pinned to, not the one just resolved', async () => {
@@ -519,6 +590,7 @@ describe('taking a repository out of the workspace', () => {
     const repo = await store.addRepo('/tmp/repo')
     const session = await store.getOrCreateSession(
       repo.id,
+      'master',
       { kind: 'worktree', value: '/tmp/repo' },
       'master',
       'abc123',
@@ -598,12 +670,14 @@ describe('numbering notes within a review', () => {
     const repo = await store.addRepo('/tmp/repo')
     const first = await store.getOrCreateSession(
       repo.id,
+      'master',
       { kind: 'worktree', value: '/tmp/repo' },
       'master',
       'abc123',
     )
     const second = await store.getOrCreateSession(
       repo.id,
+      'feature',
       { kind: 'ref', value: 'feature' },
       'master',
       'abc123',

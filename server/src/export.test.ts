@@ -59,6 +59,7 @@ const session: Session = {
   id: 1,
   repoId: 1,
   repoPath: '/repo',
+  branch: 'master',
   source: { kind: 'worktree', value: '/repo' },
   baseRef: 'master',
   baseSha: 'abcdef1234',

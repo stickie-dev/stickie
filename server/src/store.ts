@@ -29,8 +29,10 @@ interface SessionRow {
   repo_path: string
   source_kind: string
   source_value: string
+  branch: string | null
   base_ref: string
   base_sha: string
+  prev_base_ref: string | null
 }
 
 interface ActorRow {
@@ -200,26 +202,73 @@ export class Store {
    */
   async getOrCreateSession(
     repoId: number,
+    branch: string,
     source: ReviewSource,
     baseRef: string,
     baseSha: string,
   ): Promise<Session> {
     await this.db.run(
-      `insert into sessions (repo_id, source_kind, source_value, base_ref, base_sha)
-       values (?, ?, ?, ?, ?) on conflict do nothing`,
-      [repoId, source.kind, source.value, baseRef, baseSha],
+      `insert into sessions (repo_id, branch, source_kind, source_value, base_ref, base_sha)
+       values (?, ?, ?, ?, ?, ?) on conflict do nothing`,
+      [repoId, branch, source.kind, source.value, baseRef, baseSha],
     )
     // selected by the key, so an existing review comes back with the base it is
     // already pinned to rather than the one just resolved
     const row = await this.db.get<SessionRow>(
       `select s.*, r.path as repo_path from sessions s
        join repos r on r.id = s.repo_id
-       where s.repo_id = ? and s.source_kind = ? and s.source_value = ?
-         and s.base_ref = ?`,
-      [repoId, source.kind, source.value, baseRef],
+       where s.repo_id = ? and s.branch = ?`,
+      [repoId, branch],
     )
     if (row === undefined) throw new Error('session insert failed')
+    // the branch moved: reviewed in a worktree, now checked out in the main
+    // clone, or the other way about. Same work, same review, new place to read
+    // it from — the source is a location, not an identity.
+    if (
+      row.source_kind !== source.kind ||
+      row.source_value !== source.value
+    ) {
+      await this.db.run(
+        'update sessions set source_kind = ?, source_value = ? where id = ?',
+        [source.kind, source.value, row.id],
+      )
+      row.source_kind = source.kind
+      row.source_value = source.value
+    }
     return sessionFromRow(row)
+  }
+
+  /**
+   * Moves a review's base, keeping the one it had so the move can be undone.
+   *
+   * The base is a lens on one piece of work — the same branch read against
+   * `HEAD` or against `master` is the same review — so changing it moves the
+   * review rather than forking a second one to strand the notes in.
+   */
+  async slideBase(
+    sessionId: number,
+    baseRef: string,
+    baseSha: string,
+  ): Promise<void> {
+    await this.db.run(
+      `update sessions
+       set prev_base_ref = base_ref, prev_base_sha = base_sha,
+           base_ref = ?, base_sha = ?
+       where id = ? and (base_ref != ? or base_sha != ?)`,
+      [baseRef, baseSha, sessionId, baseRef, baseSha],
+    )
+  }
+
+  /** Puts the base back where it was. One step: it is an undo, not a history. */
+  async undoBase(sessionId: number): Promise<Session | undefined> {
+    await this.db.run(
+      `update sessions
+       set base_ref = prev_base_ref, base_sha = prev_base_sha,
+           prev_base_ref = base_ref, prev_base_sha = base_sha
+       where id = ? and prev_base_ref is not null`,
+      [sessionId],
+    )
+    return this.getSession(sessionId)
   }
 
   /** Moves the pin, in place: re-pinning continues a review, it does not fork one. */
@@ -833,12 +882,16 @@ function sessionFromRow(row: SessionRow): Session {
     id: row.id,
     repoId: row.repo_id,
     repoPath: row.repo_path,
+    // a review from before the branch key, which nothing could place; it is
+    // reachable by its id and never handed back by a branch lookup
+    branch: row.branch ?? '',
     source: {
       kind: row.source_kind as ReviewSource['kind'],
       value: row.source_value,
     },
     baseRef: row.base_ref,
     baseSha: row.base_sha,
+    prevBaseRef: row.prev_base_ref,
   }
 }
 

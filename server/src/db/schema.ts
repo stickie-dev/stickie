@@ -1,5 +1,7 @@
 import type { Db, Dialect } from './driver.js'
 import { numberNotes } from './noteNumbers.js'
+import type { BranchResolver } from './reviewBranch.js'
+import { rekeyByBranch } from './reviewBranch.js'
 import { rekeySessions } from './sessionKey.js'
 
 /**
@@ -13,10 +15,11 @@ import { rekeySessions } from './sessionKey.js'
  * record that it existed. On the default SQLite file the owner can still edit
  * it by hand — it is a record, not evidence, and nothing may claim otherwise.
  *
- * A review is keyed by its base *ref*, not by the commit that ref pointed at
- * when it started: see `sessionKey.ts`, which moves an older database onto that
- * key. Notes are numbered within their review rather than globally: see
- * `noteNumbers.ts`, which fills the column in and puts the unique index on.
+ * A review is keyed by the branch it reviews: see `reviewBranch.ts`, which
+ * moves an older database onto that key, and `sessionKey.ts` before it, which
+ * moved it off the pinned commit. Notes are numbered within their review rather
+ * than globally: see `noteNumbers.ts`, which fills the column in and puts the
+ * unique index on.
  */
 
 const sqlite_schema = `
@@ -30,10 +33,13 @@ create table if not exists sessions (
   repo_id integer not null references repos(id) on delete cascade,
   source_kind text not null,
   source_value text not null,
+  branch text,
   base_ref text not null,
   base_sha text not null,
+  prev_base_ref text,
+  prev_base_sha text,
   created_at text not null default (datetime('now')),
-  unique (repo_id, source_kind, source_value, base_ref)
+  unique (repo_id, branch)
 );
 
 create table if not exists threads (
@@ -106,10 +112,13 @@ create table if not exists sessions (
   repo_id integer not null references repos(id) on delete cascade,
   source_kind text not null,
   source_value text not null,
+  branch text,
   base_ref text not null,
   base_sha text not null,
+  prev_base_ref text,
+  prev_base_sha text,
   created_at timestamptz not null default now(),
-  unique (repo_id, source_kind, source_value, base_ref)
+  unique (repo_id, branch)
 );
 
 create table if not exists threads (
@@ -189,8 +198,24 @@ const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
     // existing review is safe: `createThread` takes whichever is higher, this
     // or the highest number in the review, so a review that already holds
     // notes 0..12 carries on at 13 without a migration to set it.
-    sqlite: [['notes_issued', 'notes_issued integer not null default 0']],
-    postgres: [['notes_issued', 'notes_issued integer not null default 0']],
+    //
+    // `branch` is what a review *is*; it is nullable because an older database
+    // has rows from before the key existed, and `reviewBranch.ts` fills it in
+    // from the checkout. A row it cannot place keeps a null, which no
+    // get-or-create ever matches — the review stays reachable by its id and is
+    // never silently handed to work it does not belong to.
+    sqlite: [
+      ['notes_issued', 'notes_issued integer not null default 0'],
+      ['branch', 'branch text'],
+      ['prev_base_ref', 'prev_base_ref text'],
+      ['prev_base_sha', 'prev_base_sha text'],
+    ],
+    postgres: [
+      ['notes_issued', 'notes_issued integer not null default 0'],
+      ['branch', 'branch text'],
+      ['prev_base_ref', 'prev_base_ref text'],
+      ['prev_base_sha', 'prev_base_sha text'],
+    ],
   },
   threads: {
     sqlite: [
@@ -230,7 +255,17 @@ async function existingColumns(db: Db, table: string): Promise<Set<string>> {
   return new Set(rows.map((row) => row.column_name))
 }
 
-export async function applySchema(db: Db): Promise<void> {
+/**
+ * A migration that has to ask git which branch a working tree is on, which the
+ * database layer has no business knowing. The caller supplies it; without one,
+ * a worktree review keeps a null branch rather than being placed wrongly.
+ */
+const no_branches: BranchResolver = () => Promise.resolve(null)
+
+export async function applySchema(
+  db: Db,
+  branchOf: BranchResolver = no_branches,
+): Promise<void> {
   await db.exec(db.dialect === 'sqlite' ? sqlite_schema : postgres_schema)
   for (const [table, per_dialect] of Object.entries(added_columns)) {
     const existing = await existingColumns(db, table)
@@ -243,7 +278,9 @@ export async function applySchema(db: Db): Promise<void> {
   // after the columns exist: the merge it may perform reads threads and writes
   // activity, so both have to be in their final shape first
   const merged = await rekeySessions(db)
-  // and after the merge, which moves notes between reviews: numbering them
+  // and after that merge, which is keyed on the columns this one replaces
+  const rekeyed = await rekeyByBranch(db, branchOf)
+  // and after both merges, which move notes between reviews: numbering them
   // first would leave two note 0s in whichever review absorbed another
   const numbered = await numberNotes(db)
   if (numbered > 0) {
@@ -255,6 +292,21 @@ export async function applySchema(db: Db): Promise<void> {
     const absorbed = merged.reduce((n, plan) => n + plan.absorbed.length, 0)
     console.log(
       `stickie: re-keyed reviews by base ref, merging ${String(absorbed)} duplicate ${absorbed === 1 ? 'session' : 'sessions'} into ${String(merged.length)}`,
+    )
+  }
+  if (rekeyed !== null) {
+    const absorbed = rekeyed.merged.reduce(
+      (n, plan) => n + plan.absorbed.length,
+      0,
+    )
+    console.log(
+      `stickie: re-keyed reviews by branch — ${String(rekeyed.stamped)} placed` +
+        (absorbed > 0
+          ? `, ${String(absorbed)} merged into ${String(rekeyed.merged.length)}`
+          : '') +
+        (rekeyed.unplaced > 0
+          ? `, ${String(rekeyed.unplaced)} left unplaced (open them by link)`
+          : ''),
     )
   }
 }

@@ -102,9 +102,11 @@ const session_schema = z
     id: z.number().int(),
     repoId: z.number().int(),
     repoPath: z.string(),
+    branch: z.string(),
     source: source_schema,
     baseRef: z.string(),
     baseSha: z.string(),
+    prevBaseRef: z.string().nullable().optional(),
     baseStale: z.boolean().optional(),
     baseDiverged: z.boolean().optional(),
   })
@@ -821,6 +823,28 @@ export function createApp(
         await resolveRef(repo.path, body.source.value)
       }
 
+      // what the review *is*. A worktree is asked what it has checked out; a
+      // ref names its own branch. A detached checkout has no branch, and there
+      // is nothing to key a review on — reviewing a bare commit is what the
+      // commits tab is for, so it is refused rather than given an identity it
+      // cannot keep.
+      const branch =
+        body.source.kind === 'worktree'
+          ? (await gitStatus(body.source.value)).branch
+          : body.source.value
+      if (
+        body.source.kind === 'worktree' &&
+        (branch === '' || branch === '(detached)')
+      ) {
+        return c.json(
+          {
+            error:
+              'this working tree has no branch checked out; a review is of a branch. Check one out, or open the commit from the commits list.',
+          },
+          400,
+        )
+      }
+
       let base_ref = body.baseRef
       let base_sha: string
       const resolve_in =
@@ -843,12 +867,29 @@ export function createApp(
         base_sha = await resolveRef(resolve_in, base_ref)
       }
 
-      const session = await store.getOrCreateSession(
+      let session = await store.getOrCreateSession(
         repo.id,
+        branch,
         body.source,
         base_ref,
         base_sha,
       )
+      // an explicit base on a review that already exists moves it: the base is
+      // a lens on this branch's work, not a second review of it. Without one,
+      // the review keeps the base it is on rather than being dragged back to
+      // the default every time the client opens it.
+      if (body.baseRef !== undefined && session.baseRef !== base_ref) {
+        await store.slideBase(session.id, base_ref, base_sha)
+        await record({
+          subject: 'review',
+          action: 'repinned',
+          actorId: (await identity.human(repo.path)).actor.id,
+          repoId: repo.id,
+          sessionId: session.id,
+          detail: { from: session.baseRef, baseRef: base_ref, baseSha: base_sha },
+        })
+        session = (await store.getSession(session.id)) ?? session
+      }
       // this route is get-or-create and the client calls it on every visit, so
       // only the first sighting of a review is worth recording
       if (!(await store.hasActivity(session.id, 'review', 'opened'))) {
@@ -965,6 +1006,56 @@ export function createApp(
       })
       return c.json(
         { ...session, baseSha: current, baseStale: false, baseDiverged: false },
+        200,
+      )
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/sessions/{id}/base/undo',
+      tags: ['sessions'],
+      summary: 'Put the base back where it was before the last move',
+      description:
+        'One step, not a history: the base is a lens on this branch and this ' +
+        'undoes the last time it was moved. Undoing twice returns to where ' +
+        'you started.',
+      request: { params: id_param },
+      responses: {
+        200: json_response(session_schema, 'The session, on its previous base'),
+        400: bad_request,
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const before = await store.getSession(c.req.valid('param').id)
+      if (before === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      if (before.prevBaseRef == null) {
+        return c.json({ error: 'this base has not been moved' }, 400)
+      }
+      const session = await store.undoBase(before.id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      await record({
+        subject: 'review',
+        action: 'repinned',
+        actorId: (await identity.human(session.repoPath)).actor.id,
+        repoId: session.repoId,
+        sessionId: session.id,
+        detail: {
+          from: before.baseRef,
+          baseRef: session.baseRef,
+          baseSha: session.baseSha,
+          undo: true,
+        },
+      })
+      const pin = await basePin(session)
+      return c.json(
+        { ...session, baseStale: pin.stale, baseDiverged: pin.diverged },
         200,
       )
     },
