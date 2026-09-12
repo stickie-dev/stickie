@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { discussionsToNotes, parseMrRef, projectFromRemote } from './gitlab.js'
+import {
+  discussionsToNotes,
+  discussionsToThreads,
+  parseMrRef,
+  projectFromRemote,
+  signReply,
+} from './gitlab.js'
 
 describe('projectFromRemote', () => {
   it('parses ssh remotes', () => {
@@ -94,5 +100,85 @@ describe('discussionsToNotes', () => {
     ])
     expect(notes[0]?.side).toBe('base')
     expect(notes[0]?.line).toBe(12)
+  })
+})
+
+describe('signReply', () => {
+  it('says a person wrote it, and that it came through stickie', () => {
+    const signed = signReply('looks right to me', 'user', 'Jane Doe')
+    expect(signed).toContain('**Jane Doe**')
+    expect(signed).toContain('via stickie')
+    expect(signed).toContain('looks right to me')
+  })
+
+  it('says plainly when an agent wrote it', () => {
+    const signed = signReply('renamed the field', 'agent', 'claude-code')
+    // whoever reads this on the MR was not here; the one thing they must not
+    // have to guess is whether a person wrote it
+    expect(signed).toContain('🤖 claude-code')
+    expect(signed).toContain('replied by an agent')
+  })
+
+  it('still signs an agent that did not name itself', () => {
+    expect(signReply('done', 'agent', null)).toContain('🤖 agent')
+  })
+})
+
+describe('discussionsToThreads', () => {
+  const discussion = (over: Record<string, unknown> = {}) => ({
+    id: 'abc123',
+    notes: [
+      {
+        body: 'this needs a test',
+        author: { username: 'colleague' },
+        created_at: '2026-09-10T10:00:00Z',
+        resolvable: true,
+        resolved: false,
+        position: { new_path: 'src/app.py', new_line: 12 },
+        ...over,
+      },
+    ],
+  })
+
+  it('keeps where in the diff a discussion hangs', () => {
+    const [thread] = discussionsToThreads([discussion()])
+    expect(thread).toMatchObject({
+      id: 'abc123',
+      path: 'src/app.py',
+      side: 'source',
+      line: 12,
+      resolved: false,
+    })
+    expect(thread?.messages[0]).toMatchObject({
+      author: 'colleague',
+      body: 'this needs a test',
+    })
+  })
+
+  it('keeps resolved ones too, unlike the import it replaces', () => {
+    // the tab shows the conversation, and half a conversation is not one
+    const [thread] = discussionsToThreads([discussion({ resolved: true })])
+    expect(thread?.resolved).toBe(true)
+  })
+
+  it('keeps a discussion that hangs on nothing, as a comment on the MR', () => {
+    const [thread] = discussionsToThreads([
+      discussion({ position: undefined, resolvable: false }),
+    ])
+    expect(thread?.path).toBe(null)
+    expect(thread?.line).toBe(null)
+  })
+
+  it('reads an old-side discussion from the old side', () => {
+    const [thread] = discussionsToThreads([
+      discussion({ position: { old_path: 'src/gone.py', old_line: 4 } }),
+    ])
+    expect(thread).toMatchObject({ path: 'src/gone.py', side: 'base', line: 4 })
+  })
+
+  it('drops the system notes nobody wrote', () => {
+    expect(
+      discussionsToThreads([{ id: 'x', notes: [{ system: true, body: 'changed the title' }] }]),
+    ).toEqual([])
   })
 })

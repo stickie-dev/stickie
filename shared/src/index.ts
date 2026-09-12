@@ -68,6 +68,13 @@ export interface Session {
    * one click to undo. Null when it has never moved.
    */
   prevBaseRef?: string | null
+  /**
+   * The merge request this review is of — at most one, and attached by hand.
+   * Its discussion is read from GitLab and shown beside the review; it is not
+   * copied in, because a copy forks the conversation the moment anyone
+   * replies to either side of it.
+   */
+  mr?: { iid: number; projectPath: string } | null
   /** the base ref has moved on from baseSha, and the pin can follow it */
   baseStale?: boolean
   /**

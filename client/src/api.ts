@@ -12,6 +12,31 @@ import type {
   Thread,
 } from '@stickie/shared'
 
+/** An open merge request, as much of one as a review needs to name it. */
+export interface MergeRequest {
+  iid: number
+  projectPath: string
+  title: string
+  webUrl: string
+  sourceBranch: string
+  targetBranch: string
+  state: string
+}
+
+/**
+ * One discussion on the attached merge request. Read from GitLab rather than
+ * copied here — it is someone else's conversation, shown.
+ */
+export interface MrThread {
+  id: string
+  path: string | null
+  side: 'base' | 'source'
+  line: number | null
+  resolved: boolean
+  resolvable: boolean
+  messages: { author: string; body: string; createdAt: string | null }[]
+}
+
 /** Who moves a review's base pin when it goes stale. */
 export type RepinMode = 'always' | 'when-clear' | 'never'
 
@@ -106,8 +131,12 @@ async function toJson<T>(response: Response): Promise<T> {
 }
 
 function post(url: string, body: unknown): Promise<Response> {
+  return request(url, 'POST', body)
+}
+
+function request(url: string, method: string, body: unknown): Promise<Response> {
   return fetch(url, {
-    method: 'POST',
+    method,
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
@@ -276,10 +305,28 @@ export const api = {
       body: JSON.stringify(body),
     }).then(toJson<{ ok: boolean; restartRequired: boolean }>),
 
-  importMr: (sessionId: number, mr: string) =>
-    post(`/api/sessions/${sessionId}/import-mr`, { mr }).then(
-      toJson<{ imported: number; skipped: number }>,
+  /** What there is to attach, if anything; attaching is a separate act. */
+  mrCandidate: (sessionId: number) =>
+    fetch(`/api/sessions/${sessionId}/mr/candidate`).then(
+      toJson<{ candidate: MergeRequest | null }>,
     ),
+
+  /** Attach a merge request to this review, or pass null to take it off. */
+  attachMr: (sessionId: number, iid: number | null) =>
+    request(`/api/sessions/${sessionId}/mr`, 'PUT', { iid }).then(
+      toJson<Session>,
+    ),
+
+  mrThreads: (sessionId: number) =>
+    fetch(`/api/sessions/${sessionId}/mr/threads`).then(
+      toJson<{ mr: MergeRequest | null; threads: MrThread[] }>,
+    ),
+
+  replyToMr: (sessionId: number, discussion: string, body: string) =>
+    post(
+      `/api/sessions/${sessionId}/mr/threads/${encodeURIComponent(discussion)}/reply?author=user`,
+      { body },
+    ).then(toJson<{ ok: boolean }>),
 
   definitions: (
     sessionId: number,

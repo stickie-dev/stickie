@@ -33,6 +33,8 @@ interface SessionRow {
   base_ref: string
   base_sha: string
   prev_base_ref: string | null
+  mr_iid: number | null
+  mr_project: string | null
 }
 
 interface ActorRow {
@@ -256,6 +258,20 @@ export class Store {
            base_ref = ?, base_sha = ?
        where id = ? and (base_ref != ? or base_sha != ?)`,
       [baseRef, baseSha, sessionId, baseRef, baseSha],
+    )
+  }
+
+  /**
+   * Attaches a merge request to this review, or takes it off. One per review:
+   * a review is of one branch, and a branch's work is one merge request.
+   */
+  async setReviewMr(
+    sessionId: number,
+    mr: { iid: number; projectPath: string } | null,
+  ): Promise<void> {
+    await this.db.run(
+      'update sessions set mr_iid = ?, mr_project = ? where id = ?',
+      [mr?.iid ?? null, mr?.projectPath ?? null, sessionId],
     )
   }
 
@@ -892,6 +908,10 @@ function sessionFromRow(row: SessionRow): Session {
     baseRef: row.base_ref,
     baseSha: row.base_sha,
     prevBaseRef: row.prev_base_ref,
+    mr:
+      row.mr_iid == null || row.mr_project == null
+        ? null
+        : { iid: Number(row.mr_iid), projectPath: row.mr_project },
   }
 }
 

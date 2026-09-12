@@ -59,11 +59,17 @@ import {
   shortenRev,
   shortSha,
 } from './git.js'
+import type { GitLabConfig, MrThread } from './gitlab.js'
 import {
+  fetchMr,
   fetchMrDiscussions,
+  fetchMrThreads,
+  findOpenMr,
   gitlabConfig,
   parseMrRef,
   projectFromRemote,
+  replyToMrThread,
+  signReply,
 } from './gitlab.js'
 import { findDefinitions, findReferences, searchText } from './nav.js'
 import type { SessionRollup, Store } from './store.js'
@@ -2463,6 +2469,291 @@ export function createApp(
         setDatabaseUrl(url === '' ? null : url)
       }
       return c.json({ ok: true, restartRequired: restart }, 200)
+    },
+  )
+
+  /**
+   * Shared by every merge-request route: the review, a usable GitLab config,
+   * and the project its origin remote names. Each of the three failures has a
+   * different fix, so each says which one it is.
+   */
+  async function mrContext(sessionId: number): Promise<
+    | { ok: true; session: Session; config: GitLabConfig; project: string }
+    | { ok: false; status: 400 | 404; error: string }
+  > {
+    const session = await store.getSession(sessionId)
+    if (session === undefined) {
+      return { ok: false, status: 404, error: 'unknown session' }
+    }
+    const config = gitlabConfig(await gitlabSettings())
+    if (config === null) {
+      return {
+        ok: false,
+        status: 400,
+        error:
+          'no GitLab token configured — set one in Settings → GitLab, or export GITLAB_TOKEN',
+      }
+    }
+    const project =
+      session.mr?.projectPath ??
+      (await (async () => {
+        const remote = await gitOrigin(sourceRoot(session))
+        return remote === null ? null : projectFromRemote(remote)
+      })())
+    if (project === null) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'could not work out the GitLab project from the origin remote',
+      }
+    }
+    return { ok: true, session, config, project }
+  }
+
+  const mr_thread_schema = z
+    .object({
+      id: z.string(),
+      path: z.string().nullable(),
+      side: z.enum(['base', 'source']),
+      line: z.number().int().nullable(),
+      resolved: z.boolean(),
+      resolvable: z.boolean(),
+      messages: z.array(
+        z.object({
+          author: z.string(),
+          body: z.string(),
+          createdAt: z.string().nullable(),
+        }),
+      ),
+    })
+    .openapi('MrThread')
+
+  const mr_schema = z
+    .object({
+      iid: z.number().int(),
+      projectPath: z.string(),
+      title: z.string(),
+      webUrl: z.string(),
+      sourceBranch: z.string(),
+      targetBranch: z.string(),
+      state: z.string(),
+    })
+    .openapi('MergeRequest')
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/sessions/{id}/mr/candidate',
+      tags: ['merge requests'],
+      summary: 'The open merge request for this review\'s branch, if there is one',
+      description:
+        'Looked up by source branch and narrowed by the base ref, so a branch ' +
+        'with more than one open MR answers with the one this review reads ' +
+        'against. Nothing is attached by this — it only says what there is to ' +
+        'attach.',
+      request: { params: id_param },
+      responses: {
+        200: json_response(
+          z.object({ candidate: mr_schema.nullable() }),
+          'The merge request on offer',
+        ),
+        400: bad_request,
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const context = await mrContext(c.req.valid('param').id)
+      if (!context.ok) {
+        return c.json({ error: context.error }, context.status)
+      }
+      const { session, config, project } = context
+      if (session.branch === '') return c.json({ candidate: null }, 200)
+      try {
+        const candidate = await findOpenMr(
+          config,
+          project,
+          session.branch,
+          session.baseRef === 'HEAD' ? null : session.baseRef,
+        )
+        return c.json({ candidate }, 200)
+      } catch (error) {
+        return c.json({ error: error instanceof Error ? error.message : String(error) }, 400)
+      }
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/sessions/{id}/mr',
+      tags: ['merge requests'],
+      summary: 'Attach a merge request to this review, or take one off',
+      description:
+        'One per review: a review is of one branch, and a branch\'s work is ' +
+        'one merge request. Attaching reads nothing in — the discussion stays ' +
+        'on GitLab and is shown from there.',
+      request: {
+        params: id_param,
+        body: json_body(z.object({ iid: z.number().int().nullable() })),
+      },
+      responses: {
+        200: json_response(session_schema, 'The review, with its MR'),
+        400: bad_request,
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const context = await mrContext(c.req.valid('param').id)
+      if (!context.ok) {
+        return c.json({ error: context.error }, context.status)
+      }
+      const { session, config, project } = context
+      const { iid } = c.req.valid('json')
+      if (iid === null) {
+        await store.setReviewMr(session.id, null)
+        await record({
+          subject: 'review',
+          action: 'mr-detached',
+          actorId: (await identity.human(session.repoPath)).actor.id,
+          repoId: session.repoId,
+          sessionId: session.id,
+          detail: { project, mr: session.mr?.iid ?? null },
+        })
+      } else {
+        let found
+        try {
+          found = await fetchMr(config, project, iid)
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 400)
+        }
+        if (found === null) {
+          return c.json({ error: `no merge request !${String(iid)} in ${project}` }, 400)
+        }
+        await store.setReviewMr(session.id, {
+          iid: found.iid,
+          projectPath: found.projectPath,
+        })
+        await record({
+          subject: 'review',
+          action: 'mr-attached',
+          actorId: (await identity.human(session.repoPath)).actor.id,
+          repoId: session.repoId,
+          sessionId: session.id,
+          detail: { project: found.projectPath, mr: found.iid, title: found.title },
+        })
+      }
+      const fresh = await store.getSession(session.id)
+      if (fresh === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      const pin = await basePin(fresh)
+      return c.json(
+        { ...fresh, baseStale: pin.stale, baseDiverged: pin.diverged },
+        200,
+      )
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/sessions/{id}/mr/threads',
+      tags: ['merge requests'],
+      summary: 'The attached merge request\'s discussions, read from GitLab',
+      description:
+        'Read live rather than copied: the merge request is where that ' +
+        'conversation lives, and a copy of it here would go stale the moment ' +
+        'anyone replied on either side.',
+      request: { params: id_param },
+      responses: {
+        200: json_response(
+          z.object({ mr: mr_schema.nullable(), threads: z.array(mr_thread_schema) }),
+          'The discussions',
+        ),
+        400: bad_request,
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const context = await mrContext(c.req.valid('param').id)
+      if (!context.ok) {
+        return c.json({ error: context.error }, context.status)
+      }
+      const { session, config, project } = context
+      if (session.mr == null) return c.json({ mr: null, threads: [] }, 200)
+      try {
+        const [mr, threads] = await Promise.all([
+          fetchMr(config, project, session.mr.iid),
+          fetchMrThreads(config, project, session.mr.iid),
+        ])
+        return c.json({ mr, threads }, 200)
+      } catch (error) {
+        return c.json({ error: error instanceof Error ? error.message : String(error) }, 400)
+      }
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/sessions/{id}/mr/threads/{discussion}/reply',
+      tags: ['merge requests'],
+      summary: 'Reply to a merge-request discussion, on GitLab',
+      description:
+        'The reply is posted to the merge request, signed so that whoever ' +
+        'reads it there knows it came through stickie and whether a person or an ' +
+        'agent wrote it.',
+      request: {
+        params: z.object({
+          id: z.coerce.number().int(),
+          discussion: z.string(),
+        }),
+        query: actor_query,
+        body: json_body(z.object({ body: z.string().min(1) })),
+      },
+      responses: {
+        200: json_response(z.object({ ok: z.boolean() }), 'Posted'),
+        400: bad_request,
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const context = await mrContext(c.req.valid('param').id)
+      if (!context.ok) {
+        return c.json({ error: context.error }, context.status)
+      }
+      const { session, config, project } = context
+      if (session.mr == null) {
+        return c.json({ error: 'no merge request attached to this review' }, 400)
+      }
+      // an unsigned reply reads as the repository owner's, and a reply that
+      // reaches the MR is read by people who were not here
+      const { actor } = c.req.valid('query')
+      const author = c.req.valid('query').author ?? 'user'
+      const signer =
+        author === 'agent'
+          ? await identity.agent(actor)
+          : (await identity.human(session.repoPath)).actor
+      try {
+        await replyToMrThread(
+          config,
+          project,
+          session.mr.iid,
+          c.req.valid('param').discussion,
+          signReply(c.req.valid('json').body, author, signer.name),
+        )
+      } catch (error) {
+        return c.json({ error: error instanceof Error ? error.message : String(error) }, 400)
+      }
+      await record({
+        subject: 'review',
+        action: 'mr-replied',
+        actorId: signer.id,
+        repoId: session.repoId,
+        sessionId: session.id,
+        detail: { project, mr: session.mr.iid, discussion: c.req.valid('param').discussion },
+      })
+      return c.json({ ok: true }, 200)
     },
   )
 

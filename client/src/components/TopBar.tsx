@@ -24,7 +24,8 @@ export function TopBar() {
   const setBase = useReview((s) => s.setBase)
   const repin = useReview((s) => s.repin)
   const undoBase = useReview((s) => s.undoBase)
-  const importMr = useReview((s) => s.importMr)
+  const mrCandidate = useReview((s) => s.mrCandidate)
+  const attachMr = useReview((s) => s.attachMr)
   const connected = useReview((s) => s.connected)
   const threads = useReview((s) => s.threads)
   const submitReview = useReview((s) => s.submitReview)
@@ -314,17 +315,38 @@ export function TopBar() {
           Submit review ({pending_count})
         </button>
       )}
-      <button
-        className={`shrink-0 ${btn()}`}
-        title="import unresolved GitLab MR discussions (needs GITLAB_TOKEN on the server)"
-        disabled={session === null}
-        onClick={() => {
-          const mr = window.prompt('MR iid, !iid, or full URL')
-          if (mr !== null && mr.trim() !== '') void importMr(mr)
-        }}
-      >
-        Import MR
-      </button>
+      {/*
+        Attached, not imported: the discussion stays on the merge request and
+        is shown from there. Nothing is typed — stickie knows the origin remote,
+        the branch and the base, which is all the lookup needs, so the button
+        names what it found.
+      */}
+      {session !== null && session.mr != null ? (
+        <button
+          className={`shrink-0 ${btn()}`}
+          title={`!${String(session.mr.iid)} is attached — its discussion is under Comments; click to open it`}
+          onClick={() => {
+            if (!commentsOpen) toggleComments()
+          }}
+        >
+          !{session.mr.iid}
+        </button>
+      ) : (
+        <button
+          className={`shrink-0 ${btn()}`}
+          title={
+            mrCandidate === null
+              ? 'no open merge request found for this branch (needs a GitLab token in Settings)'
+              : `attach ${mrCandidate.title} — its discussion appears under Comments, and nothing is copied in`
+          }
+          disabled={session === null || mrCandidate === null}
+          onClick={() => {
+            if (mrCandidate !== null) void attachMr(mrCandidate.iid)
+          }}
+        >
+          {mrCandidate === null ? 'Attach MR' : `Attach !${String(mrCandidate.iid)}`}
+        </button>
+      )}
       <ThemeToggle />
       <Link
         className={`shrink-0 ${icon_button}`}

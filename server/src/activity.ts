@@ -14,7 +14,20 @@ export const activity_actions = {
     'deleted',
     'posted',
   ],
-  review: ['opened', 'submitted', 'repinned', 'imported', 'exported', 'merged'],
+  review: [
+    'opened',
+    'submitted',
+    'repinned',
+    'imported',
+    'exported',
+    'merged',
+    // a merge request being attached to a review, taken off it, or replied to
+    // through stickie — the last of those leaves a mark on someone else's system,
+    // which is exactly the kind of thing this record is for
+    'mr-attached',
+    'mr-detached',
+    'mr-replied',
+  ],
   file: ['viewed', 'unviewed'],
   /**
    * A repository joining or leaving the workspace. `removed` took its reviews

@@ -209,12 +209,20 @@ const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
       ['branch', 'branch text'],
       ['prev_base_ref', 'prev_base_ref text'],
       ['prev_base_sha', 'prev_base_sha text'],
+      // the merge request this review is of, at most one; see gitlab.ts on why
+      // it is attached rather than imported
+      ['mr_iid', 'mr_iid integer'],
+      ['mr_project', 'mr_project text'],
     ],
     postgres: [
       ['notes_issued', 'notes_issued integer not null default 0'],
       ['branch', 'branch text'],
       ['prev_base_ref', 'prev_base_ref text'],
       ['prev_base_sha', 'prev_base_sha text'],
+      // the merge request this review is of, at most one; see gitlab.ts on why
+      // it is attached rather than imported
+      ['mr_iid', 'mr_iid integer'],
+      ['mr_project', 'mr_project text'],
     ],
   },
   threads: {

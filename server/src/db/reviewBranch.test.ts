@@ -35,6 +35,8 @@ async function legacyDatabase(): Promise<Db> {
       base_sha text not null,
       prev_base_ref text,
       prev_base_sha text,
+      mr_iid integer,
+      mr_project text,
       notes_issued integer not null default 0,
       created_at text not null default (datetime('now')),
       unique (repo_id, source_kind, source_value, base_ref)
@@ -271,6 +273,8 @@ async function keyedButUnplaced(): Promise<Db> {
       base_sha text not null,
       prev_base_ref text,
       prev_base_sha text,
+      mr_iid integer,
+      mr_project text,
       notes_issued integer not null default 0,
       created_at text not null default (datetime('now')),
       unique (repo_id, branch)

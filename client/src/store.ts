@@ -12,6 +12,8 @@ import type {
 import { api } from './api'
 import type {
   CommitBetween,
+  MergeRequest,
+  MrThread,
   NavHit,
   NoteDefault,
   RemoveMode,
@@ -373,7 +375,28 @@ interface ReviewState {
    * it is an edit — and an edit wants an undo.
    */
   undoBase: () => Promise<void>
-  importMr: (mr: string) => Promise<void>
+  /**
+   * The merge request this review is of. Attached by hand and never imported:
+   * its discussion is read from GitLab and shown in its own tab, because a
+   * copy of someone else's conversation forks it the moment either side
+   * replies. A note started from one of those threads *is* a stickie note, and
+   * behaves like every other.
+   */
+  mrCandidate: MergeRequest | null
+  mrThreads: MrThread[]
+  mrLoading: boolean
+  mrLoaded: boolean
+  findMr: () => Promise<void>
+  attachMr: (iid: number | null) => Promise<void>
+  loadMrThreads: () => Promise<void>
+  replyToMr: (discussion: string, body: string) => Promise<void>
+  /**
+   * Starts a stickie note from a merge-request discussion — on the same lines,
+   * carrying what was said there so the note stands on its own. From then on
+   * it is an ordinary note: it shows in the diff, an agent can answer it, and
+   * it is the review's, not the MR's.
+   */
+  discussInStickie: (thread: MrThread) => Promise<void>
   submitReview: () => Promise<void>
   postThread: (threadId: number) => Promise<void>
   toggleViewed: (path: string) => Promise<void>
@@ -631,6 +654,9 @@ export const useReview = create<ReviewState>((set, get) => {
           },
         },
       })
+      set({ mrThreads: [], mrLoaded: false, mrCandidate: null })
+      void get().findMr()
+      if (session.mr != null) void get().loadMrThreads()
       const flow_tab = ensureFlowTab(activeRepoId, session.id)
       if (get().viewMode === 'flow') {
         set({ activeTabId: flow_tab.id })
@@ -1015,6 +1041,10 @@ export const useReview = create<ReviewState>((set, get) => {
     error: null,
     connected: false,
     promptCopied: false,
+    mrCandidate: null,
+    mrThreads: [],
+    mrLoading: false,
+    mrLoaded: false,
     theme: initialTheme(),
     fontScale: initialFontScale(),
     reveal: null,
@@ -2064,18 +2094,105 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
 
-    importMr: async (mr) => {
-      const { session } = get()
+    /**
+     * What there is to attach. Asked once when a review opens, so the button
+     * can name the merge request instead of asking the reader to go and find
+     * its number — stickie knows the remote, the branch and the base, which is
+     * everything the lookup needs.
+     */
+    findMr: async () => {
+      const session = get().session
+      if (session === null) return
+      set({ mrCandidate: null })
+      try {
+        const { candidate } = await api.mrCandidate(session.id)
+        if (get().session?.id === session.id) set({ mrCandidate: candidate })
+      } catch {
+        // no token, no remote, no network: the button says "attach by number"
+        // and the reason surfaces if they try
+      }
+    },
+
+    attachMr: async (iid) => {
+      const session = get().session
       if (session === null) return
       try {
-        const result = await api.importMr(session.id, mr)
-        set({ threads: await api.threads(session.id, true) })
-        get().pushToast(
-          'info',
-          `MR import: ${result.imported} thread${result.imported === 1 ? '' : 's'} imported, ${result.skipped} skipped`,
-        )
+        const next = await api.attachMr(session.id, iid)
+        rememberSession(next)
+        set({ session: next, mrThreads: [], mrLoaded: false })
+        const repoId = get().activeRepoId
+        if (repoId !== null) updateRepoSession(repoId, { session: next })
+        if (iid === null) {
+          get().pushToast('info', 'merge request detached')
+        } else {
+          get().pushToast('info', `attached !${String(iid)}`)
+          await get().loadMrThreads()
+        }
       } catch (error) {
-        get().pushToast('error', `MR import: ${message(error)}`)
+        get().pushToast('error', `merge request: ${message(error)}`)
+      }
+    },
+
+    /** The attached MR's discussions, read from GitLab rather than held here. */
+    loadMrThreads: async () => {
+      const session = get().session
+      if (session === null || session.mr == null) {
+        set({ mrThreads: [], mrLoaded: true })
+        return
+      }
+      set({ mrLoading: true })
+      try {
+        const { threads } = await api.mrThreads(session.id)
+        if (get().session?.id !== session.id) return
+        set({ mrThreads: threads, mrLoaded: true })
+      } catch (error) {
+        get().pushToast('error', `merge request: ${message(error)}`)
+        set({ mrLoaded: true })
+      } finally {
+        set({ mrLoading: false })
+      }
+    },
+
+    discussInStickie: async (thread) => {
+      const session = get().session
+      if (session === null) return
+      const said = thread.messages
+        .map((m) => `> **${m.author}**: ${m.body.replace(/\n/g, '\n> ')}`)
+        .join('\n>\n')
+      const heading =
+        session.mr == null
+          ? 'From the merge request'
+          : `From !${String(session.mr.iid)}`
+      const body = `${heading}:\n\n${said}\n\n`
+      try {
+        // a discussion with no position is about the change rather than a
+        // line; line 0 is what stickie already calls that
+        await api.createThread(session.id, {
+          path: thread.path ?? '',
+          side: thread.side,
+          startLine: thread.line ?? 0,
+          endLine: thread.line ?? 0,
+          body,
+          author: 'user',
+          pending: get().noteDefault === 'draft',
+        })
+        set({ threads: await api.threads(session.id, true) })
+        set({ commentsOpen: true })
+        get().pushToast('info', 'note started from the MR discussion')
+      } catch (error) {
+        get().pushToast('error', `note from the MR: ${message(error)}`)
+      }
+    },
+
+    replyToMr: async (discussion, body) => {
+      const session = get().session
+      if (session === null || session.mr == null) return
+      try {
+        await api.replyToMr(session.id, discussion, body)
+        get().pushToast('info', `replied on !${String(session.mr.iid)}`)
+        await get().loadMrThreads()
+      } catch (error) {
+        get().pushToast('error', `reply on the MR: ${message(error)}`)
       }
     },
 

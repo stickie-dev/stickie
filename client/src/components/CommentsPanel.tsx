@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { NoteDefault } from '../api'
+import type { MrThread, NoteDefault } from '../api'
 import { GrowingTextarea } from './GrowingTextarea'
 import { DraftForm } from './DraftForm'
 import { SubmitSplit } from './SubmitSplit'
@@ -8,7 +8,8 @@ import { paneWidth } from '../panes'
 import { orderedThreadIds, useReview } from '../store'
 import { ThreadCard } from './ThreadCard'
 import { Close } from '../icons'
-import { btn, field, field_flush, icon_button } from '../ui'
+import { Loading, SkeletonCard } from './Skeleton'
+import { badge, btn, card, field, field_flush, icon_button } from '../ui'
 
 /** A composer for notes that carry no code anchor. */
 function NoteComposer({ onDone }: { onDone: () => void }) {
@@ -98,6 +99,122 @@ function NoteComposer({ onDone }: { onDone: () => void }) {
  * order and follows new arrivals; *prompt order* switches it to the
  * arrangement Copy prompt uses, where notes can be moved by hand.
  */
+/**
+ * The attached merge request's discussion, read from GitLab.
+ *
+ * Read-only on purpose. These are not stickie's notes and must not look like
+ * them: nobody should have to work out which marks in this panel are theirs.
+ * Two things can be done with one — reply, which goes to the merge request
+ * and is signed as having come through stickie, and start a note here, which
+ * makes an ordinary stickie note on the same lines carrying what was said.
+ */
+function MrThreads({
+  threads,
+  loading,
+  mr,
+}: {
+  threads: MrThread[]
+  loading: boolean
+  mr: { iid: number; projectPath: string } | null
+}) {
+  const discussInStickie = useReview((s) => s.discussInStickie)
+  const replyToMr = useReview((s) => s.replyToMr)
+  const [replyTo, setReplyTo] = useState<string | null>(null)
+  const [reply, setReply] = useState('')
+
+  if (loading && threads.length === 0) {
+    return (
+      <div className="min-h-0 grow overflow-y-auto p-3">
+        <Loading what="the merge request">
+          <SkeletonCard />
+          <SkeletonCard />
+        </Loading>
+      </div>
+    )
+  }
+  if (threads.length === 0) {
+    return (
+      <p className="min-h-0 grow p-3 text-xs text-faint">
+        {mr === null
+          ? 'No merge request attached.'
+          : `Nothing has been said on !${String(mr.iid)} yet.`}
+      </p>
+    )
+  }
+
+  return (
+    <div className="min-h-0 grow space-y-3 overflow-y-auto p-3">
+      {threads.map((thread) => (
+        <div key={thread.id} className={`p-2 ${card}`}>
+          <div className="mb-1 flex items-center gap-2 text-xs">
+            <span className="min-w-0 truncate font-mono text-soft">
+              {thread.path === null
+                ? 'on the merge request'
+                : `${thread.path}${thread.line === null ? '' : `:L${String(thread.line)}`}`}
+            </span>
+            <span className="grow" />
+            {thread.resolved && <span className={`${badge} bg-overlay text-faint`}>resolved</span>}
+          </div>
+          {thread.messages.map((m, i) => (
+            <div key={i} className="mb-1.5 text-note">
+              <span className="font-medium text-ink">{m.author}</span>{' '}
+              <span className="whitespace-pre-wrap text-soft">{m.body}</span>
+            </div>
+          ))}
+          {replyTo === thread.id ? (
+            <div className="mt-2">
+              <GrowingTextarea
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                placeholder="reply on the merge request…"
+              />
+              <div className="mt-1 flex justify-end gap-2">
+                <button
+                  className={`text-xs ${btn()}`}
+                  onClick={() => {
+                    setReplyTo(null)
+                    setReply('')
+                  }}
+                >
+                  cancel
+                </button>
+                <button
+                  className={`text-xs ${btn('primary')}`}
+                  disabled={reply.trim() === ''}
+                  onClick={() => {
+                    void replyToMr(thread.id, reply)
+                    setReplyTo(null)
+                    setReply('')
+                  }}
+                >
+                  Reply on !{mr?.iid}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-1 flex gap-2">
+              <button
+                className={`text-xs ${btn()}`}
+                title="reply on the merge request — it goes there, signed as having come through stickie"
+                onClick={() => setReplyTo(thread.id)}
+              >
+                reply there
+              </button>
+              <button
+                className={`text-xs ${btn()}`}
+                title="start a stickie note on these lines, carrying what was said here"
+                onClick={() => void discussInStickie(thread)}
+              >
+                note here
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function CommentsPanel() {
   const width = useReview((s) => s.paneRatios.comments)
   const threads = useReview((s) => s.threads)
@@ -109,7 +226,15 @@ export function CommentsPanel() {
   const toggleComments = useReview((s) => s.toggleComments)
   const promptOrder = useReview((s) => s.promptOrder)
   const moveInPromptOrder = useReview((s) => s.moveInPromptOrder)
-  const [openOnly, setOpenOnly] = useState(true)
+  // three tabs, not two: the merge request's discussion is a third thing to
+  // look at, and it is not stickie's notes — it is read from GitLab and shown
+  const [tab, setTab] = useState<'unresolved' | 'all' | 'mr'>('unresolved')
+  const openOnly = tab === 'unresolved'
+  const session = useReview((s) => s.session)
+  const mrThreads = useReview((s) => s.mrThreads)
+  const mrLoading = useReview((s) => s.mrLoading)
+  const mrLoaded = useReview((s) => s.mrLoaded)
+  const loadMrThreads = useReview((s) => s.loadMrThreads)
   const [arranging, setArranging] = useState(false)
   const [composing, setComposing] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
@@ -142,6 +267,18 @@ export function CommentsPanel() {
   // what each filter would show, so the choice does not have to be made blind
   const unresolved = threads.filter((t) => t.status !== 'resolved').length
   const total = visible.length
+  const mr = session?.mr ?? null
+
+  // opened rather than loaded on mount: nobody pays for a GitLab round trip
+  // until they look. Once, though — on `mrLoaded` rather than on an empty
+  // list, or a fetch that fails leaves the list empty and the effect asks
+  // again, and again, for as long as the tab is open
+  const mrIid = mr?.iid ?? null
+  useEffect(() => {
+    if (tab === 'mr' && mrIid !== null && !mrLoaded && !mrLoading) {
+      void loadMrThreads()
+    }
+  }, [tab, mrIid, mrLoaded, mrLoading, loadMrThreads])
 
   return (
     <aside
@@ -162,19 +299,37 @@ export function CommentsPanel() {
       </div>
       <div className="flex items-center gap-1 border-b border-edge px-3 py-1.5 text-xs">
         <div className="flex overflow-hidden rounded-md bg-overlay">
-          {([true, false] as const).map((only) => {
-            const active = openOnly === only
+          {(
+            [
+              { key: 'unresolved', label: 'Unresolved', count: unresolved },
+              { key: 'all', label: 'All', count: threads.length },
+              ...(mr == null
+                ? []
+                : [
+                    {
+                      key: 'mr' as const,
+                      label: `MR (!${String(mr.iid)})`,
+                      count: mrThreads.length,
+                    },
+                  ]),
+            ] as const
+          ).map((choice) => {
+            const active = tab === choice.key
             return (
               <button
-                key={String(only)}
+                key={choice.key}
                 className={`flex items-center gap-1.5 px-2 py-0.5 ${active ? 'bg-accent text-white' : 'text-soft hover:bg-overlay hover:text-ink'}`}
-                onClick={() => setOpenOnly(only)}
+                onClick={() => {
+                  // already here: the reader is asking for it again
+                  if (choice.key === 'mr' && tab === 'mr') void loadMrThreads()
+                  setTab(choice.key)
+                }}
               >
-                {only ? 'Unresolved' : 'All'}
+                {choice.label}
                 <span
                   className={`tabular-nums ${active ? 'text-white/70' : 'text-faint'}`}
                 >
-                  {only ? unresolved : threads.length}
+                  {choice.count}
                 </span>
               </button>
             )
@@ -189,7 +344,17 @@ export function CommentsPanel() {
           prompt order
         </button>
       </div>
-      <div ref={listRef} className="min-h-0 grow space-y-3 overflow-y-auto p-3">
+      {tab === 'mr' && (
+        <MrThreads
+          threads={mrThreads}
+          loading={mrLoading}
+          mr={mr}
+        />
+      )}
+      <div
+        ref={listRef}
+        className={`min-h-0 grow space-y-3 overflow-y-auto p-3 ${tab === 'mr' ? 'hidden' : ''}`}
+      >
         {visible.map((thread, index) => (
           <div key={thread.id} data-thread={thread.id}>
             <div className="mb-1 flex items-center gap-2">
