@@ -29,10 +29,12 @@ import { findMatches as scanForMatches } from './find'
 import type { TabRef } from './routes'
 import type { PaneName } from './panes'
 import {
+  previous_comments_tab,
   previous_panes,
   previous_tabs,
   restoredDrafts,
   restoredTree,
+  storeCommentsTab,
   storeDrafts,
   storePanes,
   storeTabs,
@@ -46,6 +48,9 @@ import {
  * out of the flow they were reading it in.
  */
 export type DraftSurface = 'flow' | 'file' | 'panel'
+
+/** The comments panel's three lists. */
+export type CommentsTab = 'unresolved' | 'all' | 'mr'
 
 export interface Draft {
   id: number
@@ -269,6 +274,8 @@ interface ReviewState {
    */
   openNote: (reviewId: number, note: number) => Promise<Thread | null>
   clearNoteHighlight: () => void
+  /** Marks a note, for a link or a merge-request discussion pointing at it. */
+  setNoteHighlight: (threadId: number) => void
   openFileInRepo: (
     repoId: number,
     path: string,
@@ -396,7 +403,7 @@ interface ReviewState {
    * it is an ordinary note: it shows in the diff, an agent can answer it, and
    * it is the review's, not the MR's.
    */
-  discussInStickie: (thread: MrThread) => Promise<void>
+  discussInStickie: (thread: MrThread, body: string) => Promise<void>
   submitReview: () => Promise<void>
   postThread: (threadId: number) => Promise<void>
   toggleViewed: (path: string) => Promise<void>
@@ -405,6 +412,13 @@ interface ReviewState {
   deleteThread: (threadId: number) => Promise<void>
   deleteMessage: (threadId: number, messageId: number) => Promise<void>
   commentsOpen: boolean
+  /**
+   * Which of the panel's tabs is being read. Kept, because it is a way of
+   * working rather than a moment — somebody going through unresolved notes is
+   * still doing that tomorrow.
+   */
+  commentsTab: CommentsTab
+  setCommentsTab: (tab: CommentsTab) => void
   toggleComments: () => void
   activityOpen: boolean
   toggleActivity: () => void
@@ -1373,6 +1387,8 @@ export const useReview = create<ReviewState>((set, get) => {
       return note
     },
 
+    setNoteHighlight: (threadId) => set({ noteHighlight: threadId }),
+
     clearNoteHighlight: () => {
       if (get().noteHighlight !== null) set({ noteHighlight: null })
     },
@@ -1966,6 +1982,9 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     commentsOpen: false,
+    commentsTab: previous_comments_tab,
+
+    setCommentsTab: (tab) => set({ commentsTab: tab }),
 
     toggleComments: () => set({ commentsOpen: !get().commentsOpen }),
     toggleActivity: () => set({ activityOpen: !get().activityOpen }),
@@ -2136,7 +2155,9 @@ export const useReview = create<ReviewState>((set, get) => {
     /** The attached MR's discussions, read from GitLab rather than held here. */
     loadMrThreads: async () => {
       const session = get().session
-      if (session === null || session.mr == null) {
+      // a candidate counts: the tab is there whenever the branch has an open
+      // merge request, attached or not
+      if (session === null || (session.mr == null && get().mrCandidate === null)) {
         set({ mrThreads: [], mrLoaded: true })
         return
       }
@@ -2153,9 +2174,20 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
 
-    discussInStickie: async (thread) => {
+    discussInStickie: async (thread, body) => {
       const session = get().session
       if (session === null) return
+      // one note per discussion; a second one beside it is two places to look
+      const already = get().threads.find((t) => t.mrDiscussion === thread.id)
+      if (already !== undefined) {
+        set({ noteHighlight: already.id, commentsOpen: true })
+        return
+      }
+      // the note points at a discussion, so the merge request it is on has to
+      // be written down — this is the moment attaching earns its keep
+      if (session.mr == null && get().mrCandidate !== null) {
+        await get().attachMr(get().mrCandidate?.iid ?? null)
+      }
       const said = thread.messages
         .map((m) => `> **${m.author}**: ${m.body.replace(/\n/g, '\n> ')}`)
         .join('\n>\n')
@@ -2163,22 +2195,29 @@ export const useReview = create<ReviewState>((set, get) => {
         session.mr == null
           ? 'From the merge request'
           : `From !${String(session.mr.iid)}`
-      const body = `${heading}:\n\n${said}\n\n`
+      // what the reader typed goes first: it is what they wanted to say, and
+      // the discussion under it is the context they wanted it against
+      const quoted = `${heading}:\n\n${said}`
+      const text = body.trim() === '' ? quoted : `${body.trim()}\n\n${quoted}`
       try {
         // a discussion with no position is about the change rather than a
         // line; line 0 is what stickie already calls that
-        await api.createThread(session.id, {
+        const note = await api.createThread(session.id, {
           path: thread.path ?? '',
           side: thread.side,
           startLine: thread.line ?? 0,
           endLine: thread.line ?? 0,
-          body,
+          body: text,
           author: 'user',
           pending: get().noteDefault === 'draft',
+          mrDiscussion: thread.id,
         })
-        set({ threads: await api.threads(session.id, true) })
-        set({ commentsOpen: true })
-        get().pushToast('info', 'note started from the MR discussion')
+        set({
+          threads: await api.threads(session.id, true),
+          commentsOpen: true,
+          noteHighlight: note.id,
+        })
+        get().pushToast('info', `note ${String(note.number)} started from the MR`)
       } catch (error) {
         get().pushToast('error', `note from the MR: ${message(error)}`)
       }
@@ -2186,10 +2225,10 @@ export const useReview = create<ReviewState>((set, get) => {
 
     replyToMr: async (discussion, body) => {
       const session = get().session
-      if (session === null || session.mr == null) return
+      if (session === null) return
       try {
         await api.replyToMr(session.id, discussion, body)
-        get().pushToast('info', `replied on !${String(session.mr.iid)}`)
+        get().pushToast('info', 'replied on the merge request')
         await get().loadMrThreads()
       } catch (error) {
         get().pushToast('error', `reply on the MR: ${message(error)}`)
@@ -2427,6 +2466,7 @@ let written_tabs = ''
 let written_drafts = ''
 let written_panes = ''
 let written_tree = ''
+let written_comments_tab = ''
 useReview.subscribe((state) => {
   const tabs = storeTabs(state.tabs, state.activeTabId, state.repos)
   if (tabs !== written_tabs) written_tabs = tabs
@@ -2436,4 +2476,6 @@ useReview.subscribe((state) => {
   if (ratios !== written_panes) written_panes = ratios
   const tree = storeTree(state.collapsedDirs, state.repos)
   if (tree !== written_tree) written_tree = tree
+  const tab = storeCommentsTab(state.commentsTab)
+  if (tab !== written_comments_tab) written_comments_tab = tab
 })

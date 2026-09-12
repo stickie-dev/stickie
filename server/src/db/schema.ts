@@ -232,6 +232,9 @@ const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
       ['external_id', 'external_id text'],
       ['actor_id', 'actor_id integer references actors(id)'],
       ['number', 'number integer'],
+      // the merge-request discussion this note was started from, so the one
+      // that exists can be found again rather than a second one started
+      ['mr_discussion', 'mr_discussion text'],
     ],
     postgres: [
       ['pending', 'pending boolean not null default false'],
@@ -239,6 +242,9 @@ const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
       ['external_id', 'external_id text'],
       ['actor_id', 'actor_id integer references actors(id)'],
       ['number', 'number integer'],
+      // the merge-request discussion this note was started from, so the one
+      // that exists can be found again rather than a second one started
+      ['mr_discussion', 'mr_discussion text'],
     ],
   },
   messages: {

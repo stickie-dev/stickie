@@ -240,6 +240,7 @@ const thread_schema = z
     status: z.enum(['open', 'resolved', 'detached']),
     pending: z.boolean(),
     origin: z.string().nullable(),
+    mrDiscussion: z.string().nullable().optional(),
     createdAt: z.string(),
     actorName: z.string().nullable(),
     messages: z.array(message_schema),
@@ -361,6 +362,8 @@ const thread_body = z.object({
   author: z.enum(['user', 'agent']).default('user'),
   // user notes default into the pending review batch; agent notes post
   pending: z.boolean().optional(),
+  /** the merge-request discussion this note was started from, if it was */
+  mrDiscussion: z.string().optional(),
   /**
    * What an agent calls itself. Optional on purpose: every adapter written
    * before this field existed keeps working, and its notes land under one
@@ -1528,7 +1531,13 @@ export function createApp(
           '',
           body.author,
           body.body,
-          { pending: body.pending ?? body.author === 'user', actorId },
+          {
+            pending: body.pending ?? body.author === 'user',
+            actorId,
+            ...(body.mrDiscussion === undefined
+              ? {}
+              : { mrDiscussion: body.mrDiscussion }),
+          },
         )
         await noteRecord('created', session, note.id, actorId, {
           path: body.path,
@@ -1563,7 +1572,13 @@ export function createApp(
         snippet,
         body.author,
         body.body,
-        { pending: body.pending ?? body.author === 'user', actorId },
+        {
+          pending: body.pending ?? body.author === 'user',
+          actorId,
+          ...(body.mrDiscussion === undefined
+            ? {}
+            : { mrDiscussion: body.mrDiscussion }),
+        },
       )
       await noteRecord('created', session, thread.id, actorId, {
         path: body.path,
@@ -2680,13 +2695,25 @@ export function createApp(
         return c.json({ error: context.error }, context.status)
       }
       const { session, config, project } = context
-      if (session.mr == null) return c.json({ mr: null, threads: [] }, 200)
       try {
-        const [mr, threads] = await Promise.all([
-          fetchMr(config, project, session.mr.iid),
-          fetchMrThreads(config, project, session.mr.iid),
-        ])
-        return c.json({ mr, threads }, 200)
+        // attached, or merely the open one for this branch: the discussion is
+        // read either way, since it exists and saying so costs nothing.
+        // Attaching is what lets a *note* be tied to a discussion, and that is
+        // asked for when a note is started rather than before anything is read
+        const mr =
+          session.mr == null
+            ? await findOpenMr(
+                config,
+                project,
+                session.branch,
+                session.baseRef === 'HEAD' ? null : session.baseRef,
+              )
+            : await fetchMr(config, project, session.mr.iid)
+        if (mr === null) return c.json({ mr: null, threads: [] }, 200)
+        return c.json(
+          { mr, threads: await fetchMrThreads(config, project, mr.iid) },
+          200,
+        )
       } catch (error) {
         return c.json({ error: error instanceof Error ? error.message : String(error) }, 400)
       }
@@ -2723,8 +2750,20 @@ export function createApp(
         return c.json({ error: context.error }, context.status)
       }
       const { session, config, project } = context
-      if (session.mr == null) {
-        return c.json({ error: 'no merge request attached to this review' }, 400)
+      // the same fallback the threads route makes: what is being replied to is
+      // whatever discussion was read, attached or merely found
+      const target =
+        session.mr?.iid ??
+        (
+          await findOpenMr(
+            config,
+            project,
+            session.branch,
+            session.baseRef === 'HEAD' ? null : session.baseRef,
+          ).catch(() => null)
+        )?.iid
+      if (target === undefined) {
+        return c.json({ error: 'no merge request for this review' }, 400)
       }
       // an unsigned reply reads as the repository owner's, and a reply that
       // reaches the MR is read by people who were not here
@@ -2738,7 +2777,7 @@ export function createApp(
         await replyToMrThread(
           config,
           project,
-          session.mr.iid,
+          target,
           c.req.valid('param').discussion,
           signReply(c.req.valid('json').body, author, signer.name),
         )
@@ -2751,7 +2790,7 @@ export function createApp(
         actorId: signer.id,
         repoId: session.repoId,
         sessionId: session.id,
-        detail: { project, mr: session.mr.iid, discussion: c.req.valid('param').discussion },
+        detail: { project, mr: target, discussion: c.req.valid('param').discussion },
       })
       return c.json({ ok: true }, 200)
     },

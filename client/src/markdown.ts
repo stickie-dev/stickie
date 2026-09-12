@@ -240,3 +240,32 @@ export function hasMarkup(source: string): boolean {
     b.kind === 'paragraph' && b.inlines.some((i) => i.kind !== 'text'),
   )
 }
+
+/**
+ * A one-line taste of a body, for a folded discussion. The markers are
+ * dropped rather than drawn: a teaser showing `**naming**` is asking the
+ * reader to parse markdown in their head to decide whether to open it.
+ */
+export function plainSummary(source: string, limit = 120): string {
+  const text = parseMarkdown(source)
+    .flatMap((block) => {
+      if (block.kind === 'code') return [block.text]
+      if (block.kind === 'rule') return []
+      if (block.kind === 'list') {
+        return block.items.map((i) => i.inlines.map((x) => x.text).join(''))
+      }
+      if (block.kind === 'quote') {
+        return [plainSummary(
+          block.blocks
+            .flatMap((b) => ('inlines' in b ? b.inlines.map((i) => i.text) : []))
+            .join(' '),
+          limit,
+        )]
+      }
+      return [block.inlines.map((i) => i.text).join('')]
+    })
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text
+}

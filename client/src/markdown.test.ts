@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasMarkup, parseInline, parseMarkdown } from './markdown'
+import { hasMarkup, parseInline, parseMarkdown, plainSummary } from './markdown'
 
 const kinds = (text: string) => parseInline(text).map((i) => i.kind)
 
@@ -155,5 +155,29 @@ describe('hasMarkup', () => {
   it('is true once anything is marked up', () => {
     expect(hasMarkup('rename `this`')).toBe(true)
     expect(hasMarkup('- one\n- two')).toBe(true)
+  })
+})
+
+describe('plainSummary', () => {
+  it('drops the markers rather than showing them', () => {
+    expect(plainSummary('Nit: **naming** and `foo`')).toBe('Nit: naming and foo')
+  })
+
+  it('flattens a list onto one line', () => {
+    expect(plainSummary('- one\n- two')).toBe('one two')
+  })
+
+  it('reads through a quote', () => {
+    expect(plainSummary('> they said **this**')).toBe('they said this')
+  })
+
+  it('collapses the newlines a fold has no room for', () => {
+    expect(plainSummary('one\n\ntwo')).toBe('one two')
+  })
+
+  it('cuts a long body and says it was cut', () => {
+    const summary = plainSummary('x'.repeat(200), 20)
+    expect(summary).toHaveLength(20)
+    expect(summary.endsWith('…')).toBe(true)
   })
 })

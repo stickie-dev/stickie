@@ -1,14 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { MrThread, NoteDefault } from '../api'
+import type { MergeRequest, MrThread, NoteDefault } from '../api'
 import { GrowingTextarea } from './GrowingTextarea'
 import { DraftForm } from './DraftForm'
 import { SubmitSplit } from './SubmitSplit'
 import { postsComment } from '../keys'
 import { paneWidth } from '../panes'
 import { orderedThreadIds, useReview } from '../store'
-import { Markdown } from './Markdown'
+import { plainSummary } from '../markdown'
+import {
+  CardBody,
+  CardHeader,
+  CardShell,
+  ReplyBox,
+  ReplyRow,
+  Saids,
+  StatusBadge,
+} from './NoteCard'
 import { ThreadCard } from './ThreadCard'
-import { Close } from '../icons'
+import { ChevronDown, ChevronRight, Close } from '../icons'
 import { Loading, SkeletonCard } from './Skeleton'
 import { badge, btn, card, field, field_flush, icon_button } from '../ui'
 
@@ -113,15 +122,29 @@ function MrThreads({
   threads,
   loading,
   mr,
+  candidate,
 }: {
   threads: MrThread[]
   loading: boolean
   mr: { iid: number; projectPath: string } | null
+  candidate: MergeRequest | null
 }) {
+  const notes = useReview((s) => s.threads)
   const discussInStickie = useReview((s) => s.discussInStickie)
   const replyToMr = useReview((s) => s.replyToMr)
-  const [replyTo, setReplyTo] = useState<string | null>(null)
-  const [reply, setReply] = useState('')
+  const openRef = useReview((s) => s.openRef)
+  const setNoteHighlight = useReview((s) => s.setNoteHighlight)
+  const [answering, setAnswering] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  // resolved discussions start folded: they are the ones already dealt with,
+  // and on a busy merge request they are most of the list
+  const [opened, setOpened] = useState<Record<string, boolean>>({})
+  const [showResolved, setShowResolved] = useState(false)
+
+  const settled = threads.filter((t) => t.resolved).length
+  const shown = showResolved ? threads : threads.filter((t) => !t.resolved)
+  /** The stickie note started from a discussion, if one was. */
+  const noteFor = (id: string) => notes.find((n) => n.mrDiscussion === id)
 
   if (loading && threads.length === 0) {
     return (
@@ -137,7 +160,7 @@ function MrThreads({
     return (
       <p className="min-h-0 grow p-3 text-xs text-faint">
         {mr === null
-          ? 'No merge request attached.'
+          ? 'No merge request for this branch.'
           : `Nothing has been said on !${String(mr.iid)} yet.`}
       </p>
     )
@@ -145,77 +168,156 @@ function MrThreads({
 
   return (
     <div className="min-h-0 grow space-y-3 overflow-y-auto p-3">
-      {threads.map((thread) => (
-        <div key={thread.id} className={`p-2 ${card}`}>
-          <div className="mb-1 flex items-center gap-2 text-xs">
-            <span className="min-w-0 truncate font-mono text-soft">
-              {thread.path === null
-                ? 'on the merge request'
-                : `${thread.path}${thread.line === null ? '' : `:L${String(thread.line)}`}`}
-            </span>
-            <span className="grow" />
-            {thread.resolved && <span className={`${badge} bg-overlay text-faint`}>resolved</span>}
-          </div>
-          {thread.messages.map((m, i) => (
-            <div key={i} className="mb-1.5 text-note">
-              <span className="font-medium text-ink">{m.author}</span>
-              {/* a hub's comments are markdown, and rather more of it than
-                  stickie's own notes tend to be: checkboxes, images, tables */}
-              <div className="text-soft">
-                <Markdown body={m.body} text={(run) => run} />
-              </div>
-            </div>
-          ))}
-          {replyTo === thread.id ? (
-            <div className="mt-2">
-              <GrowingTextarea
-                value={reply}
-                onChange={(e) => setReply(e.target.value)}
-                placeholder="reply on the merge request…"
-              />
-              <div className="mt-1 flex justify-end gap-2">
-                <button
-                  className={`text-xs ${btn()}`}
-                  onClick={() => {
-                    setReplyTo(null)
-                    setReply('')
-                  }}
-                >
-                  cancel
-                </button>
-                <button
-                  className={`text-xs ${btn('primary')}`}
-                  disabled={reply.trim() === ''}
-                  onClick={() => {
-                    void replyToMr(thread.id, reply)
-                    setReplyTo(null)
-                    setReply('')
-                  }}
-                >
-                  Reply on !{mr?.iid}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-1 flex gap-2">
+      {candidate !== null && (
+        <p className="text-xs text-faint">
+          <a
+            href={candidate.webUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-accent hover:underline"
+          >
+            !{candidate.iid}
+          </a>{' '}
+          {candidate.title} — {candidate.sourceBranch} into{' '}
+          {candidate.targetBranch}
+
+        </p>
+      )}
+      {settled > 0 && (
+        <button
+          className={`text-xs ${btn()}`}
+          onClick={() => setShowResolved(!showResolved)}
+        >
+          {showResolved ? 'hide' : 'show'} {settled} resolved
+        </button>
+      )}
+      {shown.map((thread) => {
+        const open = opened[thread.id] ?? !thread.resolved
+        const first = thread.messages[0]
+        const note = noteFor(thread.id)
+        return (
+          <CardShell key={thread.id}>
+            <CardHeader>
               <button
-                className={`text-xs ${btn()}`}
-                title="reply on the merge request — it goes there, signed as having come through stickie"
-                onClick={() => setReplyTo(thread.id)}
+                className="flex min-w-0 grow items-center gap-2 text-left"
+                aria-expanded={open}
+                onClick={() => setOpened({ ...opened, [thread.id]: !open })}
               >
-                reply there
+                <span className="shrink-0 text-faint [&>svg]:h-3.5 [&>svg]:w-3.5">
+                  {open ? <ChevronDown /> : <ChevronRight />}
+                </span>
+                <StatusBadge status={thread.resolved ? 'resolved' : 'open'} />
+                <span className="min-w-0 truncate text-xs text-soft">
+                  {thread.path === null
+                    ? 'on the merge request'
+                    : `${thread.path}${thread.line === null ? '' : `:L${String(thread.line)}`}`}
+                </span>
+                {thread.messages.length > 1 && (
+                  <span className="shrink-0 text-xs tabular-nums text-faint">
+                    {thread.messages.length}
+                  </span>
+                )}
               </button>
-              <button
-                className={`text-xs ${btn()}`}
-                title="start a stickie note on these lines, carrying what was said here"
-                onClick={() => void discussInStickie(thread)}
-              >
-                note here
-              </button>
-            </div>
-          )}
-        </div>
-      ))}
+              {note !== undefined && (
+                <span className={`${badge} bg-accent-soft text-accent`}>
+                  note {note.number}
+                </span>
+              )}
+            </CardHeader>
+            {!open && first !== undefined ? (
+              <p className="truncate px-3 py-1.5 text-faint">
+                <span className="font-medium">{first.author}</span>{' '}
+                {plainSummary(first.body)}
+              </p>
+            ) : (
+              <CardBody>
+                <Saids
+                  saids={thread.messages.map((m) => ({
+                    author: m.author,
+                    kind: 'other' as const,
+                    body: m.body,
+                    at: m.createdAt,
+                  }))}
+                />
+                {/*
+                  Two answers to one discussion, going to different places: a
+                  reply lands on the merge request where the people in it will
+                  see it, a note stays here to be worked through. Neither does
+                  the other — starting a note must not put anything on the MR,
+                  since the point of one is often to think before saying
+                  anything at all.
+                */}
+                {answering === thread.id ? (
+                  <ReplyBox
+                    value={draft}
+                    onChange={setDraft}
+                    onSubmit={() => {
+                      void replyToMr(thread.id, draft)
+                      setAnswering(null)
+                      setDraft('')
+                    }}
+                    onCancel={() => {
+                      setAnswering(null)
+                      setDraft('')
+                    }}
+                    submitLabel="Reply to MR"
+                    submitTitle="post this on the merge request, signed as having come through stickie"
+                    placeholder="what to say, or what to work through here…"
+                    extra={
+                      note === undefined ? (
+                        <button
+                          className={`text-xs ${btn()}`}
+                          title="start a note here, carrying this discussion — nothing is posted to the merge request"
+                          onClick={() => {
+                            void discussInStickie(thread, draft)
+                            setAnswering(null)
+                            setDraft('')
+                          }}
+                        >
+                          Start a note
+                        </button>
+                      ) : undefined
+                    }
+                  />
+                ) : (
+                  <ReplyRow
+                    onOpen={() => {
+                      setAnswering(thread.id)
+                      setDraft('')
+                    }}
+                    extra={
+                      note === undefined ? (
+                        <button
+                          className={`shrink-0 text-xs ${btn()}`}
+                          title="start a note here, carrying this discussion — nothing is posted to the merge request"
+                          onClick={() => void discussInStickie(thread, '')}
+                        >
+                          Start a note
+                        </button>
+                      ) : (
+                        // one note per discussion: a second one beside it
+                        // would be two places to look for the same argument
+                        <button
+                          className={`shrink-0 text-xs ${btn()}`}
+                          title={`go to note ${String(note.number)}`}
+                          onClick={() => {
+                            setNoteHighlight(note.id)
+                            if (note.startLine > 0 && note.path !== '') {
+                              void openRef(note.path, note.startLine)
+                            }
+                          }}
+                        >
+                          Go to note
+                        </button>
+                      )
+                    }
+                  />
+                )}
+              </CardBody>
+            )}
+          </CardShell>
+        )
+      })}
     </div>
   )
 }
@@ -233,7 +335,8 @@ export function CommentsPanel() {
   const moveInPromptOrder = useReview((s) => s.moveInPromptOrder)
   // three tabs, not two: the merge request's discussion is a third thing to
   // look at, and it is not stickie's notes — it is read from GitLab and shown
-  const [tab, setTab] = useState<'unresolved' | 'all' | 'mr'>('unresolved')
+  const tab = useReview((s) => s.commentsTab)
+  const setTab = useReview((s) => s.setCommentsTab)
   const openOnly = tab === 'unresolved'
   const session = useReview((s) => s.session)
   const mrThreads = useReview((s) => s.mrThreads)
@@ -272,13 +375,32 @@ export function CommentsPanel() {
   // what each filter would show, so the choice does not have to be made blind
   const unresolved = threads.filter((t) => t.status !== 'resolved').length
   const total = visible.length
-  const mr = session?.mr ?? null
+  const mrCandidate = useReview((s) => s.mrCandidate)
+  /*
+   * The tab is there whenever this branch has an open merge request, whether
+   * or not it has been attached — there is one, and hiding it behind a button
+   * in the top bar only meant going to look for something stickie already knew.
+   * Attaching is what lets a note be tied to a discussion, so it happens when
+   * one is started rather than as a step of its own.
+   */
+  const mr =
+    session?.mr ??
+    (mrCandidate === null
+      ? null
+      : { iid: mrCandidate.iid, projectPath: mrCandidate.projectPath })
 
   // opened rather than loaded on mount: nobody pays for a GitLab round trip
   // until they look. Once, though — on `mrLoaded` rather than on an empty
   // list, or a fetch that fails leaves the list empty and the effect asks
   // again, and again, for as long as the tab is open
   const mrIid = mr?.iid ?? null
+  // the kept tab can name a list this review has not got: a branch with no
+  // open merge request would otherwise open on an empty third tab that is not
+  // even there
+  useEffect(() => {
+    if (tab === 'mr' && mr === null && mrLoaded) setTab('unresolved')
+  }, [tab, mr, mrLoaded, setTab])
+
   useEffect(() => {
     if (tab === 'mr' && mrIid !== null && !mrLoaded && !mrLoading) {
       void loadMrThreads()
@@ -354,6 +476,7 @@ export function CommentsPanel() {
           threads={mrThreads}
           loading={mrLoading}
           mr={mr}
+          candidate={mrCandidate}
         />
       )}
       <div

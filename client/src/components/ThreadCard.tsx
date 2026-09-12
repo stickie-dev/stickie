@@ -1,71 +1,19 @@
 import { useState } from 'react'
 import type { Thread } from '@stickie/shared'
 import { postsComment } from '../keys'
-import { Markdown } from './Markdown'
+import {
+  ReplyBox,
+  ReplyRow,
+  SaidLine,
+  StatusBadge,
+  shadeRun,
+} from './NoteCard'
 import { useReview } from '../store'
 import { GrowingTextarea } from './GrowingTextarea'
 import { TimeAgo } from './TimeAgo'
 import { ask } from '../confirm'
 import { Send } from '../icons'
 import { badge, btn, field } from '../ui'
-
-const ref_pattern = /(@[\w./-]+(?::[\w./-]+)?:L\d+(?:-L?\d+)?)/g
-
-/**
- * A note's text: markdown, with stickie's own `@path:L10` references linked
- * inside it.
- *
- * The references are handed to the markdown renderer as the way to draw plain
- * text, rather than being a markdown extension — they are stickie's, they point
- * inward at a file rather than outward at a URL, and markdown has no business
- * knowing about either.
- */
-export function MessageBody({ body }: { body: string }) {
-  return (
-    <div className="text-ink [overflow-wrap:anywhere]">
-      <Markdown body={body} text={(run, key) => <Refs key={key} run={run} />} />
-    </div>
-  )
-}
-
-/** Render @path:L10 and @repo:path:L10 references as jump links. */
-function Refs({ run }: { run: string }) {
-  const openRefTarget = useReview((s) => s.openRefTarget)
-  const parts = run.split(ref_pattern)
-  return (
-    <>
-      {parts.map((part, i) => {
-        const match = /^@(.+):L(\d+)/.exec(part)
-        if (i % 2 === 1 && match !== null) {
-          const target = match[1] ?? ''
-          const line = Number(match[2])
-          const colon = target.indexOf(':')
-          const has_repo =
-            colon !== -1 && !target.slice(0, colon).includes('/')
-          const repo = has_repo ? target.slice(0, colon) : null
-          const path = has_repo ? target.slice(colon + 1) : target
-          return (
-            <button
-              key={i}
-              className="rounded bg-accent/10 px-1 text-left font-mono text-accent [overflow-wrap:anywhere] hover:bg-accent/20"
-              title={repo === null ? `open ${path}` : `open ${path} in ${repo}`}
-              onClick={() => void openRefTarget(repo, path, line)}
-            >
-              {part}
-            </button>
-          )
-        }
-        return <span key={i}>{part}</span>
-      })}
-    </>
-  )
-}
-
-const status_styles: Record<Thread['status'], string> = {
-  open: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-  resolved: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-  detached: 'bg-rose-500/15 text-rose-700 dark:text-rose-300',
-}
 
 /** Where the card is rendered; the same note appears in both. */
 type Surface = 'zone' | 'panel'
@@ -115,6 +63,11 @@ export function ThreadCard({
   const folds = surface === 'zone' && thread?.status === 'resolved'
   const open = !folds || opened || linked
   const first = thread?.messages[0]
+  // the ground shifts when the speaker does, the same way it does on a merge
+  // request's discussions — one rule, drawn by one component
+  const shades = shadeRun(
+    (thread?.messages ?? []).map((m) => m.actorName ?? m.author),
+  )
 
   if (thread === undefined) return null
 
@@ -137,9 +90,7 @@ export function ThreadCard({
       }`}
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-edge/60 px-3 py-1.5">
-        <span className={`${badge} ${status_styles[thread.status]}`}>
-          {thread.status}
-        </span>
+        <StatusBadge status={thread.status} />
         <span className="text-xs text-soft">
           {thread.startLine === 0
             ? thread.path === ''
@@ -272,7 +223,7 @@ export function ThreadCard({
           </div>
         )}
         {open &&
-          thread.messages.map((message) =>
+          thread.messages.map((message, index) =>
           editingId === message.id ? (
             <div key={message.id} className="flex items-end gap-2">
               <GrowingTextarea
@@ -310,82 +261,51 @@ export function ThreadCard({
               </div>
             </div>
           ) : (
-            <div key={message.id} className="group">
-              <span
-                className={
-                  message.author === 'agent'
-                    ? 'font-semibold text-sky-600 dark:text-sky-400'
-                    : 'font-semibold text-ink'
-                }
-                title={`role: ${message.author}`}
-              >
-                {message.actorName ?? message.author}
-              </span>
-              <TimeAgo at={message.createdAt} className="ml-1.5 text-faint" />
-              <MessageBody body={message.body} />
-              {message.author === 'user' && (
-                <>
-                  <button
-                    className="ml-1.5 hidden text-xs text-faint group-hover:inline hover:text-ink"
-                    title="edit this message"
-                    onClick={() => {
-                      setEditingId(message.id)
-                      setEditText(message.body)
-                    }}
-                  >
-                    edit
-                  </button>
-                  <button
-                    className="ml-1.5 hidden text-xs text-faint group-hover:inline hover:text-rose-500"
-                    title="delete this message"
-                    onClick={() => void deleteMessage(thread.id, message.id)}
-                  >
-                    delete
-                  </button>
-                </>
-              )}
-            </div>
+            <SaidLine
+              key={message.id}
+              shade={shades[index] ?? false}
+              said={{
+                    author: message.actorName ?? message.author,
+                    kind: message.author,
+                    body: message.body,
+                    at: message.createdAt,
+                    actions:
+                      message.author === 'user' ? (
+                        <>
+                          <button
+                            className="ml-1.5 hidden text-xs text-faint group-hover:inline hover:text-ink"
+                            title="edit this message"
+                            onClick={() => {
+                              setEditingId(message.id)
+                              setEditText(message.body)
+                            }}
+                          >
+                            edit
+                          </button>
+                          <button
+                            className="ml-1.5 hidden text-xs text-faint group-hover:inline hover:text-rose-500"
+                            title="delete this message"
+                            onClick={() => void deleteMessage(thread.id, message.id)}
+                          >
+                            delete
+                          </button>
+                        </>
+                      ) : undefined,
+              }}
+            />
           ),
         )}
         {showReply ? (
-          <div className="flex items-end gap-2 border-t border-edge/60 pt-2">
-            <GrowingTextarea
-              autoFocus
-              className={`grow ${field}`}
-              placeholder={
-                submitKey === 'enter'
-                  ? 'reply… (↵ to send, ⇧↵ for a new line)'
-                  : 'reply… (⌘↵ to send)'
-              }
-              value={replyText}
-              onChange={(e) => updateReplyDraft(thread.id, e.target.value)}
-              onFocus={() => setActiveReply(thread.id)}
-              onKeyDown={(e) => {
-                if (postsComment(e, submitKey)) {
-                  e.preventDefault()
-                  void submitReply()
-                }
-                if (e.key === 'Escape') closeReply()
-              }}
-            />
-            <button
-              className={`text-xs ${btn('primary')}`}
-              onClick={() => void submitReply()}
-            >
-              send
-            </button>
-          </div>
+          <ReplyBox
+            value={replyText}
+            onChange={(next) => updateReplyDraft(thread.id, next)}
+            onFocus={() => setActiveReply(thread.id)}
+            onSubmit={() => void submitReply()}
+            onCancel={closeReply}
+            submitLabel="send"
+          />
         ) : (
-          // the whole row, not the word: the row is the target a pointer is
-          // already over, and a two-word hit area inside it is a thing to aim at
-          <div className="border-t border-edge/60 pt-1.5">
-            <button
-              className={`w-full text-left text-xs ${btn('text', 'px-1.5')}`}
-              onClick={() => setShowReply(true)}
-            >
-              reply…
-            </button>
-          </div>
+          <ReplyRow onOpen={() => setShowReply(true)} />
         )}
       </div>
     </div>

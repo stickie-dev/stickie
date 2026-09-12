@@ -5,7 +5,7 @@ import type { Draft, DraftSurface } from '../store'
 import { useReview } from '../store'
 import { GrowingTextarea } from './GrowingTextarea'
 import { btn, field_flush, motion } from '../ui'
-import { MessageBody } from './ThreadCard'
+import { MessageBody } from './NoteCard'
 import { SubmitSplit } from './SubmitSplit'
 
 /** Where a form for the same note is rendered; each surface focuses alone. */

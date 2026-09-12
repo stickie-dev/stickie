@@ -166,6 +166,12 @@ export interface Thread {
   pending: boolean
   /** e.g. "gitlab" for imported threads */
   origin: string | null
+  /**
+   * The merge-request discussion this note was started from, when it was.
+   * One note per discussion: the point of starting one is to have somewhere
+   * to iterate, and a second one beside it is two places to look.
+   */
+  mrDiscussion?: string | null
   createdAt: string
   /** who raised the note; null for imported and pre-actor threads */
   actorName: string | null

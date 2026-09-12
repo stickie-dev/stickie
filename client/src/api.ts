@@ -240,6 +240,8 @@ export const api = {
       author?: Author
       /** false sends it to the agent at once; true keeps it in the batch */
       pending?: boolean
+      /** the merge-request discussion it was started from, if it was */
+      mrDiscussion?: string
     },
   ) => post(`/api/sessions/${sessionId}/threads`, input).then(toJson<Thread>),
 

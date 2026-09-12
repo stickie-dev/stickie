@@ -1,7 +1,7 @@
 import type { RepoInfo, Side } from '@stickie/shared'
 import type { PaneName } from './panes'
 import { clampRatio, panes } from './panes'
-import type { Draft, DraftSurface, Tab } from './store'
+import type { CommentsTab, Draft, DraftSurface, Tab } from './store'
 
 /**
  * What survives a reload, and how. Repositories are keyed by path rather than
@@ -14,6 +14,7 @@ const tabs_key = 'stickie-tabs'
 const drafts_key = 'stickie-drafts'
 const panes_key = 'stickie-panes'
 const tree_key = 'stickie-tree'
+const comments_tab_key = 'stickie-comments-tab'
 
 interface StoredTab {
   kind: Tab['kind']
@@ -118,6 +119,20 @@ function readTree(): { collapsed: Record<string, string[]> } {
   return { collapsed }
 }
 
+/** Which of the comments panel's tabs was last being read. */
+function readCommentsTab(): CommentsTab {
+  const stored = localStorage.getItem(comments_tab_key)
+  return stored === 'all' || stored === 'mr' || stored === 'unresolved'
+    ? stored
+    : 'unresolved'
+}
+
+export function storeCommentsTab(tab: CommentsTab): string {
+  localStorage.setItem(comments_tab_key, tab)
+  return tab
+}
+
+export const previous_comments_tab = readCommentsTab()
 export const previous_tabs = readTabs()
 export const previous_drafts = readDrafts()
 export const previous_panes = readPanes()

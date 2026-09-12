@@ -63,6 +63,7 @@ interface ThreadRow {
   pending: number | boolean
   origin: string | null
   external_id: string | null
+  mr_discussion: string | null
   created_at: string | Date
   /** from the left join, not a column of threads */
   actor_name: string | null
@@ -382,6 +383,7 @@ export class Store {
       pending?: boolean
       origin?: string
       externalId?: string
+      mrDiscussion?: string
       actorId?: number | null
     } = {},
   ): Promise<Thread> {
@@ -412,8 +414,8 @@ export class Store {
         sessionId,
       ])
       const threadId = await this.db.insert(
-        `insert into threads (session_id, number, path, side, start_line, end_line, blob_sha, snippet, pending, origin, external_id, actor_id)
-         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `insert into threads (session_id, number, path, side, start_line, end_line, blob_sha, snippet, pending, origin, external_id, mr_discussion, actor_id)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           sessionId,
           number,
@@ -426,6 +428,7 @@ export class Store {
           options.pending === true ? this.trueValue : this.falseValue,
           options.origin ?? null,
           options.externalId ?? null,
+          options.mrDiscussion ?? null,
           options.actorId ?? null,
         ],
       )
@@ -830,6 +833,7 @@ export class Store {
       status: row.status as ThreadStatus,
       pending: toBool(row.pending),
       origin: row.origin,
+      mrDiscussion: row.mr_discussion,
       createdAt: toText(row.created_at),
       actorName: row.actor_name,
       messages,
