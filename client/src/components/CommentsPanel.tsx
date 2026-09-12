@@ -6,6 +6,7 @@ import { SubmitSplit } from './SubmitSplit'
 import { postsComment } from '../keys'
 import { paneWidth } from '../panes'
 import { orderedThreadIds, useReview } from '../store'
+import { Markdown } from './Markdown'
 import { ThreadCard } from './ThreadCard'
 import { Close } from '../icons'
 import { Loading, SkeletonCard } from './Skeleton'
@@ -157,8 +158,12 @@ function MrThreads({
           </div>
           {thread.messages.map((m, i) => (
             <div key={i} className="mb-1.5 text-note">
-              <span className="font-medium text-ink">{m.author}</span>{' '}
-              <span className="whitespace-pre-wrap text-soft">{m.body}</span>
+              <span className="font-medium text-ink">{m.author}</span>
+              {/* a hub's comments are markdown, and rather more of it than
+                  stickie's own notes tend to be: checkboxes, images, tables */}
+              <div className="text-soft">
+                <Markdown body={m.body} text={(run) => run} />
+              </div>
             </div>
           ))}
           {replyTo === thread.id ? (

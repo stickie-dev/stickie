@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Thread } from '@stickie/shared'
 import { postsComment } from '../keys'
+import { Markdown } from './Markdown'
 import { useReview } from '../store'
 import { GrowingTextarea } from './GrowingTextarea'
 import { TimeAgo } from './TimeAgo'
@@ -10,13 +11,29 @@ import { badge, btn, field } from '../ui'
 
 const ref_pattern = /(@[\w./-]+(?::[\w./-]+)?:L\d+(?:-L?\d+)?)/g
 
-/** Render @path:L10 and @repo:path:L10 references as jump links. */
-function MessageBody({ body }: { body: string }) {
-  const openRefTarget = useReview((s) => s.openRefTarget)
-  const parts = body.split(ref_pattern)
+/**
+ * A note's text: markdown, with stickie's own `@path:L10` references linked
+ * inside it.
+ *
+ * The references are handed to the markdown renderer as the way to draw plain
+ * text, rather than being a markdown extension — they are stickie's, they point
+ * inward at a file rather than outward at a URL, and markdown has no business
+ * knowing about either.
+ */
+export function MessageBody({ body }: { body: string }) {
   return (
-    <span className="whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
-      {' '}
+    <div className="text-ink [overflow-wrap:anywhere]">
+      <Markdown body={body} text={(run, key) => <Refs key={key} run={run} />} />
+    </div>
+  )
+}
+
+/** Render @path:L10 and @repo:path:L10 references as jump links. */
+function Refs({ run }: { run: string }) {
+  const openRefTarget = useReview((s) => s.openRefTarget)
+  const parts = run.split(ref_pattern)
+  return (
+    <>
       {parts.map((part, i) => {
         const match = /^@(.+):L(\d+)/.exec(part)
         if (i % 2 === 1 && match !== null) {
@@ -40,7 +57,7 @@ function MessageBody({ body }: { body: string }) {
         }
         return <span key={i}>{part}</span>
       })}
-    </span>
+    </>
   )
 }
 

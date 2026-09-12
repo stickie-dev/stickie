@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { NoteDefault } from '../api'
 import { postsComment } from '../keys'
 import type { Draft, DraftSurface } from '../store'
 import { useReview } from '../store'
 import { GrowingTextarea } from './GrowingTextarea'
-import { btn, field_flush } from '../ui'
+import { btn, field_flush, motion } from '../ui'
+import { MessageBody } from './ThreadCard'
 import { SubmitSplit } from './SubmitSplit'
 
 /** Where a form for the same note is rendered; each surface focuses alone. */
@@ -91,6 +92,7 @@ export function DraftForm({
   const here = useReview((s): DraftSurface => (s.viewMode === 'flow' ? 'flow' : 'file'))
   const activeDraftId = useReview((s) => s.activeDraftId)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [previewing, setPreviewing] = useState(false)
 
   const key = draft === undefined ? null : `${surface}:${draft.id}`
   useEffect(() => {
@@ -189,6 +191,21 @@ export function DraftForm({
             : '— click to make active'}
         </span>
       </div>
+      {previewing ? (
+        // the same body, drawn as it will be read. A preview rather than a
+        // rich editor: what is typed here is markdown, it goes to agents and
+        // to merge requests as markdown, and hiding that behind a toolbar
+        // would make the one thing that travels the hardest to see
+        <div
+          className={`min-h-16 w-full rounded-md bg-overlay px-2 py-1 ${motion}`}
+        >
+          {draft.body.trim() === '' ? (
+            <span className="text-faint">nothing to preview yet</span>
+          ) : (
+            <MessageBody body={draft.body} />
+          )}
+        </div>
+      ) : (
       <GrowingTextarea
         inputRef={textareaRef}
         data-stickie-draft={key}
@@ -214,7 +231,17 @@ export function DraftForm({
           if (e.key === 'Escape') cancelDraft(draft.id)
         }}
       />
+      )}
       <div className="mt-1 flex items-center justify-end gap-2">
+        <button
+          className={`text-xs ${btn(previewing ? 'outline' : 'text')}`}
+          title="see the note as it will be read — it is markdown, here and everywhere it goes"
+          aria-pressed={previewing}
+          onClick={() => setPreviewing(!previewing)}
+        >
+          {previewing ? 'write' : 'preview'}
+        </button>
+        <span className="grow" />
         <button
           className={`text-xs ${btn()}`}
           onClick={() => cancelDraft(draft.id)}
