@@ -672,22 +672,49 @@ export const useReview = create<ReviewState>((set, get) => {
       void get().findMr()
       if (session.mr != null) void get().loadMrThreads()
       const flow_tab = ensureFlowTab(activeRepoId, session.id)
+      const timeline = get().commitView
       if (get().viewMode === 'flow') {
         set({ activeTabId: flow_tab.id })
+      } else if (
+        get().viewMode === 'commits' &&
+        timeline?.repoId !== activeRepoId
+      ) {
+        // which commits are in the timeline was chosen for the repository that
+        // was active, and it cannot follow the reader to this one: asked of a
+        // repo that does not have them, every one reads as a starting point.
+        // The selection is left alone, so its own tab still opens on it.
+        set({ viewMode: 'flow', activeTabId: flow_tab.id })
       }
       const first = files[0]
-      if (first !== undefined) {
-        if (get().viewMode === 'flow') {
-          get().flowSelect(first.path)
-        } else {
-          await get().openFile(first.path, first.status)
-        }
-      }
+      if (first !== undefined) await landOn(first.path, first.status)
     } catch (error) {
       const text = message(error)
       set({ error: text })
       // a working tree with no branch is refused, and the reason is the fix
       get().pushToast('error', text)
+    }
+  }
+
+  /**
+   * Lands the reader on a file *in the view they are already in*. The flow
+   * shows every file at once, so arriving at one there is a selection rather
+   * than an opening, and the commits timeline is of neither.
+   *
+   * Which view is being read is a tab's answer and nothing else's. Re-reading
+   * a review — starting it, coming back to a repository, moving a base — used
+   * to answer it too, by calling `openFile` whatever the reader happened to be
+   * looking at: that is how landing on a diff tab opened a file instead, and
+   * left a tab for it behind.
+   */
+  async function landOn(
+    path: string,
+    status?: ChangedFile['status'] | 'unchanged',
+  ): Promise<void> {
+    const mode = get().viewMode
+    if (mode === 'flow') {
+      get().flowSelect(path)
+    } else if (mode === 'file') {
+      await get().openFile(path, status)
     }
   }
 
@@ -1480,6 +1507,11 @@ export const useReview = create<ReviewState>((set, get) => {
     activateTab: async (id) => {
       const tab = get().tabs.find((t) => t.id === id)
       if (tab === undefined) return
+      // said before the review is opened, not after: opening one re-reads it,
+      // and a re-read asks `viewMode` what the reader is looking at. Left
+      // until afterwards, the answer is about the tab being left rather than
+      // the one being landed on.
+      if (tab.kind !== 'file') set({ viewMode: tab.kind })
       // a tab is of a review, so landing on it means landing on that review —
       // which may be another branch of the repository already open
       if (tab.reviewId !== get().session?.id) {
@@ -1492,10 +1524,10 @@ export const useReview = create<ReviewState>((set, get) => {
       } else if (tab.repoId !== get().activeRepoId) {
         await get().selectRepo(tab.repoId)
       }
-      if (tab.kind === 'flow') {
-        set({ viewMode: 'flow', activeTabId: tab.id })
-      } else if (tab.kind === 'commits') {
-        set({ viewMode: 'commits', activeTabId: tab.id })
+      if (tab.kind !== 'file') {
+        // opening the review lands on its own flow tab; this is the one
+        // that was asked for
+        set({ viewMode: tab.kind, activeTabId: tab.id })
       } else if (tab.path !== undefined) {
         await get().openFile(tab.path)
       }
@@ -1622,7 +1654,7 @@ export const useReview = create<ReviewState>((set, get) => {
       await startSession()
       const remembered = get().perRepo[repoId]?.selectedPath
       if (remembered !== undefined && remembered !== get().selectedPath) {
-        await get().openFile(remembered).catch(() => undefined)
+        await landOn(remembered).catch(() => undefined)
       }
     },
 
@@ -2316,7 +2348,14 @@ export const useReview = create<ReviewState>((set, get) => {
           api.viewed(next.id),
         ])
         rememberSession(next)
-        set({ session: next, threads, viewed: new Set(viewed) })
+        set({
+          session: next,
+          threads,
+          viewed: new Set(viewed),
+          // the base moved, so every base read cached under this review is of
+          // the old one — and the epoch is what that cache is keyed on
+          contentEpoch: get().contentEpoch + 1,
+        })
         const repoId = get().activeRepoId
         if (repoId !== null) {
           updateRepoSession(repoId, { sessionId: next.id, session: next, files })
@@ -2333,7 +2372,11 @@ export const useReview = create<ReviewState>((set, get) => {
             ? `base ${automatic ? 'moved to' : 're-pinned to'} ${sha} — ${String(lost)} ${lost === 1 ? 'note' : 'notes'} lost its anchor`
             : `base ${automatic ? 'moved to' : 're-pinned to'} ${sha}`,
         )
-        if (selectedPath !== null) {
+        // the flow re-reads on the epoch alone; the single-file view holds its
+        // two sides in the store, so those are read again. Neither moves the
+        // reader, because this runs on its own — an automatic re-pin arriving
+        // while someone is reading a diff used to open a file under them.
+        if (selectedPath !== null && get().viewMode === 'file') {
           await get().openFile(selectedPath)
         }
       } catch (error) {

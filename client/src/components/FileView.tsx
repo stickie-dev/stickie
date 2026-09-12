@@ -574,6 +574,7 @@ export function FileView() {
   const viewMode = useReview((s) => s.viewMode)
   const setViewMode = useReview((s) => s.setViewMode)
   const session = useReview((s) => s.session)
+  const activeTabId = useReview((s) => s.activeTabId)
   const reveal = useReview((s) => s.reveal)
   const clearReveal = useReview((s) => s.clearReveal)
   // a link can name the base side; everything else reveals in the source
@@ -669,6 +670,18 @@ export function FileView() {
       instance?.setScrollTop(0)
     }
   }, [selectedPath, reveal, originalEditor, modifiedEditor, singleEditor])
+
+  // every tab closes, so closing the last one is somewhere a reader can be.
+  // Asked of the review rather than of the tabs, because before one resolves
+  // there is no tab yet either, and "nothing is open" is the wrong thing to
+  // say to someone still waiting for it.
+  if (session !== null && activeTabId === null) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-faint">
+        No tab open
+      </div>
+    )
+  }
 
   if (viewMode === 'commits') {
     return (

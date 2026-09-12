@@ -12,11 +12,15 @@ const overflow_reserve = 52
 const fallback_width = 140
 
 /**
- * Open views as tabs: one persistent diff (flow) tab per repo that resumes
- * where it was left, one commit-timeline tab per repo, plus closable
- * single-file tabs. Tabs that do not fit move into a dropdown rather than
- * off the side, and file names only carry as much path as it takes to tell
- * two of them apart.
+ * Open views as tabs: one diff (flow) tab per repo that resumes where it was
+ * left, one commit-timeline tab per repo, plus single-file tabs. Tabs that do
+ * not fit move into a dropdown rather than off the side, and file names only
+ * carry as much path as it takes to tell two of them apart.
+ *
+ * Every tab closes, the diff included. Its tab is made by opening the review
+ * rather than by asking for it, so closing one is hiding a view and not
+ * discarding anything: going back to that repo's diff makes it again. A tab
+ * that alone refused to close read as a tab that was stuck.
  */
 export function TabBar() {
   const tabs = useReview((s) => s.tabs)
@@ -172,16 +176,14 @@ export function TabBar() {
           )}
           <span className="truncate">{labelOf(tab)}</span>
         </button>
-        {tab.kind !== 'flow' && (
-          <button
-            className={`shrink-0 rounded-sm px-0.5 text-faint opacity-0 group-hover:opacity-100 hover:bg-overlay hover:text-ink ${motion}`}
-            title="close tab"
-            aria-label="close tab"
-            onClick={() => closeTab(tab.id)}
-          >
-            <Close className="h-3 w-3" />
-          </button>
-        )}
+        <button
+          className={`shrink-0 rounded-sm px-0.5 text-faint opacity-0 group-hover:opacity-100 hover:bg-overlay hover:text-ink ${motion}`}
+          title="close tab"
+          aria-label={`close ${labelOf(tab)}`}
+          onClick={() => closeTab(tab.id)}
+        >
+          <Close className="h-3 w-3" />
+        </button>
       </div>
     )
   }
@@ -251,16 +253,14 @@ export function TabBar() {
                       : repoName(tab.repoId)}
                   </span>
                 </button>
-                {tab.kind !== 'flow' && (
-                  <button
-                    className={`shrink-0 ${icon_button}`}
-                    title="close tab"
-                    aria-label="close tab"
-                    onClick={() => closeTab(tab.id)}
-                  >
-                    <Close />
-                  </button>
-                )}
+                <button
+                  className={`shrink-0 ${icon_button}`}
+                  title="close tab"
+                  aria-label={`close ${labelOf(tab)}`}
+                  onClick={() => closeTab(tab.id)}
+                >
+                  <Close />
+                </button>
               </div>
             ))}
           </div>

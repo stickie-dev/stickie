@@ -134,19 +134,34 @@ export function SaidLine({ said, shade }: { said: Said; shade: boolean }) {
     <div
       className={`group -mx-1 rounded-md px-1 py-0.5 ${shade ? 'bg-overlay/50' : ''}`}
     >
-      <span
-        className={
-          said.kind === 'agent'
-            ? 'font-semibold text-sky-600 dark:text-sky-400'
-            : 'font-semibold text-ink'
-        }
-        title={said.kind === 'other' ? undefined : `role: ${said.kind}`}
-      >
-        {said.author}
-      </span>
-      {said.at !== null && (
-        <TimeAgo at={said.at} className="ml-1.5 text-faint" />
-      )}
+      {/*
+        A row of its own, so the name can be cut short. Names are not all
+        chosen by people — a hub's bots sign with things like
+        `project_1234_bot_a1b2c3`, which has no space or hyphen in it to break
+        on, so left inline it pushed the whole panel wider than its pane. The
+        time keeps its width and the name takes what is left, with the whole of
+        it on hover, since a trimmed name is still the thing you might need to
+        read in full.
+      */}
+      <div className="flex items-baseline gap-1.5">
+        <span
+          className={`min-w-0 truncate ${
+            said.kind === 'agent'
+              ? 'font-semibold text-sky-600 dark:text-sky-400'
+              : 'font-semibold text-ink'
+          }`}
+          title={
+            said.kind === 'other'
+              ? said.author
+              : `${said.author} — role: ${said.kind}`
+          }
+        >
+          {said.author}
+        </span>
+        {said.at !== null && (
+          <TimeAgo at={said.at} className="shrink-0 text-faint" />
+        )}
+      </div>
       <MessageBody body={said.body} />
       {said.actions}
     </div>

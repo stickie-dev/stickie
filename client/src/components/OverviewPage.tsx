@@ -377,7 +377,12 @@ function ReviewsTable({
                 ) : (
                   <>
                     <TimeAgo at={review.lastActivityAt} /> ·{' '}
-                    {review.lastActorName ?? 'someone'}{' '}
+                    <span
+                      className="inline-block max-w-40 truncate align-bottom"
+                      title={review.lastActorName ?? 'someone'}
+                    >
+                      {review.lastActorName ?? 'someone'}
+                    </span>{' '}
                     {actions[review.lastAction] ?? review.lastAction}
                   </>
                 )}
@@ -779,8 +784,10 @@ export function OverviewPage() {
                     <td className="px-2 py-1.5 whitespace-nowrap text-soft">
                       {repo_names.get(entry.repoId ?? -1) ?? ''}
                     </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap text-ink">
-                      {entry.actorName ?? 'someone'}
+                    <td className="max-w-48 truncate px-2 py-1.5 text-ink">
+                      <span title={entry.actorName ?? 'someone'}>
+                        {entry.actorName ?? 'someone'}
+                      </span>
                     </td>
                     <td className="px-2 py-1.5 text-soft">
                       {actions[`${entry.subject}.${entry.action}`] ??

@@ -148,7 +148,7 @@ function MrThreads({
 
   if (loading && threads.length === 0) {
     return (
-      <div className="min-h-0 grow overflow-y-auto p-3">
+      <div className="min-h-0 grow overflow-y-auto px-2 py-3">
         <Loading what="the merge request">
           <SkeletonCard />
           <SkeletonCard />
@@ -158,7 +158,7 @@ function MrThreads({
   }
   if (threads.length === 0) {
     return (
-      <p className="min-h-0 grow p-3 text-xs text-faint">
+      <p className="min-h-0 grow px-2 py-3 text-xs text-faint">
         {mr === null
           ? 'No merge request for this branch.'
           : `Nothing has been said on !${String(mr.iid)} yet.`}
@@ -167,7 +167,7 @@ function MrThreads({
   }
 
   return (
-    <div className="min-h-0 grow space-y-3 overflow-y-auto p-3">
+    <div className="min-h-0 grow space-y-3 overflow-y-auto px-2 py-3">
       {candidate !== null && (
         <p className="text-xs text-faint">
           <a
@@ -412,7 +412,7 @@ export function CommentsPanel() {
       className="flex shrink-0 flex-col bg-surface"
       style={{ width: paneWidth('comments', width) }}
     >
-      <div className="flex items-center gap-2 border-b border-edge px-3 py-2">
+      <div className="flex items-center gap-2 border-b border-edge px-2 py-2">
         <h2 className="text-sm font-semibold text-ink">Comments</h2>
         <span className="grow" />
         <button
@@ -424,7 +424,7 @@ export function CommentsPanel() {
           <Close />
         </button>
       </div>
-      <div className="flex items-center gap-1 border-b border-edge px-3 py-1.5 text-xs">
+      <div className="flex items-center gap-1 border-b border-edge px-2 py-1.5 text-xs">
         <div className="flex overflow-hidden rounded-md bg-overlay">
           {(
             [
@@ -481,7 +481,7 @@ export function CommentsPanel() {
       )}
       <div
         ref={listRef}
-        className={`min-h-0 grow space-y-3 overflow-y-auto p-3 ${tab === 'mr' ? 'hidden' : ''}`}
+        className={`min-h-0 grow space-y-3 overflow-y-auto px-2 py-3 ${tab === 'mr' ? 'hidden' : ''}`}
       >
         {visible.map((thread, index) => (
           <div key={thread.id} data-thread={thread.id}>
@@ -559,7 +559,7 @@ export function CommentsPanel() {
       </div>
 
       {/* the composer sits where what it makes will appear, not opposite it */}
-      <div className="border-t border-edge p-3">
+      <div className="border-t border-edge px-2 py-3">
         {composing ? (
           <NoteComposer onDone={() => setComposing(false)} />
         ) : (
