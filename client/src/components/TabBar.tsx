@@ -4,7 +4,7 @@ import type { Tab } from '../store'
 import { useReview } from '../store'
 import { tabLabels } from '../tabLabels'
 import { ChevronDown, ChevronLeft, ChevronRight, Close } from '../icons'
-import { btn, button_on, icon_button, motion } from '../ui'
+import { btn, button_on, glass, icon_button, motion } from '../ui'
 import { ViewMenu } from './ViewMenu'
 
 /** Room kept for the overflow button when not every tab fits. */
@@ -231,7 +231,7 @@ export function TabBar() {
       {listing && hidden.length > 0 && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setListing(false)} />
-          <div className="absolute top-full right-1 z-50 max-h-80 w-80 overflow-y-auto rounded-lg bg-panel py-1 shadow-lifted">
+          <div className={`absolute top-full right-1 z-50 max-h-80 w-80 overflow-y-auto rounded-lg py-1 ${glass}`}>
             {hidden.map((tab) => (
               <div
                 key={tab.id}

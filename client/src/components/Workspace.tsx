@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { paneWidth } from '../panes'
+import { glass } from '../ui'
 import { useReview } from '../store'
 import { ActivityPanel } from './ActivityPanel'
 import { CommentsPanel } from './CommentsPanel'
@@ -42,7 +43,7 @@ function DraftPill() {
   const repo_name = repos.find((r) => r.id === active.repoId)?.name
 
   return (
-    <div className="fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-lg border border-accent bg-panel px-3 py-2 text-xs shadow-xl">
+    <div className={`fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-lg px-3 py-2 text-xs ring-1 ring-accent ${glass}`}>
       <span className="text-soft">
         {drafts.length > 1
           ? `${drafts.length} notes in progress; active on`

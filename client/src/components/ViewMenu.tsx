@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { activeFiles, useReview, wrapFor } from '../store'
 import { Kebab } from '../icons'
-import { btn, button_on, eyebrow, motion } from '../ui'
+import { btn, button_on, eyebrow, glass, motion } from '../ui'
 
 /**
  * The diff's own menu, at the end of the tabs: how it is drawn, and what can be
@@ -117,7 +117,7 @@ export function ViewMenu() {
       </button>
       {open && (
         <div
-          className={`absolute top-full right-0 z-50 mt-1 w-56 rounded-lg bg-panel py-1 shadow-lifted ${motion}`}
+          className={`absolute top-full right-0 z-50 mt-1 w-56 rounded-lg py-1 ${glass} ${motion}`}
         >
           <Group label="Diff">
             <Choice

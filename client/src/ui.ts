@@ -18,6 +18,16 @@ export const motion = 'transition-colors duration-150 ease-smooth'
 /** A raised surface: notes, panels, rows that can be picked up. */
 export const card = 'rounded-lg bg-panel shadow-soft'
 
+/**
+ * A surface that floats over the page — a menu, the find bar, the draft pill,
+ * an overlay, a dialog. Translucent and blurred, so what it covers stays
+ * legible as context while clearly being behind it.
+ *
+ * Only what floats. The diff never gets this: blurring the surface a reader is
+ * reading code on costs legibility and buys nothing.
+ */
+export const glass = 'stickie-glass shadow-lifted'
+
 /** A well: search fields, code gutters, anything set into the page. */
 export const sunken = 'rounded-md bg-sunken'
 
@@ -42,13 +52,15 @@ export type ButtonKind = 'primary' | 'secondary' | 'outline' | 'text'
  * that the reader is doing something wrong, when usually they have simply not
  * typed anything yet.
  */
-const button_base = 'rounded-sm px-2 py-1'
+const button_base = 'rounded-sm px-2 py-1 stickie-focus'
 
 const button_kinds: Record<ButtonKind, string> = {
+  // `stickie-lit` is the fall of light over a filled button; the two colours
+  // that carry an action are the two that get it
   primary:
-    'bg-accent font-medium text-white shadow-soft hover:bg-accent-strong disabled:bg-accent/35 disabled:text-white/80 disabled:shadow-none',
+    'stickie-lit bg-accent font-medium text-white hover:bg-accent-strong disabled:bg-accent/35 disabled:text-white/80',
   secondary:
-    'bg-emerald-600 font-medium text-white shadow-soft hover:bg-emerald-500 disabled:bg-emerald-600/35 disabled:text-white/80 disabled:shadow-none',
+    'stickie-lit bg-emerald-600 font-medium text-white hover:bg-emerald-500 disabled:bg-emerald-600/35 disabled:text-white/80',
   outline:
     'text-soft ring-1 ring-edge hover:bg-overlay hover:text-ink disabled:text-faint disabled:ring-edge/40 disabled:hover:bg-transparent',
   text: 'text-soft hover:bg-overlay hover:text-ink disabled:text-faint disabled:hover:bg-transparent',
@@ -68,7 +80,7 @@ export const button_on = `${button_base} bg-accent-soft text-accent ${motion}`
  * 6px of padding is a 28px target, which is what a browser draws its own
  * title-bar buttons at, and these sit next to those in an installed window.
  */
-export const icon_button = `rounded-sm p-1.5 text-soft hover:bg-overlay hover:text-ink disabled:text-faint [&>svg]:h-4 [&>svg]:w-4 ${motion}`
+export const icon_button = `rounded-sm p-1.5 text-soft stickie-focus hover:bg-overlay hover:text-ink disabled:text-faint [&>svg]:h-4 [&>svg]:w-4 ${motion}`
 
 /**
  * Text entry and selects, filled rather than outlined, with the focus ring
@@ -76,7 +88,7 @@ export const icon_button = `rounded-sm p-1.5 text-soft hover:bg-overlay hover:te
  * that is already ringed as the active note, holding a field ringed twice as
  * thickly, is three lines around one place to type.
  */
-export const field = `rounded-md border-0 bg-overlay px-2 py-1 text-ink outline-none ring-1 ring-transparent focus:ring-1 focus:ring-accent/60 ${motion}`
+export const field = `rounded-md border-0 bg-overlay px-2 py-1 text-ink outline-none stickie-focus ${motion}`
 
 /**
  * The same field with no line of its own, for one sitting inside something
@@ -84,7 +96,7 @@ export const field = `rounded-md border-0 bg-overlay px-2 py-1 text-ink outline-
  * moment the field takes focus, and two rings around one place to type is a
  * border twice as thick as anyone asked for.
  */
-export const field_flush = `rounded-md border-0 bg-overlay px-2 py-1 text-ink outline-none ${motion}`
+export const field_flush = `rounded-md border-0 bg-overlay px-2 py-1 text-ink outline-none stickie-focus ${motion}`
 
 /** A badge: a state, not an action. Pill-shaped so it cannot read as a button. */
 export const badge =

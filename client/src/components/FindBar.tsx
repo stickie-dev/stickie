@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { fileCount } from '../find'
 import { useReview } from '../store'
 import { ChevronDown, ChevronUp, Close } from '../icons'
-import { btn, field, icon_button } from '../ui'
+import { btn, field, glass, icon_button } from '../ui'
 
 /**
  * Find, over the whole review rather than one editor.
@@ -50,7 +50,7 @@ export function FindBar() {
             (files > 1 ? ` in ${String(files)} files` : '')
 
   return (
-    <div className="absolute top-2 right-6 z-40 flex items-center gap-1 rounded-lg bg-panel p-1 shadow-lifted">
+    <div className={`absolute top-2 right-6 z-40 flex items-center gap-1 rounded-lg p-1 ${glass}`}>
       <input
         ref={input}
         className={`w-52 text-xs ${field}`}

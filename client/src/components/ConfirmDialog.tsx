@@ -1,6 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { answer, current, subscribe } from '../confirm'
-import { btn, enter } from '../ui'
+import { btn, enter, glass } from '../ui'
 
 /**
  * The window for `ask()`. Mounted once, above everything, showing whichever
@@ -45,7 +45,7 @@ export function ConfirmDialog() {
         role="dialog"
         aria-modal="true"
         aria-label={request.title}
-        className={`w-[26rem] rounded-lg bg-panel p-4 shadow-lifted ${enter}`}
+        className={`w-[26rem] rounded-lg p-4 ${glass} ${enter}`}
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-note font-semibold text-ink">{request.title}</p>

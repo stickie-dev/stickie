@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import type { NavHit } from '../api'
 import { useReview } from '../store'
-import { badge, btn, enter, field_flush, motion } from '../ui'
+import { badge, btn, enter, field_flush, glass, motion } from '../ui'
 
 /**
  * Workspace-wide text search (cmd+F / cmd+shift+F). Results open in the
@@ -62,7 +62,7 @@ export function SearchOverlay() {
       onClick={close}
     >
       <div
-        className={`flex max-h-[70vh] w-[42rem] flex-col rounded-lg bg-panel shadow-lifted ${enter}`}
+        className={`flex max-h-[70vh] w-[42rem] flex-col rounded-lg ${glass} ${enter}`}
         onClick={(e) => e.stopPropagation()}
       >
         <input
