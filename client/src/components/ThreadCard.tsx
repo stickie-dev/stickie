@@ -13,7 +13,7 @@ import { GrowingTextarea } from './GrowingTextarea'
 import { TimeAgo } from './TimeAgo'
 import { ask } from '../confirm'
 import { Send } from '../icons'
-import { badge, btn, field } from '../ui'
+import { badge, btn, field, motion } from '../ui'
 
 /** Where the card is rendered; the same note appears in both. */
 type Surface = 'zone' | 'panel'
@@ -272,8 +272,14 @@ export function ThreadCard({
                     actions:
                       message.author === 'user' ? (
                         <>
+                          {/*
+                            Faded rather than absent, so the row is the same
+                            height either way — and deaf to the pointer while
+                            it is faded, because an invisible delete is worse
+                            than no delete at all.
+                          */}
                           <button
-                            className="ml-1.5 hidden text-xs text-faint group-hover:inline hover:text-ink"
+                            className={`ml-1.5 text-xs text-faint opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 pointer-events-none hover:text-ink ${motion}`}
                             title="edit this message"
                             onClick={() => {
                               setEditingId(message.id)
@@ -283,7 +289,7 @@ export function ThreadCard({
                             edit
                           </button>
                           <button
-                            className="ml-1.5 hidden text-xs text-faint group-hover:inline hover:text-rose-500"
+                            className={`ml-1.5 text-xs text-faint opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 pointer-events-none hover:text-rose-500 ${motion}`}
                             title="delete this message"
                             onClick={() => void deleteMessage(thread.id, message.id)}
                           >

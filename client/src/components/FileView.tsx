@@ -15,6 +15,7 @@ import { CommitTimeline } from './CommitTimeline'
 import { ContinuousDiff } from './ContinuousDiff'
 import { Loading, SkeletonCode } from './Skeleton'
 import { btn, reveal_line_count } from '../ui'
+import { useNearPoint } from '../floating'
 import { FileName } from './FileName'
 
 const side_by_side_min_width = 1440
@@ -342,6 +343,7 @@ function CaptureActions({
   target: CaptureTarget
   onDone: () => void
 }) {
+  const placed = useNearPoint<HTMLDivElement>(target.x, target.y)
   const hasDraft = useReview(
     (s) => s.drafts.length > 0 || s.activeReplyId !== null,
   )
@@ -356,11 +358,9 @@ function CaptureActions({
   return (
     <div
       data-stickie-capture=""
+      ref={placed.ref}
       className="fixed z-50 grid -translate-x-1/2 grid-flow-col auto-cols-fr overflow-hidden rounded-md border border-edge bg-panel shadow-xl"
-      style={{
-        left: Math.min(Math.max(target.x, 120), window.innerWidth - 120),
-        top: target.y + 12,
-      }}
+      style={placed.style}
     >
       <button
         className={button_classes}
@@ -922,6 +922,7 @@ function DefinitionPicker({
   pick: DefinitionPick
   onDone: () => void
 }) {
+  const placed = useNearPoint<HTMLDivElement>(pick.x, pick.y)
   const openHit = useReview((s) => s.openHit)
   const openHitSide = useReview((s) => s.openHitSide)
   const repos = useReview((s) => s.repos)
@@ -932,11 +933,9 @@ function DefinitionPicker({
   return (
     <div className="fixed inset-0 z-50" onMouseDown={onDone}>
     <div
+      ref={placed.ref}
       className="fixed z-50 max-h-64 w-[30rem] -translate-x-1/2 overflow-y-auto rounded-md border border-edge bg-panel text-xs shadow-xl"
-      style={{
-        left: Math.min(Math.max(pick.x, 250), window.innerWidth - 250),
-        top: pick.y + 12,
-      }}
+      style={placed.style}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div className="flex items-center border-b border-edge px-3 py-1.5">

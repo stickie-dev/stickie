@@ -161,9 +161,18 @@ export function SaidLine({ said, shade }: { said: Said; shade: boolean }) {
         {said.at !== null && (
           <TimeAgo at={said.at} className="shrink-0 text-faint" />
         )}
+        {/*
+          On this line, and holding its place whether or not they are shown.
+          Under the message they appeared only on hover and grew the card by a
+          line as they did — which in a view zone re-measures the zone, moves
+          the card out from under the pointer, and hides them again. They could
+          be seen and never reached.
+        */}
+        {said.actions !== undefined && (
+          <span className="ml-auto shrink-0">{said.actions}</span>
+        )}
       </div>
       <MessageBody body={said.body} />
-      {said.actions}
     </div>
   )
 }

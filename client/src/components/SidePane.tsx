@@ -7,6 +7,7 @@ import { languageFor } from '../languages'
 import { fontShift, useReview } from '../store'
 import { Loading, SkeletonCode } from './Skeleton'
 import { btn } from '../ui'
+import { useNearPoint } from '../floating'
 
 interface RefOffer {
   x: number
@@ -39,6 +40,9 @@ export function SidePane() {
     null,
   )
   const [offer, setOffer] = useState<RefOffer | null>(null)
+  // called for every render, offer or not: the measurement only means
+  // anything once there is something drawn to measure
+  const placed = useNearPoint<HTMLButtonElement>(offer?.x ?? 0, offer?.y ?? 0)
 
   const repoId = pane?.repoId
   const path = pane?.path
@@ -158,11 +162,9 @@ export function SidePane() {
       </div>
       {offer !== null && hasTarget && (
         <button
+          ref={placed.ref}
           className="fixed z-50 -translate-x-1/2 rounded-md border border-edge bg-panel px-3 py-1.5 text-xs whitespace-nowrap text-ink shadow-xl hover:bg-overlay"
-          style={{
-            left: Math.min(Math.max(offer.x, 120), window.innerWidth - 120),
-            top: offer.y + 12,
-          }}
+          style={placed.style}
           onClick={() => {
             insertDraftRef(pane.path, offer.start, offer.end, pane.repoId)
             setOffer(null)
