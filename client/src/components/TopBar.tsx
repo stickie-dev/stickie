@@ -4,7 +4,8 @@ import { api } from '../api'
 import { ask } from '../confirm'
 import { formatRoute } from '../routes'
 import { Search, Send, Sliders } from '../icons'
-import { badge, btn, button_on, field, icon_button, title_bar } from '../ui'
+import { badge, btn, button_on, icon_button, title_bar } from '../ui'
+import { Picker } from './Picker'
 import { ThemeToggle } from './ThemeToggle'
 import { useReview } from '../store'
 
@@ -138,7 +139,6 @@ export function TopBar() {
     })()
   }
 
-  const select_classes = `${field} py-0.5`
 
   const warning_button =
     'bg-amber-500/15 text-amber-700 ring-amber-500/40 hover:bg-amber-500/25 dark:text-amber-300'
@@ -198,64 +198,84 @@ export function TopBar() {
       </span>
 
       <label className="text-faint">source</label>
-      <select
-        className={`min-w-24 max-w-72 shrink ${select_classes}`}
+      <Picker
+        className="min-w-24 max-w-72 shrink"
+        label="what this review is of"
         value={source === null ? '' : source_key(source)}
-        onChange={(e) => changeSource(e.target.value)}
-      >
-        {targets !== null && (
-          <>
-            {/*
-              A source that is no longer in the repository still needs an
-              option, or the picker falls back to showing the first worktree it
-              has — quietly claiming this review is of the main checkout, which
-              is the nonsense a removed worktree used to produce. It names what
-              the review is actually of, and choosing anything else is how the
-              reviewer leaves it.
-            */}
-            {session?.sourceGone === true && source !== null && (
-              <option value={source_key(source)}>
-                {source.kind === 'worktree'
-                  ? shortPath(source.value)
-                  : source.value}{' '}
-                (gone)
-              </option>
-            )}
-            <optgroup label="worktrees (working tree)">
-              {targets.worktrees.map((wt) => (
-                <option key={wt.path} value={`worktree:${wt.path}`}>
-                  {shortPath(wt.path)}
-                  {wt.branch !== null ? ` (${wt.branch})` : ' (detached)'}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="branches">
-              {targets.branches.map((branch) => (
-                <option key={branch.name} value={`ref:${branch.name}`}>
-                  {branch.name}
-                </option>
-              ))}
-            </optgroup>
-          </>
-        )}
-      </select>
+        onChange={changeSource}
+        groups={
+          targets === null
+            ? []
+            : [
+                /*
+                  A source that is no longer in the repository still needs a
+                  row, or the picker falls back to naming the first worktree it
+                  has — quietly claiming this review is of the main checkout,
+                  which is the nonsense a removed worktree used to produce. It
+                  names what the review is actually of, and choosing anything
+                  else is how the reviewer leaves it.
+                */
+                ...(session?.sourceGone === true && source !== null
+                  ? [
+                      {
+                        options: [
+                          {
+                            value: source_key(source),
+                            label:
+                              source.kind === 'worktree'
+                                ? shortPath(source.value)
+                                : source.value,
+                            hint: 'gone',
+                          },
+                        ],
+                      },
+                    ]
+                  : []),
+                {
+                  label: 'worktrees (working tree)',
+                  options: targets.worktrees.map((wt) => ({
+                    value: `worktree:${wt.path}`,
+                    label: shortPath(wt.path),
+                    hint: wt.branch ?? 'detached',
+                  })),
+                },
+                {
+                  label: 'branches',
+                  options: targets.branches.map((branch) => ({
+                    value: `ref:${branch.name}`,
+                    label: branch.name,
+                  })),
+                },
+              ]
+        }
+      />
 
       <label className="text-faint">base</label>
-      <select
-        className={`min-w-20 max-w-52 shrink ${select_classes}`}
+      <Picker
+        className="min-w-20 max-w-52 shrink"
+        label="what this review is read against"
         value={baseRef ?? 'auto'}
-        onChange={(e) => changeBase(e.target.value)}
-      >
-        <option value="auto">
-          auto{session !== null ? ` (${session.baseRef})` : ''}
-        </option>
-        <option value="HEAD">HEAD</option>
-        {targets?.branches.map((branch) => (
-          <option key={branch.name} value={branch.name}>
-            {branch.name}
-          </option>
-        ))}
-      </select>
+        onChange={changeBase}
+        groups={[
+          {
+            options: [
+              {
+                value: 'auto',
+                label: 'auto',
+                ...(session !== null ? { hint: session.baseRef } : {}),
+              },
+              { value: 'HEAD', label: 'HEAD' },
+            ],
+          },
+          {
+            label: 'branches',
+            options: (targets?.branches ?? []).map((branch) => ({
+              value: branch.name,
+              label: branch.name,
+            })),
+          },
+        ]}
+      />
 
       {session?.prevBaseRef != null && (
         <button
