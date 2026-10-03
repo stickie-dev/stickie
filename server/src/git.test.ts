@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   parseNameStatus,
   orderWorktrees,
+  parseRefNames,
   parseWorktrees,
   shortenRev,
   shortSha,
@@ -59,6 +60,36 @@ describe('parseWorktrees', () => {
         isMain: false,
       },
     ])
+  })
+})
+
+describe('parseRefNames', () => {
+  it('reads one name per line', () => {
+    expect(parseRefNames('main\nfeature\nfix/thing\n')).toEqual([
+      'main',
+      'feature',
+      'fix/thing',
+    ])
+  })
+
+  it('drops the marker git puts on the checked-out branch', () => {
+    // `--format` is meant to suppress it and does not in every git; a branch
+    // read as "* main" matches nothing and reads as deleted
+    expect(parseRefNames('* main\n  feature\n+ shared\n')).toEqual([
+      'main',
+      'feature',
+      'shared',
+    ])
+  })
+
+  it('drops a symbolic ref rather than taking it for a branch', () => {
+    expect(parseRefNames('main\norigin/HEAD -> origin/main\n')).toEqual([
+      'main',
+    ])
+  })
+
+  it('returns nothing for empty output', () => {
+    expect(parseRefNames('')).toEqual([])
   })
 })
 

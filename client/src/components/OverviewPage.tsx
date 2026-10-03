@@ -124,6 +124,9 @@ interface ReviewRow {
   lastAction: string | null
   lastActorName: string | null
   awaiting: 'you' | 'agent' | null
+  /** of the source, so the same for every session of the group */
+  sourceGone: boolean
+  merged: boolean
 }
 
 /** `reviews` arrives newest first, so the first session of a group is current. */
@@ -169,6 +172,9 @@ function rows(reviews: ReviewOverview[]): ReviewRow[] {
           : sessions.some((r) => r.awaiting === 'agent')
             ? 'agent'
             : null,
+        // a property of the source, which is half of what groups these rows
+        sourceGone: current.sourceGone === true,
+        merged: current.merged === true,
       },
     ]
   })
@@ -349,12 +355,36 @@ function ReviewsTable({
               onClick={() => void navigate(to)}
             >
               <td className="px-2 py-2.5">
-                <span
-                  title={status_why[status]}
-                  className={`${badge} whitespace-nowrap ${status_classes[status]}`}
-                >
-                  {status_label[status]}
-                </span>
+                <div className="flex flex-wrap items-center gap-1">
+                  <span
+                    title={status_why[status]}
+                    className={`${badge} whitespace-nowrap ${status_classes[status]}`}
+                  >
+                    {status_label[status]}
+                  </span>
+                  {/*
+                    Beside the note status rather than folded into it: one says
+                    whose turn it is, the other what became of the work, and a
+                    review can want you *and* have had its branch deleted —
+                    which is the pair most worth seeing together.
+                  */}
+                  {review.sourceGone && (
+                    <span
+                      title="the worktree or branch this review is of is no longer in the repository; its notes are kept"
+                      className={`${badge} whitespace-nowrap bg-amber-500/15 text-amber-700 dark:text-amber-300`}
+                    >
+                      gone
+                    </span>
+                  )}
+                  {review.merged && !review.sourceGone && (
+                    <span
+                      title={`already contained in ${review.current.baseRef} — this branch has landed`}
+                      className={`${badge} whitespace-nowrap bg-overlay text-faint`}
+                    >
+                      landed
+                    </span>
+                  )}
+                </div>
               </td>
               <td className="px-2 py-2.5 font-medium whitespace-nowrap text-ink">
                 <Link

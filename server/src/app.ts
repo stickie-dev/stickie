@@ -41,7 +41,6 @@ import {
   defaultBranch,
   describeRevs,
   expandUserPath,
-  listCommitsBetween,
   fileAtRef,
   fileAtSide,
   fileInWorktree,
@@ -50,14 +49,17 @@ import {
   isAncestor,
   isGitRepo,
   listAllFiles,
+  listBranchNames,
+  listCommitsBetween,
   listRecentBranches,
   listRecentCommits,
   listWorktrees,
   mergeBase,
+  mergedBranches,
   repoRoot,
   resolveRef,
-  shortenRev,
   shortSha,
+  shortenRev,
 } from './git.js'
 import type { GitLabConfig, MrThread } from './gitlab.js'
 import {
@@ -384,6 +386,8 @@ const review_overview_schema = z
     baseRef: z.string(),
     baseSha: z.string(),
     comparing: z.object({ source: rev_label_schema, base: rev_label_schema }),
+    sourceGone: z.boolean().optional(),
+    merged: z.boolean().optional(),
     notes: note_counts_schema,
     filesRead: z.number().int(),
     agentReplies: z.number().int(),
@@ -1430,10 +1434,12 @@ export function createApp(
       tags: ['sessions'],
       summary: 'Every review in the workspace, with what is waiting on whom',
       description:
-        'One request for the landing page. Everything about a review comes ' +
-        'from the database — nothing shells out to git per review, or listing ' +
-        'thirty of them would run thirty git commands; changed-file counts ' +
-        'and base staleness stay on the review itself, which knows them.',
+        'One request for the landing page. Nothing shells out to git per ' +
+        'review, or listing thirty of them would run thirty git commands: the ' +
+        'counts come from the database, and what git alone can answer — the ' +
+        'checkouts, the branches, what has landed in each base — is asked once ' +
+        'per repository and read from there. Changed-file counts and base ' +
+        'staleness stay on the review itself, which knows them.',
       responses: {
         200: json_response(overview_schema, 'The workspace at a glance'),
       },
@@ -1494,10 +1500,78 @@ export function createApp(
           )
         }),
       )
+      /*
+       * Whether each review's source is still there, and whether it has
+       * landed — per repository, never per review.
+       *
+       * `checkouts` above already answers the first half for a worktree
+       * review at no cost. A branch review needs the repository's branch list,
+       * which is one call; and "already in the base" is one `branch --merged`
+       * per base a review of this repository names, which is almost always the
+       * one default branch. So a page of thirty reviews asks git twice more
+       * per repository rather than sixty times.
+       */
+      const branch_names = new Map<number, Set<string>>()
+      const landed = new Map<number, Map<string, Set<string>>>()
+      await Promise.all(
+        repos.map(async (repo) => {
+          const mine = sessions.filter((s) => s.repoId === repo.id)
+          const bases = [...new Set(mine.map((s) => s.baseRef))]
+          const [names, merged] = await Promise.all([
+            listBranchNames(repo.path).catch(() => []),
+            Promise.all(
+              bases.map(
+                async (base) =>
+                  [
+                    base,
+                    new Set(await mergedBranches(repo.path, base).catch(() => [])),
+                  ] as const,
+              ),
+            ),
+          ])
+          branch_names.set(repo.id, new Set(names))
+          landed.set(repo.id, new Map(merged))
+        }),
+      )
+
+      /** The branch a review is of, whichever way its source names one. */
+      const branchOf = (session: Session): string | null => {
+        if (session.source.kind === 'ref') return session.source.value
+        return (
+          checkouts.get(session.repoId)?.get(session.source.value)?.branch ??
+          null
+        )
+      }
+
       // listSessions is newest first, so the first hit per repo is the newest
       const latest = new Map<number, number>()
       for (const session of sessions) {
         if (!latest.has(session.repoId)) latest.set(session.repoId, session.id)
+      }
+
+      /**
+       * The same two answers `sourceState` gives on a single review, read from
+       * the maps above rather than from git. A detached checkout has no branch
+       * to ask about — it is a commit being looked at, not a review of work.
+       */
+      const sourceFacts = (
+        session: Session,
+      ): { sourceGone: boolean; merged: boolean } => {
+        const branch = branchOf(session)
+        const gone =
+          session.source.kind === 'worktree'
+            ? !(checkouts.get(session.repoId)?.has(session.source.value) ?? true)
+            : !(branch_names.get(session.repoId)?.has(session.source.value) ??
+                true)
+        if (gone || branch === null || session.baseRef === 'HEAD') {
+          return { sourceGone: gone, merged: false }
+        }
+        return {
+          sourceGone: false,
+          merged:
+            landed.get(session.repoId)?.get(session.baseRef)?.has(branch) ??
+            false,
+        }
       }
 
       const empty: SessionRollup = {
@@ -1556,6 +1630,7 @@ export function createApp(
                   subject: known.get(session.baseSha) ?? null,
                 },
               },
+              ...sourceFacts(session),
               ...rollup,
             }
           }),

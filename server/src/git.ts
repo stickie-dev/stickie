@@ -269,6 +269,47 @@ export async function listRecentBranches(
     })
 }
 
+/**
+ * Ref names, one per line, as `--format=%(refname:short)` writes them. Its own
+ * function because `git branch` decorates the checked-out one with a `*` in
+ * every other format, and a branch called `* main` has bitten this before.
+ */
+export function parseRefNames(out: string): string[] {
+  return out
+    .split('\n')
+    .map((line) => line.replace(/^[*+]\s+/, '').trim())
+    .filter((name) => name !== '' && !name.includes(' -> '))
+}
+
+/** Every local branch, for asking whether one still exists. */
+export async function listBranchNames(repo: string): Promise<string[]> {
+  const out = await gitOrNull(repo, [
+    'for-each-ref',
+    '--format=%(refname:short)',
+    'refs/heads',
+  ])
+  return out === null ? [] : parseRefNames(out)
+}
+
+/**
+ * The local branches already contained in `base` — everything that has landed
+ * there. One call answers for every branch in the repository, which is the
+ * only reason the overview can ask this at all: asked per review it would be a
+ * git spawn per row, and that page is thirty rows on a good day.
+ */
+export async function mergedBranches(
+  repo: string,
+  base: string,
+): Promise<string[]> {
+  const out = await gitOrNull(repo, [
+    'branch',
+    '--merged',
+    base,
+    '--format=%(refname:short)',
+  ])
+  return out === null ? [] : parseRefNames(out)
+}
+
 export async function listRecentCommits(
   repo: string,
   limit = 15,

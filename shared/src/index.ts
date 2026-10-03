@@ -244,6 +244,10 @@ export interface ReviewOverview {
   baseSha: string
   /** what this review compares, already in the words to show */
   comparing: { source: RevLabel; base: RevLabel }
+  /** its worktree or branch is not in the repository any more */
+  sourceGone?: boolean
+  /** its branch is already contained in the base: the work has landed */
+  merged?: boolean
   notes: NoteCounts
   /** how many files were opened and marked read */
   filesRead: number
