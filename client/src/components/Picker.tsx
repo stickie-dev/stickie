@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from '../icons'
+import { type_ahead_pause, typeAheadIndex } from '../typeAhead'
 import { field, glass, motion } from '../ui'
 
 export interface PickerOption {
@@ -49,21 +50,40 @@ export function Picker({
   const [at, setAt] = useState(0)
   const trigger = useRef<HTMLButtonElement>(null)
   const list = useRef<HTMLDivElement>(null)
+  /**
+   * What has been typed, and when. A ref rather than state: it is read inside
+   * the keystroke that changes it, and a render is not owed to a buffer
+   * nothing draws.
+   */
+  const typed = useRef({ run: '', at: 0 })
+  /**
+   * Where this opening should land, when it was opened by typing rather than
+   * asked for. Without it the effect below runs after the keystroke has chosen
+   * a row and puts the cursor back on the selected one: typing `n` at a closed
+   * picker opened it on `main`.
+   */
+  const opening_on = useRef<number | null>(null)
 
   const flat = groups.flatMap((group) => group.options)
   const chosen = flat.find((option) => option.value === value)
+  const selected_at = flat.findIndex((option) => option.value === value)
 
-  // the list opens on what is chosen, which is where a reader looks first
+  // the list opens on what is chosen, which is where a reader looks first —
+  // on opening only, so nothing walks the cursor back while it is being read
   useEffect(() => {
     if (!open) return
-    const index = flat.findIndex((option) => option.value === value)
-    setAt(index < 0 ? 0 : index)
-  }, [open, value, flat.length])
+    const asked = opening_on.current
+    opening_on.current = null
+    setAt(asked ?? Math.max(selected_at, 0))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   // focus moves to the list so the arrows reach it; without this the keyboard
   // opens a menu it cannot then walk
   useEffect(() => {
     if (open) list.current?.focus()
+    // and a run of typing does not carry across a close and a reopen
+    else typed.current = { run: '', at: 0 }
   }, [open])
 
   useEffect(() => {
@@ -77,6 +97,23 @@ export function Picker({
     setOpen(false)
     trigger.current?.focus()
     if (next !== value) onChange(next)
+  }
+
+  /** True when the key was typing rather than a command. */
+  const isTyping = (e: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean }) =>
+    e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey
+
+  /** Answers where the cursor should go, or -1 when nothing matches. */
+  const jumpFor = (key: string, from: number): number => {
+    const now = Date.now()
+    const run =
+      now - typed.current.at > type_ahead_pause ? key : typed.current.run + key
+    typed.current = { run, at: now }
+    return typeAheadIndex(
+      flat.map((option) => option.label),
+      run,
+      from,
+    )
   }
 
   const step = (delta: number) => {
@@ -98,6 +135,18 @@ export function Picker({
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault()
+            setOpen(true)
+            return
+          }
+          // typing at a closed picker opens it on what was typed, the way
+          // typing at a closed `<select>` always has
+          if (isTyping(e)) {
+            // from what is chosen, not from `at`: the cursor means nothing
+            // until the list is open
+            const to = jumpFor(e.key, Math.max(selected_at, 0))
+            if (to < 0) return
+            e.preventDefault()
+            opening_on.current = to
             setOpen(true)
           }
         }}
@@ -138,10 +187,22 @@ export function Picker({
                 e.preventDefault()
                 setAt(flat.length - 1)
               }
-              if (e.key === 'Enter' || e.key === ' ') {
+              // space chooses, except in the middle of a run of typing, where
+              // it is a space — a worktree path is allowed to have one in it
+              const typing_now =
+                Date.now() - typed.current.at <= type_ahead_pause &&
+                typed.current.run !== ''
+              if (e.key === 'Enter' || (e.key === ' ' && !typing_now)) {
                 e.preventDefault()
                 const option = flat[at]
                 if (option !== undefined) choose(option.value)
+                return
+              }
+              if (isTyping(e)) {
+                const to = jumpFor(e.key, at)
+                if (to < 0) return
+                e.preventDefault()
+                setAt(to)
               }
             }}
           >
