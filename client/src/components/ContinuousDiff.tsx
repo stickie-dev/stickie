@@ -17,7 +17,7 @@ import { CommentLayer } from './CommentLayer'
 import { FileName } from './FileName'
 import { Loading, SkeletonCode } from './Skeleton'
 import { ChevronDown, ChevronRight } from '../icons'
-import { btn, card, icon_button } from '../ui'
+import { btn, card, icon_button, reveal_line_count } from '../ui'
 
 type Attach = (
   instance: editor.IStandaloneCodeEditor,
@@ -151,8 +151,6 @@ function DiffSection({
     collapsedFor(file.path, s.collapsedFiles, s.collapseFileOverrides),
   )
   const toggleFileCollapsed = useReview((s) => s.toggleFileCollapsed)
-  // only the file a match or a reference landed in opens; moving on folds it
-  const expanded = useReview((s) => s.expandFor === file.path)
   const binary = base?.binary === true || source?.binary === true
   const has_any = base?.content != null || source?.content != null
   // side-by-side renders one-sided files as a diff so added content sits
@@ -277,12 +275,10 @@ function DiffSection({
               // the reader's choice, not a constant: this said "always
               // collapsed", so the menu's other answer did nothing here
               hideUnchangedRegions: {
-                // a find match can sit in an unchanged region, and a region
-                // that is folded away cannot show it
-                enabled: collapseUnchanged && !expanded,
+                enabled: collapseUnchanged,
                 contextLineCount: 3,
                 minimumLineCount: 5,
-                revealLineCount: 20,
+                revealLineCount: reveal_line_count,
               },
             }}
             onMount={(diff) => {

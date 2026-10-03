@@ -6,7 +6,7 @@ import type { CommitBetween } from '../api'
 import { languageFor } from '../languages'
 import { useReview, wrapFor } from '../store'
 import { Loading, Skeleton, SkeletonCode } from './Skeleton'
-import { badge, btn } from '../ui'
+import { badge, btn, reveal_line_count } from '../ui'
 
 interface Step {
   /** the commit this column arrives at */
@@ -200,7 +200,7 @@ function FileTimeline({
       enabled: true,
       contextLineCount: 2,
       minimumLineCount: 4,
-      revealLineCount: 20,
+      revealLineCount: reveal_line_count,
     },
   }
 

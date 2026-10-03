@@ -354,15 +354,6 @@ interface ReviewState {
   findAt: number
   findCapped: boolean
   findBusy: boolean
-  /**
-   * One file held open against `collapseUnchanged`, because a match or a
-   * reference landed in a region that is folded away and a folded region
-   * cannot show it. One path, not a flag: expanding every file to reach a
-   * match in one of them makes the reader scroll past twenty whole files, and
-   * moving on has to fold the last one back. It never writes
-   * `collapseUnchanged` — that is the reader's setting, not a scratch pad.
-   */
-  expandFor: string | null
   openFind: (open: boolean) => void
   setFindQuery: (query: string) => Promise<void>
   setFindCase: (on: boolean) => Promise<void>
@@ -370,7 +361,6 @@ interface ReviewState {
   goToMatch: (index: number) => Promise<void>
   collapseUnchanged: boolean
   setCollapseUnchanged: (collapse: boolean) => void
-  setExpandFor: (path: string | null) => void
   setActiveReply: (threadId: number | null) => void
   updateReplyDraft: (threadId: number, body: string) => void
   cancelDraft: (id: number) => void
@@ -1100,7 +1090,6 @@ export const useReview = create<ReviewState>((set, get) => {
     findAt: 0,
     findCapped: false,
     findBusy: false,
-    expandFor: null,
     usages: null,
     toasts: [],
     navHistory: [],
@@ -1437,7 +1426,6 @@ export const useReview = create<ReviewState>((set, get) => {
 
     flowSelect: (path) => {
       const { activeRepoId } = get()
-      if (get().expandFor !== path) set({ expandFor: null })
       const files = activeFiles(get())
       const review = currentReview()
       const flow_tab =
@@ -1689,7 +1677,6 @@ export const useReview = create<ReviewState>((set, get) => {
     openFile: async (path, status) => {
       const { session, contentEpoch } = get()
       if (session === null) return
-      if (get().expandFor !== path) set({ expandFor: null })
       const files = activeFiles(get())
       const resolved = status ?? statusOf(files, path)
       // the draft survives navigation so other files can be browsed and
@@ -1884,7 +1871,7 @@ export const useReview = create<ReviewState>((set, get) => {
       set({ findOpen: open })
       // the query survives closing: reopening to look for the same thing again
       // is the common case, and it costs nothing to remember
-      if (!open) set({ findAt: 0, expandFor: null })
+      if (!open) set({ findAt: 0 })
     },
 
     setFindQuery: async (query) => {
@@ -1916,15 +1903,12 @@ export const useReview = create<ReviewState>((set, get) => {
         // through flowNav rather than through the single view's `reveal`
         if (match.path !== get().selectedPath) get().flowSelect(match.path)
         get().showFileInFlow(match.path)
-        // after flowSelect, which clears the file it was holding open
-        set({ expandFor: match.path })
         flowReveal(match.path, match.line, select)
         return
       }
       if (match.path !== get().selectedPath) {
         await get().openFile(match.path).catch(() => undefined)
       }
-      set({ expandFor: match.path })
       set({
         reveal: {
           path: match.path,
@@ -1935,10 +1919,7 @@ export const useReview = create<ReviewState>((set, get) => {
       })
     },
 
-    setCollapseUnchanged: (collapse) =>
-      set({ collapseUnchanged: collapse, expandFor: null }),
-
-    setExpandFor: (path) => set({ expandFor: path }),
+    setCollapseUnchanged: (collapse) => set({ collapseUnchanged: collapse }),
 
     setActiveDraft: (id) => {
       if (get().drafts.some((d) => d.id === id)) {

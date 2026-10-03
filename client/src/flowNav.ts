@@ -147,6 +147,23 @@ function revealLine(entry: Entry, line: number, select?: Select): void {
   const modified = entry.modified
   const node = modified?.getDomNode() ?? null
   if (scroller === null || modified == null || node === null) return
+  // The cursor moves before anything is measured. A line inside a collapsed
+  // unchanged region has no place on screen yet, and moving the cursor into
+  // one is what asks the diff editor to open it — that region alone, and only
+  // as far as this line. Measured first, every number below describes where
+  // the line sat while it was still folded away.
+  if (select === undefined) {
+    modified.setPosition({ lineNumber: line, column: 1 })
+  } else {
+    // a found word is selected, not merely scrolled to: on a long line the
+    // reader would otherwise have to spot which of them matched
+    modified.setSelection({
+      startLineNumber: line,
+      startColumn: select.column,
+      endLineNumber: line,
+      endColumn: select.column + select.length,
+    })
+  }
   const in_editor = modified.getTopForLineNumber(line) - modified.getScrollTop()
   const editor_rect = node.getBoundingClientRect()
   const scroll_rect = scroller.getBoundingClientRect()
@@ -154,18 +171,6 @@ function revealLine(entry: Entry, line: number, select?: Select): void {
   // a third of the way down clears the sticky file header and shows context
   const wanted = scroll_rect.top + scroll_rect.height * 0.3
   scroller.scrollTop += target - wanted
-  if (select === undefined) {
-    modified.setPosition({ lineNumber: line, column: 1 })
-    return
-  }
-  // a found word is selected, not merely scrolled to: on a long line the
-  // reader would otherwise have to spot which of them matched
-  modified.setSelection({
-    startLineNumber: line,
-    startColumn: select.column,
-    endLineNumber: line,
-    endColumn: select.column + select.length,
-  })
 }
 
 /**

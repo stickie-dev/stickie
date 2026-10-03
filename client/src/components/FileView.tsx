@@ -14,7 +14,7 @@ import { CommentLayer } from './CommentLayer'
 import { CommitTimeline } from './CommitTimeline'
 import { ContinuousDiff } from './ContinuousDiff'
 import { Loading, SkeletonCode } from './Skeleton'
-import { btn } from '../ui'
+import { btn, reveal_line_count } from '../ui'
 import { FileName } from './FileName'
 
 const side_by_side_min_width = 1440
@@ -407,10 +407,8 @@ export function FileView() {
   const width = useWindowWidth()
   const sideBySideChoice = useReview((s) => s.sideBySide)
   const collapseUnchanged = useReview((s) => s.collapseUnchanged)
-  const expanded = useReview((s) => s.expandFor === s.selectedPath)
   // resolved notes are drawn in the gutter, so the gutter needs the room
   const marked_gutter = useReview((s) => s.resolvedNotes === 'gutter')
-  const setExpandFor = useReview((s) => s.setExpandFor)
   const [captureTarget, setCaptureTarget] = useState<CaptureTarget | null>(
     null,
   )
@@ -592,19 +590,15 @@ export function FileView() {
     ) {
       return
     }
-    // a collapsed unchanged region swallows reveals into it; hold this one
-    // file open and let the effect re-run once the option has applied. It used
-    // to turn `collapseUnchanged` off outright, which answered the reader's
-    // setting for them and never put it back
-    if (
-      collapseUnchanged &&
-      !expanded &&
-      (modifiedEditor !== null || originalEditor !== null)
-    ) {
-      setExpandFor(reveal.path)
-      return
-    }
     const timer = setTimeout(() => {
+      // The cursor moves first and the scroll follows it. A line inside a
+      // collapsed unchanged region is not laid out to be scrolled to, and
+      // moving the cursor into one is exactly what asks the diff editor to
+      // open it — that region, and only as far as this line. Scrolling first
+      // aims at where the line sat while it was still folded away, which is
+      // what this used to work around by unfolding the whole file: one note
+      // opened every unchanged region in it.
+      //
       // a find match knows its column, so select the match itself rather than
       // centring the line and leaving the reader to spot which word it was
       if (reveal.column !== undefined && reveal.length !== undefined) {
@@ -614,27 +608,16 @@ export function FileView() {
           endLineNumber: reveal.line,
           endColumn: reveal.column + reveal.length,
         }
-        reveal_editor.revealRangeInCenterIfOutsideViewport(range)
         reveal_editor.setSelection(range)
+        reveal_editor.revealRangeInCenterIfOutsideViewport(range)
       } else {
-        reveal_editor.revealLineInCenter(reveal.line)
         reveal_editor.setPosition({ lineNumber: reveal.line, column: 1 })
+        reveal_editor.revealLineInCenter(reveal.line)
       }
       clearReveal()
     }, 50)
     return () => clearTimeout(timer)
-  }, [
-    reveal,
-    selectedPath,
-    reveal_editor,
-    content_ready,
-    clearReveal,
-    collapseUnchanged,
-    expanded,
-    setExpandFor,
-    modifiedEditor,
-    originalEditor,
-  ])
+  }, [reveal, selectedPath, reveal_editor, content_ready, clearReveal])
 
   useEffect(() => {
     setCaptureTarget(null)
@@ -828,10 +811,10 @@ export function FileView() {
                 ...editorOptions(width, wrap, shift, marked_gutter),
                 renderSideBySide: sideBySide,
                 hideUnchangedRegions: {
-                  enabled: collapseUnchanged && !expanded,
+                  enabled: collapseUnchanged,
                   contextLineCount: 2,
                   minimumLineCount: 4,
-                  revealLineCount: 20,
+                  revealLineCount: reveal_line_count,
                 },
               }}
               onMount={(diff) => {

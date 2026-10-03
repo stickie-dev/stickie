@@ -140,3 +140,21 @@ export const title_bar =
 
 /** Content arriving: a short rise, once, rather than a fade on every render. */
 export const enter = 'animate-rise'
+
+/**
+ * How many lines one click on a collapsed region opens, in whichever
+ * direction was clicked.
+ *
+ * A collapsed region is a claim that nothing in it is worth reading, and the
+ * click that disagrees is usually asking about the few lines just past the
+ * edge — what this function is called from, what this branch does. Opening the
+ * whole region to answer that buries the change the reader came for, however
+ * many hundred lines it holds. Monaco keeps the whole of it a double-click
+ * away on the line count itself, and the unfold button beside it, so nothing
+ * is out of reach — it is only no longer the first thing a click does.
+ *
+ * One number for all three surfaces, though they each hold their own context
+ * and minimum line counts: how dense a diff is depends on where it is drawn,
+ * but how much a click opens is the same question everywhere.
+ */
+export const reveal_line_count = 15
