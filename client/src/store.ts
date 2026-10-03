@@ -276,6 +276,16 @@ interface ReviewState {
   clearNoteHighlight: () => void
   /** Marks a note, for a link or a merge-request discussion pointing at it. */
   setNoteHighlight: (threadId: number) => void
+  /**
+   * A file, read in the diff this review already has open. What one click on
+   * a file in the tree does.
+   */
+  showFileInRepo: (
+    repoId: number,
+    path: string,
+    status?: ChangedFile['status'] | 'unchanged',
+  ) => Promise<void>
+  /** The same file in a tab of its own. What two clicks do. */
   openFileInRepo: (
     repoId: number,
     path: string,
@@ -1409,19 +1419,41 @@ export const useReview = create<ReviewState>((set, get) => {
       if (get().noteHighlight !== null) set({ noteHighlight: null })
     },
 
+    /*
+     * One click reads a file where the review is already being read; two open
+     * it somewhere of its own. Which of those a single click did used to
+     * depend on the mode the reader happened to be in, so the same click on
+     * the same file sometimes scrolled the diff and sometimes opened a tab —
+     * and a tree click is how a reader moves around, not how they ask for a
+     * window.
+     *
+     * A file that is not part of the diff is the exception in both: browsing
+     * the whole tree reaches files the flow has no row for, and there is
+     * nowhere in it to land on them.
+     */
+    showFileInRepo: async (repoId, path, status) => {
+      if (repoId !== get().activeRepoId) {
+        await get().selectRepo(repoId)
+      }
+      if (!activeFiles(get()).some((f) => f.path === path)) {
+        await get().openFile(path, status)
+        return
+      }
+      const review = get().session
+      if (review === null) return
+      set({
+        viewMode: 'flow',
+        activeTabId: ensureFlowTab(repoId, review.id).id,
+      })
+      get().showFileInFlow(path)
+      get().flowSelect(path)
+    },
+
     openFileInRepo: async (repoId, path, status) => {
       if (repoId !== get().activeRepoId) {
         await get().selectRepo(repoId)
       }
-      // changed files review in the continuous flow; anything else (all-files
-      // browsing, unchanged refs) opens the single-file view
-      const changed = activeFiles(get()).some((f) => f.path === path)
-      if (get().viewMode === 'flow' && changed) {
-        get().showFileInFlow(path)
-        get().flowSelect(path)
-      } else {
-        await get().openFile(path, status)
-      }
+      await get().openFile(path, status)
     },
 
     flowSelect: (path) => {

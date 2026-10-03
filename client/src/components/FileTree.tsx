@@ -100,6 +100,7 @@ function RepoNode({ repoId }: { repoId: number }) {
   const selectRepo = useReview((s) => s.selectRepo)
   const selectedPath = useReview((s) => s.selectedPath)
   const openFileInRepo = useReview((s) => s.openFileInRepo)
+  const showFileInRepo = useReview((s) => s.showFileInRepo)
   const toggleRepoExpanded = useReview((s) => s.toggleRepoExpanded)
   const toggleRepoShowAll = useReview((s) => s.toggleRepoShowAll)
   const threads = useReview((s) => s.threads)
@@ -184,8 +185,11 @@ function RepoNode({ repoId }: { repoId: number }) {
     return (
       <button
         key={file.path}
-        className={`flex w-full items-center gap-1.5 py-1 pr-2 pl-2 text-left font-mono hover:bg-overlay ${is_selected ? 'bg-overlay' : ''}`}
-        onClick={() => void openFileInRepo(repoId, file.path, file.status ?? undefined)}
+        className={`flex w-full items-center gap-1.5 py-1 pr-2 pl-2 text-left font-mono select-none hover:bg-overlay ${is_selected ? 'bg-overlay' : ''}`}
+        onClick={() => void showFileInRepo(repoId, file.path, file.status ?? undefined)}
+        onDoubleClick={() =>
+          void openFileInRepo(repoId, file.path, file.status ?? undefined)
+        }
         title={
           file.oldPath !== undefined
             ? `${file.oldPath} → ${file.path}`
