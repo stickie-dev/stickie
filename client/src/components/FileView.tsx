@@ -688,9 +688,18 @@ export function FileView() {
       )
     }
     if (files.length === 0) {
+      // "no changes to review" is an answer about the code, and it is the
+      // wrong one twice over: a review whose branch has been removed has no
+      // code to answer about, and one whose work has all landed is finished
+      // rather than empty. Both used to read as a diff that had lost its
+      // files, which is what sends a reader looking for what went missing.
       return (
-        <div className="flex h-full items-center justify-center text-sm text-faint">
-          No changes to review
+        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-faint">
+          {session.sourceGone === true
+            ? 'What this review is of is no longer in the repository. Its notes are kept — point the source above at something else to carry on.'
+            : session.merged === true
+              ? `Everything this review is of is already in ${session.baseRef}.`
+              : 'No changes to review'}
         </div>
       )
     }

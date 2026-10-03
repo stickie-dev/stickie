@@ -84,6 +84,19 @@ export interface Session {
    * re-pinned automatically, because the notes' code is not there.
    */
   baseDiverged?: boolean
+  /**
+   * What this review is of is no longer in the repository: its worktree has
+   * been removed, or its branch deleted. The review keeps pointing at it — the
+   * notes on it were written about that work — and says so, rather than
+   * quietly becoming a review of whatever is checked out now.
+   */
+  sourceGone?: boolean
+  /**
+   * The source tip is already contained in the base: everything this review is
+   * of has landed. True of a merged branch, and of a review of the checkout
+   * that *is* the base branch, which never had anything to review.
+   */
+  merged?: boolean
 }
 
 export type FileChangeStatus =

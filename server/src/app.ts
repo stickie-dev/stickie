@@ -121,6 +121,8 @@ const session_schema = z
     prevBaseRef: z.string().nullable().optional(),
     baseStale: z.boolean().optional(),
     baseDiverged: z.boolean().optional(),
+    sourceGone: z.boolean().optional(),
+    merged: z.boolean().optional(),
   })
   .openapi('Session')
 
@@ -166,6 +168,66 @@ async function basePin(session: Session): Promise<BasePinState> {
     )
   } catch {
     return classifyBasePin(session.baseSha, null, false)
+  }
+}
+
+/**
+ * Whether what this review is *of* is still there, and whether it has landed.
+ *
+ * A review outlives the work it is of: a branch is merged and deleted, a
+ * worktree is removed, and the row stays because the notes written on it do.
+ * What it must not do is go on drawing a diff as though nothing had happened.
+ * An emptied one reads as "no changes to review", which is an answer about the
+ * code rather than about the branch being gone.
+ *
+ * `merged` is the source tip being contained in the base: everything this
+ * review is of is already in the branch it is read against. It is reported
+ * even where the diff is not yet empty, because uncommitted work in a worktree
+ * is still work — and reported for a review of the checkout that *is* the base
+ * branch, which has never had anything in it to review.
+ *
+ * Reported, never stored. A review is `(repo, source, base_ref)` and none of
+ * this changes that: which of them is finished is the reviewer's to say, and
+ * re-pointing the source is how they say otherwise.
+ */
+async function sourceState(
+  session: Session,
+): Promise<{ gone: boolean; merged: boolean }> {
+  const root = sourceRoot(session)
+  let tip: string
+  try {
+    tip = await resolveRef(root, sourceHead(session))
+  } catch {
+    // a removed worktree takes its directory with it, and a deleted branch
+    // stops resolving; neither is an error to report as one
+    return { gone: true, merged: false }
+  }
+  // a base of HEAD is the source's own tip, so there is nothing for the work
+  // to have landed in
+  if (session.baseRef === 'HEAD') return { gone: false, merged: false }
+  try {
+    const base = await resolveRef(root, session.baseRef)
+    return { gone: false, merged: await isAncestor(root, tip, base) }
+  } catch {
+    return { gone: false, merged: false }
+  }
+}
+
+/**
+ * What the repository says about a review right now. Four answers rather than
+ * one call per route, so a route cannot report half of them and a reader
+ * cannot be told the base moved without being told the branch is gone.
+ */
+async function reviewState(session: Session): Promise<Partial<Session>> {
+  const [pin, source] = await Promise.all([
+    basePin(session),
+    sourceState(session),
+  ])
+  return {
+    baseStale: pin.stale,
+    baseDiverged: pin.diverged,
+    sourceGone: source.gone,
+    merged: source.merged,
   }
 }
 
@@ -845,16 +907,47 @@ export function createApp(
       const repo = await store.getRepo(body.repoId)
       if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
 
-      if (body.source.kind === 'worktree') {
-        const worktrees = await listWorktrees(repo.path)
-        if (!worktrees.some((wt) => wt.path === body.source.value)) {
-          return c.json(
-            { error: `not a worktree of this repo: ${body.source.value}` },
-            400,
-          )
+      const source = body.source
+      const source_there =
+        source.kind === 'worktree'
+          ? (await listWorktrees(repo.path)).some(
+              (wt) => wt.path === source.value,
+            )
+          : await resolveRef(repo.path, source.value).then(
+              () => true,
+              () => false,
+            )
+      if (!source_there) {
+        /*
+         * A review outlives the source it is of. A branch is merged and
+         * deleted, a worktree is removed, and the notes written on it are
+         * still about work that was really done — so the review opens, empty,
+         * and says what happened to it (`sourceGone`). Refusing it is what
+         * made a finished branch's review unreachable, and left the workspace
+         * showing a review of whatever is checked out now instead, which is a
+         * review of something nobody asked to review.
+         *
+         * A source that never had a review is still refused. There is nothing
+         * there to read, and making a review of it would only record the
+         * mistake.
+         */
+        const existing = await store.getSessionBySource(
+          repo.id,
+          source,
+          body.baseRef,
+        )
+        if (existing !== undefined) {
+          return c.json({ ...existing, ...(await reviewState(existing)) }, 200)
         }
-      } else {
-        await resolveRef(repo.path, body.source.value)
+        return c.json(
+          {
+            error:
+              source.kind === 'worktree'
+                ? `not a worktree of this repo: ${source.value}`
+                : `not a ref in this repo: ${source.value}`,
+          },
+          400,
+        )
       }
 
       // what the review *is*. A worktree is asked what it has checked out; a
@@ -946,11 +1039,7 @@ export function createApp(
       // an existing review comes back with the base it is pinned to, which may
       // have been left behind since; saying so here is what lets a fresh load
       // offer the re-pin rather than waiting for the next file change
-      const pin = await basePin(session)
-      return c.json(
-        { ...session, baseStale: pin.stale, baseDiverged: pin.diverged },
-        200,
-      )
+      return c.json({ ...session, ...(await reviewState(session)) }, 200)
     },
   )
 
@@ -971,11 +1060,7 @@ export function createApp(
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      const pin = await basePin(session)
-      return c.json(
-        { ...session, baseStale: pin.stale, baseDiverged: pin.diverged },
-        200,
-      )
+      return c.json({ ...session, ...(await reviewState(session)) }, 200)
     },
   )
 
@@ -1004,10 +1089,19 @@ export function createApp(
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      const pin = await basePin(session)
+      // both asked at once: a re-pin answers with the review as it now stands,
+      // and the branch being gone is as much a part of that as the base is
+      const [pin, source] = await Promise.all([
+        basePin(session),
+        sourceState(session),
+      ])
+      const state = { sourceGone: source.gone, merged: source.merged }
       const current = pin.next
       if (current === null) {
-        return c.json({ ...session, baseStale: false, baseDiverged: false }, 200)
+        return c.json(
+          { ...session, ...state, baseStale: false, baseDiverged: false },
+          200,
+        )
       }
       /*
        * A base that would move backwards is not this review moving on, and the
@@ -1017,7 +1111,10 @@ export function createApp(
        * under them, which the client warns about before asking for this.
        */
       if (pin.diverged && c.req.valid('query').automatic === true) {
-        return c.json({ ...session, baseStale: false, baseDiverged: true }, 200)
+        return c.json(
+          { ...session, ...state, baseStale: false, baseDiverged: true },
+          200,
+        )
       }
       // the pin moves on this review rather than starting another one; what
       // the base used to be is not lost, it is in the record below
@@ -1039,7 +1136,13 @@ export function createApp(
         },
       })
       return c.json(
-        { ...session, baseSha: current, baseStale: false, baseDiverged: false },
+        {
+          ...session,
+          ...state,
+          baseSha: current,
+          baseStale: false,
+          baseDiverged: false,
+        },
         200,
       )
     },
@@ -1087,11 +1190,7 @@ export function createApp(
           undo: true,
         },
       })
-      const pin = await basePin(session)
-      return c.json(
-        { ...session, baseStale: pin.stale, baseDiverged: pin.diverged },
-        200,
-      )
+      return c.json({ ...session, ...(await reviewState(session)) }, 200)
     },
   )
 
@@ -1148,10 +1247,19 @@ export function createApp(
       if (session === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      return c.json(
-        await changedFiles(session.repoPath, session.source, session.baseSha),
-        200,
-      )
+      // A review whose worktree has been removed has no diff to read, and git
+      // says so by failing on a directory that is not there. That is not an
+      // error the reviewer can act on: the review still opens, empty, and
+      // `sourceGone` on the session is what explains it.
+      const changed = await changedFiles(
+        session.repoPath,
+        session.source,
+        session.baseSha,
+      ).catch(async (error: unknown) => {
+        if ((await sourceState(session)).gone) return []
+        throw error
+      })
+      return c.json(changed, 200)
     },
   )
 
@@ -2661,9 +2769,8 @@ export function createApp(
       if (fresh === undefined) {
         return c.json({ error: 'unknown session' }, 404)
       }
-      const pin = await basePin(fresh)
       return c.json(
-        { ...fresh, baseStale: pin.stale, baseDiverged: pin.diverged },
+        { ...fresh, ...(await reviewState(fresh)) },
         200,
       )
     },

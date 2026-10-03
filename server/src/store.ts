@@ -242,6 +242,34 @@ export class Store {
   }
 
   /**
+   * A review found by where it is read from, rather than by what it is of.
+   *
+   * The key is `(repo, branch)`, and the branch of a worktree review is what
+   * that checkout answers — so once the worktree is removed there is nothing
+   * left to ask, and the review cannot be found the usual way. It is still a
+   * review: the notes on it are about work that was really done.
+   *
+   * Narrowed by base when one was asked for, and otherwise the most recent, so
+   * a source read against two bases answers with the one last made rather than
+   * with whichever the query planner reached first.
+   */
+  async getSessionBySource(
+    repoId: number,
+    source: ReviewSource,
+    baseRef?: string,
+  ): Promise<Session | undefined> {
+    const row = await this.db.get<SessionRow>(
+      `select s.*, r.path as repo_path from sessions s
+       join repos r on r.id = s.repo_id
+       where s.repo_id = ? and s.source_kind = ? and s.source_value = ?
+         and (? is null or s.base_ref = ?)
+       order by s.id desc`,
+      [repoId, source.kind, source.value, baseRef ?? null, baseRef ?? null],
+    )
+    return row === undefined ? undefined : sessionFromRow(row)
+  }
+
+  /**
    * Moves a review's base, keeping the one it had so the move can be undone.
    *
    * The base is a lens on one piece of work — the same branch read against

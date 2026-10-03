@@ -4,7 +4,7 @@ import { api } from '../api'
 import { ask } from '../confirm'
 import { formatRoute } from '../routes'
 import { Search, Send, Sliders } from '../icons'
-import { btn, button_on, field, icon_button, title_bar } from '../ui'
+import { badge, btn, button_on, field, icon_button, title_bar } from '../ui'
 import { ThemeToggle } from './ThemeToggle'
 import { useReview } from '../store'
 
@@ -205,6 +205,22 @@ export function TopBar() {
       >
         {targets !== null && (
           <>
+            {/*
+              A source that is no longer in the repository still needs an
+              option, or the picker falls back to showing the first worktree it
+              has — quietly claiming this review is of the main checkout, which
+              is the nonsense a removed worktree used to produce. It names what
+              the review is actually of, and choosing anything else is how the
+              reviewer leaves it.
+            */}
+            {session?.sourceGone === true && source !== null && (
+              <option value={source_key(source)}>
+                {source.kind === 'worktree'
+                  ? shortPath(source.value)
+                  : source.value}{' '}
+                (gone)
+              </option>
+            )}
             <optgroup label="worktrees (working tree)">
               {targets.worktrees.map((wt) => (
                 <option key={wt.path} value={`worktree:${wt.path}`}>
@@ -278,6 +294,29 @@ export function TopBar() {
         >
           source moved off this base
         </button>
+      )}
+      {/*
+        Statements, where the two above are offers. Nothing can re-point a
+        review for the reviewer — which branch it is of is the whole of what it
+        is — and the picker that does it is a few inches to the left in this
+        same bar. So these keep the pill, which cannot be read as the button
+        that would do it for you.
+      */}
+      {session?.sourceGone === true && (
+        <span
+          className={`${badge} whitespace-nowrap bg-amber-500/15 text-amber-700 dark:text-amber-300`}
+          title="the worktree or branch this review is of is no longer in the repository — its notes are kept, and the source picker is how to carry on somewhere else"
+        >
+          source gone
+        </span>
+      )}
+      {session?.merged === true && (
+        <span
+          className={`${badge} whitespace-nowrap bg-overlay text-faint`}
+          title={`everything this review is of is already in ${session.baseRef}, so an empty diff here is the branch being finished rather than a file having been missed`}
+        >
+          already in {session.baseRef}
+        </span>
       )}
 
       <span className="grow" />

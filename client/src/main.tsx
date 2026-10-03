@@ -4,8 +4,10 @@ import { BrowserRouter } from 'react-router'
 import { App } from './App'
 import './index.css'
 import { registerWorker } from './install'
+import { tameUnfoldAll } from './collapsedRegions'
 
 registerWorker()
+tameUnfoldAll()
 
 const root = document.getElementById('root')
 if (root === null) {

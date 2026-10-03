@@ -278,7 +278,7 @@ and the review — source, base, search, the panels, the theme, settings. The
 menu at the end of the tabs is the diff: how it is drawn, and what can be done
 with it. The status bar carries counts, so nothing else should.
 
-### Monaco, and two things it will do to you
+### Monaco, and three things it will do to you
 
 **A selection is painted under the diff's colours.** Monaco renders one line's
 overlays as siblings in DOM order at `z-index: auto`: the selection first, then
@@ -286,6 +286,27 @@ the inserted/removed line background, which is opaque. No colour can fix that �
 the selection is there, buried — so `.view-overlays .selected-text` is raised a
 step in `index.css`. Anything else that must show through a diff line has the
 same problem and the same answer.
+
+**A collapsed region opens itself for the cursor, and for nothing else.**
+Moving the cursor into a region `hideUnchangedRegions` has folded away is
+what opens it — that region alone, and only as far as the line the cursor
+landed on. Nothing else reaches in: a line that is folded away has no place
+on screen, so `revealLine` on it scrolls to where it is not. So anywhere a
+line is reached rather than clicked — a note, a find match, a pasted link —
+the cursor moves **first** and the scroll follows it. Done the other way
+round, the reveal silently does nothing, which is why this used to unfold
+the whole file to make the line exist: one note opened nine hundred lines.
+
+The same widget is why `reveal_line_count` is a token rather than three
+numbers, and why `collapsedRegions.ts` exists. A band has three targets and
+they are not equally findable: two four-pixel drag strips that step by that
+many lines, and an icon at the gutter end — the only one of the three that
+looks like something to press — which opens the region entire. Lowering the
+step count does nothing about the icon, because the icon never asked for a
+step. So its click is intercepted and steps both ends instead, and its
+tooltip is corrected on hover, since the widget writes that once when it is
+built. The whole region stays one double-click away on the line count,
+which is the editor's own gesture and its own tooltip.
 
 **A form inside a view zone keeps no state of its own.** `useState` for an open
 menu read back false on the very next click. Zone-local state goes in the store
