@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   parseNameStatus,
+  orderWorktrees,
   parseWorktrees,
   shortenRev,
   shortSha,
@@ -57,6 +58,61 @@ describe('parseWorktrees', () => {
         branch: null,
         isMain: false,
       },
+    ])
+  })
+})
+
+describe('orderWorktrees', () => {
+  const wt = (path: string, head: string, branch: string | null) => ({
+    path,
+    head,
+    branch,
+    isMain: path === '/repo',
+  })
+
+  it('puts the newest checkout first and detached ones last', () => {
+    const list = [
+      wt('/repo', 'aaaa', 'master'),
+      wt('/repo/.worktrees/alpha', 'bbbb', 'alpha'),
+      wt('/repo/.worktrees/zeta', 'cccc', 'zeta'),
+      wt('/repo/.worktrees/spike', 'dddd', null),
+    ]
+    const dates = new Map([
+      ['aaaa', '2026-09-01T10:00:00+02:00'],
+      ['bbbb', '2026-09-20T10:00:00+02:00'],
+      ['cccc', '2026-09-28T10:00:00+02:00'],
+      // newer than every attached one, and still sorted after them
+      ['dddd', '2026-09-29T10:00:00+02:00'],
+    ])
+    expect(orderWorktrees(list, dates).map((w) => w.path)).toEqual([
+      '/repo/.worktrees/zeta',
+      '/repo/.worktrees/alpha',
+      '/repo',
+      '/repo/.worktrees/spike',
+    ])
+  })
+
+  it('keeps a worktree git gave no date for, as the oldest of its kind', () => {
+    const list = [
+      wt('/repo/.worktrees/unknown', 'eeee', 'unknown'),
+      wt('/repo', 'aaaa', 'master'),
+    ]
+    const dates = new Map([['aaaa', '2026-09-01T10:00:00+02:00']])
+    expect(orderWorktrees(list, dates).map((w) => w.path)).toEqual([
+      '/repo',
+      '/repo/.worktrees/unknown',
+    ])
+  })
+
+  it('orders two checkouts of the same commit by path, not by chance', () => {
+    const list = [
+      wt('/repo/.worktrees/b', 'aaaa', 'b'),
+      wt('/repo/.worktrees/a', 'aaaa', 'a'),
+    ]
+    const dates = new Map([['aaaa', '2026-09-01T10:00:00+02:00']])
+    expect(orderWorktrees(list, dates).map((w) => w.path)).toEqual([
+      '/repo/.worktrees/a',
+      '/repo/.worktrees/b',
     ])
   })
 })

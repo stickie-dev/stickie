@@ -190,10 +190,63 @@ export function parseWorktrees(porcelain: string, mainPath: string): WorktreeInf
   return result
 }
 
+/**
+ * Commit dates for a set of shas, in one spawn rather than one per sha. Every
+ * open descriptor is paid for again by the next `fork`, so asking git once for
+ * ten answers is not a tidiness preference.
+ */
+export async function commitDates(
+  repo: string,
+  shas: string[],
+): Promise<Map<string, string>> {
+  const wanted = [...new Set(shas)].filter((sha) => sha !== '')
+  if (wanted.length === 0) return new Map()
+  const out = await gitOrNull(repo, [
+    'log',
+    '--no-walk=unsorted',
+    '--format=%H%x09%cI',
+    ...wanted,
+  ])
+  const dates = new Map<string, string>()
+  for (const line of (out ?? '').split('\n')) {
+    const [sha = '', when = ''] = line.split('\t')
+    if (sha !== '' && when !== '') dates.set(sha, when)
+  }
+  return dates
+}
+
+/**
+ * Worktrees newest first, and the detached ones after all of the attached
+ * ones. `git worktree list` answers in the order the administrative files
+ * happen to be read, which reads as alphabetical and says nothing about which
+ * one is being worked in — the reason to open the picker at all.
+ *
+ * A worktree whose date git would not give is sorted as the oldest rather than
+ * dropped or floated: the picker's job is to list every one of them.
+ */
+export function orderWorktrees(
+  worktrees: WorktreeInfo[],
+  dates: Map<string, string>,
+): WorktreeInfo[] {
+  const rank = (wt: WorktreeInfo) => (wt.branch === null ? 1 : 0)
+  return [...worktrees].sort((a, b) => {
+    if (rank(a) !== rank(b)) return rank(a) - rank(b)
+    const when_a = dates.get(a.head) ?? ''
+    const when_b = dates.get(b.head) ?? ''
+    if (when_a !== when_b) return when_a < when_b ? 1 : -1
+    return a.path.localeCompare(b.path)
+  })
+}
+
 export async function listWorktrees(repo: string): Promise<WorktreeInfo[]> {
   const out = await git(repo, ['worktree', 'list', '--porcelain'])
   const main = await repoRoot(repo)
-  return parseWorktrees(out, main)
+  const worktrees = parseWorktrees(out, main)
+  const dates = await commitDates(
+    repo,
+    worktrees.map((wt) => wt.head),
+  )
+  return orderWorktrees(worktrees, dates)
 }
 
 export async function listRecentBranches(
