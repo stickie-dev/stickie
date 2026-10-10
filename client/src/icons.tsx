@@ -147,13 +147,69 @@ export function ChevronDown(props: IconProps) {
   )
 }
 
-/** The menu at the end of the tabs: three dots, the shape everyone reads. */
-export function Kebab(props: IconProps) {
+/*
+ * How a diff is drawn. Each is a frame with what is inside it changed, so the
+ * set reads as one family in the top bar and the difference is the content:
+ * two panes, one column, or a divider that gives way when there is no room.
+ */
+
+export function Columns(props: IconProps) {
   return (
     <Icon {...props}>
-      <circle cx="12" cy="5.5" r="1.5" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="18.5" r="1.5" fill="currentColor" stroke="none" />
+      <rect x="4" y="5" width="16" height="14" rx="2" />
+      <path d="M12 5v14" />
+    </Icon>
+  )
+}
+
+export function Inline(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="5" width="16" height="14" rx="2" />
+      <path d="M7.5 9.5h9M7.5 12h6M7.5 14.5h9" />
+    </Icon>
+  )
+}
+
+export function Fits(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="5" width="16" height="14" rx="2" />
+      <path d="M12 5v3M12 16v3M8.5 12h7M10 10.5 8.5 12l1.5 1.5M14 10.5l1.5 1.5-1.5 1.5" />
+    </Icon>
+  )
+}
+
+/** Unchanged lines folded away: the edges of a file, squeezed towards each other. */
+export function FoldLines(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 5h14M5 19h14M12 7.5v3M10 9l2 2 2-2M12 16.5v-3M10 15l2-2 2 2" />
+    </Icon>
+  )
+}
+
+export function WrapLines(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 7h16M4 12h12.5a3 3 0 0 1 0 6H12M14 16l-2 2 2 2M4 17h4" />
+    </Icon>
+  )
+}
+
+export function Clipboard(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9 4h6a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" />
+      <path d="M16 5.5h1.5A1.5 1.5 0 0 1 19 7v11.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 18.5V7a1.5 1.5 0 0 1 1.5-1.5H8" />
+    </Icon>
+  )
+}
+
+export function Check(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5.5 12.5 10 17l8.5-9.5" />
     </Icon>
   )
 }

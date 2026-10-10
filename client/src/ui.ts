@@ -83,6 +83,17 @@ export const button_on = `${button_base} bg-accent-soft text-accent ${motion}`
 export const icon_button = `rounded-sm p-1.5 text-soft stickie-focus hover:bg-overlay hover:text-ink disabled:text-faint [&>svg]:h-4 [&>svg]:w-4 ${motion}`
 
 /**
+ * An icon toggle that is on — written out rather than added to `icon_button`,
+ * since two text colours on one element are settled by stylesheet order and
+ * not by which was written last. The tint is `button_on`'s, so a toggle reads
+ * the same whether it is a word or a shape.
+ */
+export const icon_button_on = `rounded-sm p-1.5 bg-accent-soft text-accent stickie-focus [&>svg]:h-4 [&>svg]:w-4 ${motion}`
+
+/** Partly on — some files wrapped, not all: the colour without the fill. */
+export const icon_button_part = `rounded-sm p-1.5 text-accent stickie-focus hover:bg-overlay [&>svg]:h-4 [&>svg]:w-4 ${motion}`
+
+/**
  * Text entry and selects, filled rather than outlined, with the focus ring
  * doing what a permanent border was doing badly. One pixel, not two: a card
  * that is already ringed as the active note, holding a field ringed twice as

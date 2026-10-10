@@ -1,3 +1,4 @@
+import type { ResolvedNotes } from '../../api'
 import type { FontScale } from '../../store'
 import { useReview } from '../../store'
 import { Field, Section, field_classes, useFieldValue } from './parts'
@@ -22,6 +23,23 @@ const font_choices: { value: FontScale; label: string; why: string }[] = [
   },
 ]
 
+const resolved_choices: {
+  value: ResolvedNotes
+  label: string
+  why: string
+}[] = [
+  {
+    value: 'folded',
+    label: 'In the diff',
+    why: 'folded to one line, where it was written',
+  },
+  {
+    value: 'gutter',
+    label: 'In the gutter',
+    why: 'out of the code, as a mark on the line it was written against — click one to read it',
+  },
+]
+
 export function AppearanceSection({ state, save, saving }: SettingsAccess) {
   const theme = useReview((s) => s.theme)
   const toggleTheme = useReview((s) => s.toggleTheme)
@@ -30,6 +48,8 @@ export function AppearanceSection({ state, save, saving }: SettingsAccess) {
   const wrap = useFieldValue(state?.wrapExtensions)
   const collapsed = useFieldValue(state?.collapsedFiles)
   const setCollapsedFiles = useReview((s) => s.setCollapsedFiles)
+  const resolvedNotes = useReview((s) => s.resolvedNotes)
+  const setResolvedNotes = useReview((s) => s.setResolvedNotes)
 
   return (
     <Section
@@ -63,6 +83,34 @@ export function AppearanceSection({ state, save, saving }: SettingsAccess) {
                 className="mt-0.5 shrink-0"
                 checked={fontScale === choice.value}
                 onChange={() => setFontScale(choice.value)}
+              />
+              <span>
+                <span className="text-ink">{choice.label}</span>
+                <span className="block text-faint">{choice.why}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </Field>
+
+      {/* set once and left, so it is here rather than in the top bar beside
+          the toggles that are changed while reading */}
+      <Field
+        label="Resolved notes"
+        hint="Where a note goes once it is resolved. Either way it can be opened again from where it sits."
+      >
+        <div className="space-y-2">
+          {resolved_choices.map((choice) => (
+            <label
+              key={choice.value}
+              className="flex cursor-pointer gap-2 text-xs"
+            >
+              <input
+                type="radio"
+                name="resolved-notes"
+                className="mt-0.5 shrink-0"
+                checked={resolvedNotes === choice.value}
+                onChange={() => setResolvedNotes(choice.value)}
               />
               <span>
                 <span className="text-ink">{choice.label}</span>

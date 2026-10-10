@@ -10,7 +10,6 @@ import { tabLabels } from '../tabLabels'
 import { ChevronDown, ChevronLeft, ChevronRight, Close } from '../icons'
 import { btn, button_on, glass, icon_button, motion } from '../ui'
 import { OpenRepoMenu } from './OpenRepoMenu'
-import { ViewMenu } from './ViewMenu'
 
 /** Room kept for the overflow button when not every tab fits. */
 const overflow_reserve = 52
@@ -302,7 +301,6 @@ export function TabBar({ page }: { page: Page }) {
       >
         <ChevronRight />
       </button>
-      <ViewMenu />
       {listing && hidden.length > 0 && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setListing(false)} />

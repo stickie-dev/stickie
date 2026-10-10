@@ -180,7 +180,10 @@ buttons at, which matters because ours sit next to those in an installed
 window.
 Settings, the theme, reload, close and the arrows that move you about are
 shapes. `Comments (3)`, `Activity`, `Import MR` stay words, because the word
-carries what the shape cannot; sending gets both, since the label counts what
+carries what the shape cannot. The diff's drawing toggles are shapes too,
+because they are a row that must fit one line — and each shows its state
+(pressed is on, partly pressed is some files) and says in its title what it
+is now and what a click makes it, since a shape alone says neither; sending gets both, since the label counts what
 is about to go. A bar of pictograms is not denser than a bar of verbs, it is
 just quieter about what it does — and an icon-only button still needs its
 `aria-label`, because the picture is not the name.
@@ -293,8 +296,13 @@ search, the panels, the theme, settings — and the same on every tab. The foote
 is the review in front, described: where you are in it, what it is of and read
 against (changeable where they are shown, with their warnings), and what it
 still owes you. Off a review it keeps its height and its connection dot, and
-stops describing a review that is not the one being looked at. The menu at the
-end of the tabs is the diff: how it is drawn, and what can be done with it.
+stops describing a review that is not the one being looked at. How every diff
+is drawn — its layout, folding unchanged lines, wrapping — is a preference for
+the app, so it is a row of toggles in the top bar (`ViewToggles`) rather than
+a menu at the end of the tabs, where an unlabelled ⋮ sat directly under the
+browser's own. Copy prompt sits beside Submit review, since both are a review's
+notes reaching an agent; where resolved notes go is set once and lives in
+Settings.
 
 ### Monaco, and four things it will do to you
 

@@ -1,8 +1,9 @@
 import { Link } from 'react-router'
 import { formatRoute } from '../routes'
-import { Search, Send, Sliders } from '../icons'
+import { Check, Clipboard, Search, Send, Sliders } from '../icons'
 import { btn, button_on, icon_button, title_bar } from '../ui'
 import { ThemeToggle } from './ThemeToggle'
+import { ViewToggles } from './ViewToggles'
 import { useReview } from '../store'
 
 export function TopBar() {
@@ -13,6 +14,9 @@ export function TopBar() {
   const toggleActivity = useReview((s) => s.toggleActivity)
   const commentsOpen = useReview((s) => s.commentsOpen)
   const activityOpen = useReview((s) => s.activityOpen)
+  const session = useReview((s) => s.session)
+  const copyPrompt = useReview((s) => s.copyPrompt)
+  const promptCopied = useReview((s) => s.promptCopied)
   const open_threads = threads.filter((t) => t.status === 'open').length
   const pending_count = threads.filter(
     (t) => t.pending && t.status === 'open',
@@ -67,6 +71,25 @@ export function TopBar() {
           Submit review ({pending_count})
         </button>
       )}
+      {/*
+        Beside sending, since it is the other way a review's notes reach an
+        agent: as text on the clipboard rather than through the server.
+      */}
+      <button
+        className={`shrink-0 ${icon_button}`}
+        title={
+          promptCopied
+            ? 'copied'
+            : 'copy every unresolved note as a prompt, to paste into any agent'
+        }
+        aria-label="copy this review as a prompt"
+        disabled={session === null}
+        onClick={() => void copyPrompt()}
+      >
+        {promptCopied ? <Check /> : <Clipboard />}
+      </button>
+      <span className="ml-1.5" />
+      <ViewToggles />
       <ThemeToggle />
       <Link
         className={`shrink-0 ${icon_button}`}
