@@ -320,8 +320,29 @@ an explicit **apply**. Since a save re-reads the whole settings object,
 `useFieldValue` keeps a field the reader is editing from being overwritten by
 a save somewhere else on the page.
 
+**Every panel has a place on the bar down the left edge.** `PanelBar`: Files
+in the upper left; Commits or Activity below them, taking turns in one slot;
+Search; and Comments, which opens on the right beside the code it is about.
+The icons are grouped by where they open, with a rule between groups, so the
+icons that share a space sit together and lighting one puts the other away. Settings sits at the foot. Each is lit while open and a second
+click puts it away, so putting away Files and the lower slot gives the diff
+the whole width. Panels used to be words in the top bar, and Commits had no
+button at all, only a strip under the tree — each had to be known to be
+found. They are meant to become movable; until then this is where each one
+sits, and which are open is remembered across reloads. The bar is outside
+the row the pane fractions are measured against, or every drag of the tree's
+edge would land a bar's width off the pointer.
+
+**The window never scrolls; panels do.** The frame is the height of the
+window and clips anything that would make it wider or taller, and each panel
+scrolls inside itself. A flex item will not shrink below what its content
+asks for, so any row laid out sideways that holds the diff needs `min-w-0` —
+without it on the row beside the panel bar, a long tab strip widened the
+whole window and pushed the comments off its right edge.
+
 **Where a control lives says what it acts on.** The top bar is the app —
-search, the panels, the theme, settings — and the same on every tab. The footer
+where you have been, sending, how every diff is drawn, the theme — and the
+same on every tab. The footer
 is the review in front, described: where you are in it, what it is of and read
 against (changeable where they are shown, with their warnings), and what it
 still owes you. Off a review it keeps its height and its connection dot, and

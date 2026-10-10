@@ -9,6 +9,7 @@ import { CommitsPanel } from './CommitsPanel'
 import { FileTree } from './FileTree'
 import { FileView } from './FileView'
 import { PageArea } from './PageArea'
+import { PanelBar } from './PanelBar'
 import { SearchOverlay } from './SearchOverlay'
 import { SidePane } from './SidePane'
 import { StatusBar } from './StatusBar'
@@ -124,7 +125,8 @@ export function Workspace({ page }: { page: Page }) {
   const active = page.kind !== 'home' && page.kind !== 'settings'
   const setSearchOpen = useReview((s) => s.setSearchOpen)
   const commentsOpen = useReview((s) => s.commentsOpen)
-  const activityOpen = useReview((s) => s.activityOpen)
+  const filesOpen = useReview((s) => s.filesOpen)
+  const lowerPanel = useReview((s) => s.lowerPanel)
   const openFind = useReview((s) => s.openFind)
   const flipFindScope = useReview((s) => s.flipFindScope)
   useAutoRepin()
@@ -198,17 +200,42 @@ export function Workspace({ page }: { page: Page }) {
       <div className="flex min-h-0 grow flex-col">
         {/* the row the pane fractions are of; measured here rather than from
             the window, since that is what they are fractions of */}
-        <div className="flex min-h-0 grow" ref={row}>
-          <aside
-            className="flex shrink-0 flex-col"
-            style={{ width: paneWidth('tree', treeRatio) }}
-          >
-            <div className="min-h-0 grow">
-              <FileTree />
-            </div>
-            <CommitsPanel />
-          </aside>
-          <PaneResizer pane="tree" side="left" bounds={bounds} />
+        {/* the bar sits outside the measured row: the pane fractions are of
+            what the panels can use, and counting the bar would put every
+            drag of the tree's edge a bar's width off the pointer */}
+        <div className="flex min-h-0 grow">
+        <PanelBar page={page} />
+        {/* `min-w-0`, because beside the bar the row is a flex item laid out
+            sideways, and a flex item will not shrink below what its content
+            asks for: a long tab strip or a wide line of code made the whole
+            window scroll sideways and took the comments off its right edge */}
+        <div className="flex min-h-0 min-w-0 grow" ref={row}>
+          {(filesOpen || lowerPanel !== null) && (
+            <>
+              <aside
+                className="flex shrink-0 flex-col"
+                style={{ width: paneWidth('tree', treeRatio) }}
+              >
+                {filesOpen && (
+                  <div className="min-h-0 grow">
+                    <FileTree />
+                  </div>
+                )}
+                {/* below the files and as tall as it needs, up to a little
+                    under half; the whole column when the files are put away */}
+                {lowerPanel !== null && (
+                  <div
+                    className={`flex min-h-0 flex-col ${
+                      filesOpen ? 'max-h-[45%] shrink-0 border-t border-edge' : 'grow'
+                    }`}
+                  >
+                    {lowerPanel === 'commits' ? <CommitsPanel /> : <ActivityPanel />}
+                  </div>
+                )}
+              </aside>
+              <PaneResizer pane="tree" side="left" bounds={bounds} />
+            </>
+          )}
           <main className="relative flex min-w-0 grow flex-col">
             <TabBar page={page} />
             <div className="relative min-h-0 grow">
@@ -236,7 +263,7 @@ export function Workspace({ page }: { page: Page }) {
               <CommentsPanel />
             </>
           )}
-          {activityOpen && <ActivityPanel />}
+        </div>
         </div>
         <UsagesPanel />
         <StatusBar reviewInFront={active} />

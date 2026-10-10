@@ -127,6 +127,28 @@ function initialFontScale(): FontScale {
   return localStorage.getItem('stickie-font') === 'compact' ? 'compact' : 'comfort'
 }
 
+export type LowerPanel = 'commits' | 'activity'
+
+/** Which panels were open last time; files and commits, the first time. */
+function readPanels(): { files: boolean; lower: LowerPanel | null } {
+  try {
+    const raw = JSON.parse(localStorage.getItem('stickie-panels') ?? 'null') as {
+      files?: unknown
+      lower?: unknown
+    } | null
+    return {
+      files: raw?.files !== false,
+      lower:
+        raw?.lower === 'activity' || raw?.lower === null
+          ? (raw.lower as LowerPanel | null)
+          : 'commits',
+    }
+  } catch {
+    return { files: true, lower: 'commits' }
+  }
+}
+const previous_panels = readPanels()
+
 function initialTheme(): Theme {
   const stored = localStorage.getItem('stickie-theme')
   if (stored === 'dark' || stored === 'light') return stored
@@ -467,8 +489,19 @@ interface ReviewState {
   commentsTab: CommentsTab
   setCommentsTab: (tab: CommentsTab) => void
   toggleComments: () => void
-  activityOpen: boolean
-  toggleActivity: () => void
+  /** Files, in the upper left: shown, or put away to give the diff its width. */
+  filesOpen: boolean
+  toggleFiles: () => void
+  /**
+   * What sits below the files: the review's commits or its activity, which
+   * take turns in the one slot, or nothing. Activity was a panel of its own on
+   * the right, beside the comments, so opening it squeezed the diff from the
+   * side the reader was reading.
+   */
+  lowerPanel: LowerPanel | null
+  showLower: (panel: LowerPanel | null) => void
+  /** The bar's button: open this one there, or close it if it already is. */
+  toggleLower: (panel: LowerPanel) => void
   resolveThread: (threadId: number) => Promise<void>
   reopenThread: (threadId: number) => Promise<void>
   copyPrompt: () => Promise<void>
@@ -1171,7 +1204,8 @@ export const useReview = create<ReviewState>((set, get) => {
     reviewActive: false,
     reviewAsk: 0,
     settingsTab: null,
-    activityOpen: false,
+    filesOpen: previous_panels.files,
+    lowerPanel: previous_panels.lower,
     viewMode: 'flow',
     commits: [],
     commitView: null,
@@ -2171,7 +2205,10 @@ export const useReview = create<ReviewState>((set, get) => {
     setCommentsTab: (tab) => set({ commentsTab: tab }),
 
     toggleComments: () => set({ commentsOpen: !get().commentsOpen }),
-    toggleActivity: () => set({ activityOpen: !get().activityOpen }),
+    toggleFiles: () => set({ filesOpen: !get().filesOpen }),
+    showLower: (panel) => set({ lowerPanel: panel }),
+    toggleLower: (panel) =>
+      set({ lowerPanel: get().lowerPanel === panel ? null : panel }),
 
     deleteThread: async (threadId) => {
       try {
@@ -2662,6 +2699,7 @@ let written_drafts = ''
 let written_panes = ''
 let written_tree = ''
 let written_comments_tab = ''
+let written_panels = ''
 useReview.subscribe((state) => {
   const tabs = storeTabs(state.tabs, state.activeTabId, state.repos)
   if (tabs !== written_tabs) written_tabs = tabs
@@ -2673,4 +2711,13 @@ useReview.subscribe((state) => {
   if (tree !== written_tree) written_tree = tree
   const tab = storeCommentsTab(state.commentsTab)
   if (tab !== written_comments_tab) written_comments_tab = tab
+  const panels = JSON.stringify({ files: state.filesOpen, lower: state.lowerPanel })
+  if (panels !== written_panels) {
+    written_panels = panels
+    try {
+      localStorage.setItem('stickie-panels', panels)
+    } catch {
+      // a browser that will not store it keeps the layout until reload
+    }
+  }
 })

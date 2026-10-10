@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useReview } from '../store'
-import { eyebrow, motion } from '../ui'
+import { motion } from '../ui'
 
 /**
  * Commits between base and source for the active repo. A click opens that
@@ -15,7 +15,6 @@ export function CommitsPanel() {
   const loadCommits = useReview((s) => s.loadCommits)
   const commitView = useReview((s) => s.commitView)
   const selectCommits = useReview((s) => s.selectCommits)
-  const [expanded, setExpanded] = useState(true)
   const [anchor, setAnchor] = useState<number | null>(null)
 
   const sessionId = session?.id
@@ -58,37 +57,33 @@ export function CommitsPanel() {
   }
 
   return (
-    <div className="border-t border-edge text-xs">
-      <button
-        className={`flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-overlay ${motion}`}
-        onClick={() => setExpanded(!expanded)}
-      >
-        <span className="w-2 text-faint">{expanded ? '▾' : '▸'}</span>
+    // the slot below the files, filled; the bar opens and closes it, so it no
+    // longer folds itself
+    <section className="flex min-h-0 grow flex-col text-xs">
+      <div className="flex items-center gap-1.5 px-2 py-1.5">
         <span className="font-semibold text-soft">Commits</span>
         <span className="text-faint">{commits.length}</span>
-        <span className="grow" />
-        <span className={eyebrow}>click · ⌘ · shift</span>
-      </button>
-      {expanded && (
-        <div className="max-h-56 overflow-y-auto pb-1">
-          {commits.map((commit, index) => (
-            <button
-              key={commit.sha}
-              className={`flex w-full items-center gap-2 px-3 py-1 text-left font-mono hover:bg-overlay ${motion} ${selected.has(commit.sha) ? 'bg-accent-soft text-accent' : 'text-soft'}`}
-              title={`${commit.subject}\nclick: this commit · ⌘+click: add it · shift+click: add the span`}
-              onClick={(e) => pick(index, e)}
-            >
-              <span className="shrink-0 text-faint">{commit.shortSha}</span>
-              <span className="truncate">{commit.subject}</span>
-            </button>
-          ))}
-          {commits.length === 0 && (
-            <p className="px-3 py-1 text-faint">
-              no commits between base and source
-            </p>
-          )}
-        </div>
-      )}
-    </div>
+        {/* how to pick is said on every row's hint and on the bar's: in a
+            column this narrow, saying it here as well wrapped the header */}
+      </div>
+      <div className="min-h-0 grow overflow-y-auto pb-1">
+        {commits.map((commit, index) => (
+          <button
+            key={commit.sha}
+            className={`flex w-full items-center gap-2 px-3 py-1 text-left font-mono hover:bg-overlay ${motion} ${selected.has(commit.sha) ? 'bg-accent-soft text-accent' : 'text-soft'}`}
+            title={`${commit.subject}\nclick: this commit · ⌘+click: add it · shift+click: add the span`}
+            onClick={(e) => pick(index, e)}
+          >
+            <span className="shrink-0 text-faint">{commit.shortSha}</span>
+            <span className="truncate">{commit.subject}</span>
+          </button>
+        ))}
+        {commits.length === 0 && (
+          <p className="px-3 py-1 text-faint">
+            no commits between base and source
+          </p>
+        )}
+      </div>
+    </section>
   )
 }

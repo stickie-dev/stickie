@@ -90,6 +90,14 @@ export const icon_button = `rounded-sm p-1.5 text-soft stickie-focus hover:bg-ov
  */
 export const icon_button_on = `rounded-sm p-1.5 bg-accent-soft text-accent stickie-focus [&>svg]:h-4 [&>svg]:w-4 ${motion}`
 
+/**
+ * The panel bar's places: larger than an icon in a line of text, since each is
+ * the only thing on its row and is found by its shape alone.
+ */
+export const bar_button = `rounded-md p-1.5 text-soft stickie-focus hover:bg-overlay hover:text-ink [&>svg]:h-5 [&>svg]:w-5 ${motion}`
+
+export const bar_button_on = `rounded-md p-1.5 bg-accent-soft text-accent stickie-focus [&>svg]:h-5 [&>svg]:w-5 ${motion}`
+
 /** Partly on — some files wrapped, not all: the colour without the fill. */
 export const icon_button_part = `rounded-sm p-1.5 text-accent stickie-focus hover:bg-overlay [&>svg]:h-4 [&>svg]:w-4 ${motion}`
 

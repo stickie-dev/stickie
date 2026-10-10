@@ -56,7 +56,7 @@ export function ActivityPanel() {
   const session = useReview((s) => s.session)
   const threads = useReview((s) => s.threads)
   const viewed = useReview((s) => s.viewed)
-  const toggleActivity = useReview((s) => s.toggleActivity)
+  const showLower = useReview((s) => s.showLower)
   const [entries, setEntries] = useState<ActivityEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -77,9 +77,18 @@ export function ActivityPanel() {
   }, [load, threads, viewed])
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-edge bg-surface">
+    // the slot below the files, filled — it was a fixed column on the right,
+    // beside the comments, squeezing the diff from the side being read
+    <section className="flex min-h-0 grow flex-col bg-surface">
       <div className="flex items-center gap-2 border-b border-edge px-3 py-2 text-xs">
-        <span className="font-semibold text-ink">Activity</span>
+        {/* what the record is, on the name rather than under the list: in the
+            slot below the files a paragraph was a third of the panel */}
+        <span
+          className="font-semibold text-ink"
+          title={'append-only: nothing here is rewritten when a note changes or is deleted\nit lives in the same database as the notes, so on a local SQLite file its owner can still edit it — a record, not proof'}
+        >
+          Activity
+        </span>
         <span className="text-faint">
           {entries === null ? '' : entries.length}
         </span>
@@ -94,9 +103,9 @@ export function ActivityPanel() {
         </button>
         <button
           className={icon_button}
-          title="close the panel"
-          aria-label="close the panel"
-          onClick={toggleActivity}
+          title="close activity"
+          aria-label="close activity"
+          onClick={() => showLower(null)}
         >
           <Close />
         </button>
@@ -148,12 +157,6 @@ export function ActivityPanel() {
           )
         })}
       </div>
-
-      <p className="border-t border-edge px-3 py-2 text-xs text-faint">
-        Append-only: nothing here is rewritten when a note changes or is
-        deleted. It lives in the same database as the notes, so on a local
-        SQLite file its owner can still edit it — a record, not proof.
-      </p>
-    </aside>
+    </section>
   )
 }

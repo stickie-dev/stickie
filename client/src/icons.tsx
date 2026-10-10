@@ -250,6 +250,46 @@ export function Check(props: IconProps) {
   )
 }
 
+/*
+ * The panel bar: one shape per place a panel lives, so the bar reads as a
+ * list of where things are rather than a row of actions.
+ */
+
+export function Files(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9 3.5h5.5L19 8v9.5a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1Z" />
+      <path d="M14.5 3.5V8H19M5 7v12.5a1 1 0 0 0 1 1h9" />
+    </Icon>
+  )
+}
+
+export function Commit(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="3.5" />
+      <path d="M3 12h5.5M15.5 12H21" />
+    </Icon>
+  )
+}
+
+/** The record of what happened: a clock turning back. */
+export function History(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v3h3M12 8v4.5l3 2" />
+    </Icon>
+  )
+}
+
+export function Comment(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20 4.5H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3.5V20l4.5-3.5h8a1 1 0 0 0 1-1v-10a1 1 0 0 0-1-1Z" />
+    </Icon>
+  )
+}
+
 /** The same reach as `Close`, so the two read as a pair in the tab strip. */
 export function Plus(props: IconProps) {
   return (

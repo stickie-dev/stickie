@@ -341,8 +341,10 @@ export function App() {
     }
   }, [refresh, syncThreads, setConnected])
 
+  // the window itself never scrolls: every panel scrolls inside itself, and
+  // anything that would push the frame wider or taller is clipped at it
   return (
-    <div className="flex h-screen flex-col bg-surface text-ink">
+    <div className="flex h-screen flex-col overflow-hidden bg-surface text-ink">
       {error !== null && (
         <div className="border-b border-rose-300 bg-rose-100 px-3 py-1.5 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-300">
           {error}
