@@ -54,7 +54,8 @@ export type NoteDefault = 'draft' | 'comment'
  * opens; `gutter` takes it out of the code entirely and marks its line, so a
  * file that has been worked through reads as code again.
  */
-export type ResolvedNotes = 'folded' | 'gutter'
+/** The whole note, a line or two of it, or only a mark in the gutter. */
+export type ResolvedNotes = 'shown' | 'folded' | 'gutter'
 
 /**
  * What removing a repository does to the reviews in it: delete them with it,

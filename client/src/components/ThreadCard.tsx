@@ -60,7 +60,14 @@ export function ThreadCard({
    * puts the history out of the way for anyone who wants it gone.
    */
   const [opened, setOpened] = useState(false)
-  const folds = surface === 'zone' && thread?.status === 'resolved'
+  // only under "folded": "shown" keeps it whole, and under "gutter" the note
+  // is out of the code until its mark is clicked — and someone who clicked a
+  // mark to read a note should not have to open it a second time
+  const resolvedNotes = useReview((s) => s.resolvedNotes)
+  const folds =
+    surface === 'zone' &&
+    thread?.status === 'resolved' &&
+    resolvedNotes === 'folded'
   const open = !folds || opened || linked
   const first = thread?.messages[0]
   // the ground shifts when the speaker does, the same way it does on a merge
@@ -205,21 +212,27 @@ export function ThreadCard({
         </button>
       </div>
       <div className="space-y-2 px-3 py-2">
-        {/* folded: who raised it and the first line of what they said */}
+        {/* folded: who raised it, and up to two lines of what they said — one
+            truncated line was too little to tell one resolved note from the
+            next, which is the only thing a folded one is for */}
         {!open && (
-          <div className="flex min-w-0 items-baseline gap-1.5">
-            <span className="shrink-0 font-semibold text-ink">
-              {first?.actorName ?? first?.author ?? ''}
-            </span>
-            <span className="truncate text-soft">{first?.body ?? ''}</span>
-            {thread.messages.length > 1 && (
-              <span
-                className="shrink-0 text-xs text-faint"
-                title={`${String(thread.messages.length - 1)} more in this note`}
-              >
-                +{thread.messages.length - 1}
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-1.5">
+              <span className="min-w-0 truncate font-semibold text-ink">
+                {first?.actorName ?? first?.author ?? ''}
               </span>
-            )}
+              {thread.messages.length > 1 && (
+                <span
+                  className="shrink-0 text-xs text-faint"
+                  title={`${String(thread.messages.length - 1)} more in this note`}
+                >
+                  +{thread.messages.length - 1}
+                </span>
+              )}
+            </div>
+            <p className="line-clamp-2 whitespace-pre-line text-soft">
+              {first?.body ?? ''}
+            </p>
           </div>
         )}
         {open &&
@@ -301,18 +314,21 @@ export function ThreadCard({
             />
           ),
         )}
-        {showReply ? (
-          <ReplyBox
-            value={replyText}
-            onChange={(next) => updateReplyDraft(thread.id, next)}
-            onFocus={() => setActiveReply(thread.id)}
-            onSubmit={() => void submitReply()}
-            onCancel={closeReply}
-            submitLabel="send"
-          />
-        ) : (
-          <ReplyRow onOpen={() => setShowReply(true)} />
-        )}
+        {/* folded is a line or two and nothing else: a reply box under it
+            was most of a folded card's height. Opening the note brings it */}
+        {open &&
+          (showReply ? (
+            <ReplyBox
+              value={replyText}
+              onChange={(next) => updateReplyDraft(thread.id, next)}
+              onFocus={() => setActiveReply(thread.id)}
+              onSubmit={() => void submitReply()}
+              onCancel={closeReply}
+              submitLabel="send"
+            />
+          ) : (
+            <ReplyRow onOpen={() => setShowReply(true)} />
+          ))}
       </div>
     </div>
   )

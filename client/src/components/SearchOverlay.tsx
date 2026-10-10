@@ -5,7 +5,7 @@ import { useReview } from '../store'
 import { badge, btn, enter, field_flush, glass, motion } from '../ui'
 
 /**
- * Workspace-wide text search (cmd+F / cmd+shift+F). Results open in the
+ * Workspace-wide text search (⌘⇧F, Shift twice, or the Search button). Results open in the
  * reference side pane by default so the diff under review stays put.
  */
 export function SearchOverlay() {

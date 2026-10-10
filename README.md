@@ -126,12 +126,13 @@ the only output.
 - **GitLab MR import** — pull unresolved MR diff discussions into a local
   session (`GITLAB_TOKEN` + `GITLAB_URL` env), so agent fixes happen
   locally against real review threads
-- **Find, and search** — two different questions with two shortcuts. ⌘F finds
-  text in the review you are reading, across every file of the diff rather than
-  the one editor with focus: it counts the matches, walks them with ↵ and ⇧↵,
-  selects each one where it sits, and shows unchanged lines while it is open so
-  a match cannot be hidden in a folded region. ⌘⇧F (and the Search button)
-  searches every registered repository instead; those results, and
+- **Find, and search** — ⌘F finds in what the tab shows: every file of the
+  diff in the diff tab, the one file in a file tab. Pressed again while find
+  is open it flips between the file you are in and the whole diff, and the
+  find bar shows which. It counts the matches, walks them with ↵ and ⇧↵, and
+  selects each one where it sits, opening only as much of a folded region as
+  the match needs. ⌘⇧F, pressing Shift twice, or the Search button searches
+  every registered repository instead; those results, and
   definition/usage hits, open in a read-only pane beside the diff, where
   selections feed refs into the note being written
 - **Reading comfort** — light and dark themes built for diffs, soft wrap by

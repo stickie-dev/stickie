@@ -287,7 +287,7 @@
  */
 .stickie-resolved-mark {
   cursor: pointer;
-  color: color-mix(in srgb, var(--ink) 42%, transparent);
+  color: color-mix(in srgb, var(--ink) 62%, transparent);
 }
 
 /*
@@ -302,9 +302,11 @@
 .stickie-resolved-mark::after {
   content: '';
   display: block;
-  width: 13px;
-  height: 13px;
-  margin: 3px auto 0;
+  /* the height of the line it sits on, near enough: at 13px and faint it
+     read as a smudge, and a mark that has to be found is not doing its job */
+  width: 16px;
+  height: 16px;
+  margin: 2px auto 0;
   background: currentColor;
   -webkit-mask: var(--speech-bubble) center / contain no-repeat;
   mask: var(--speech-bubble) center / contain no-repeat;

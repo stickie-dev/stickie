@@ -560,7 +560,7 @@ const default_note_default = 'draft'
  * can be opened; `gutter` takes it out of the flow of the code entirely and
  * marks its line, so a file that has been worked through reads as code again.
  */
-const resolved_notes_modes = ['folded', 'gutter'] as const
+const resolved_notes_modes = ['shown', 'folded', 'gutter'] as const
 const default_resolved_notes = 'folded'
 
 // extensions whose files open soft-wrapped; prose and data, not code

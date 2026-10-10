@@ -117,38 +117,70 @@ function useAutoRepin(): void {
  * still the reader's — and anything listening on `window` checks
  * `reviewActive` for itself.
  */
+/** The second Shift has to come this soon after the first to count as a pair. */
+const double_shift_ms = 350
+
 export function Workspace({ page }: { page: Page }) {
   const active = page.kind !== 'home' && page.kind !== 'settings'
   const setSearchOpen = useReview((s) => s.setSearchOpen)
   const commentsOpen = useReview((s) => s.commentsOpen)
   const activityOpen = useReview((s) => s.activityOpen)
   const openFind = useReview((s) => s.openFind)
+  const flipFindScope = useReview((s) => s.flipFindScope)
   useAutoRepin()
 
   /**
-   * ⌘F finds in what the tab in front shows — every file in the diff tab, the
-   * one file in a file tab; ⌘⇧F searches every repository.
+   * ⌘F finds in what the tab shows — every file in the diff tab, the one file
+   * in a file tab — and ⌘F again, while find is open, flips between the two:
+   * the file you are in, or the whole diff. ⌘⇧F searches every repository, as
+   * it always has, and so does Shift twice.
    *
    * Taken in the capture phase, before anything under the window sees it. A
    * Monaco editor with focus answers ⌘F itself, with a find for that one
-   * editor, and stops the key there — so listening after it meant ⌘F found
-   * across the diff or in one file depending on whether the reader had last
-   * clicked into the code, which is the whole of why it was confusing. Now
-   * there is one find, and the tab decides what it covers.
+   * editor, and stops the key there — so listening after it made the find you
+   * got depend on where you had last clicked.
    */
   useEffect(() => {
-    if (!active) return
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return
       if (event.key !== 'f' && event.key !== 'F') return
+      // on Home and Settings plain ⌘F is the page's own find, which is what a
+      // page of text wants; ⌘⇧F searches everything from anywhere
+      if (!event.shiftKey && !active) return
       event.preventDefault()
       event.stopPropagation()
       if (event.shiftKey) setSearchOpen(true)
+      else if (useReview.getState().findOpen) void flipFindScope()
       else openFind(true)
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [active, setSearchOpen, openFind])
+  }, [active, openFind, flipFindScope, setSearchOpen])
+
+  /*
+   * Shift twice, with nothing between: search everywhere. Any other key in
+   * between — the capital letters of a sentence being typed — starts the count
+   * again, so it cannot go off while someone is writing a note.
+   */
+  useEffect(() => {
+    let last = 0
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Shift') {
+        last = 0
+        return
+      }
+      if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return
+      const now = performance.now()
+      if (now - last < double_shift_ms) {
+        last = 0
+        setSearchOpen(true)
+      } else {
+        last = now
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [setSearchOpen])
 
   const row = useRef<HTMLDivElement>(null)
   const bounds = useCallback(() => {

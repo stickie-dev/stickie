@@ -1,10 +1,10 @@
 import { Link } from 'react-router'
 import { formatRoute } from '../routes'
 import {
-  ArrowLeft,
-  ArrowRight,
   Check,
   Clipboard,
+  NavBack,
+  NavForward,
   Search,
   Send,
   Sliders,
@@ -63,7 +63,7 @@ export function TopBar() {
           disabled={!canBack}
           onClick={() => void navBack()}
         >
-          <ArrowLeft />
+          <NavBack />
         </button>
         <button
           className={icon_button}
@@ -72,13 +72,13 @@ export function TopBar() {
           disabled={!canForward}
           onClick={() => void navForward()}
         >
-          <ArrowRight />
+          <NavForward />
         </button>
       </div>
       <span className="grow" />
       <button
         className={`shrink-0 inline-flex items-center gap-1.5 ${btn()}`}
-        title="search all repos (⌘F / ⌘⇧F)"
+        title={'search every repository\nshortcut: ⌘⇧F, or press Shift twice'}
         onClick={() => setSearchOpen(true)}
       >
         <Search />

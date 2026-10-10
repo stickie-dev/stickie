@@ -35,8 +35,9 @@ export function CommentLayer({ editorInstance, threads, drafts }: Props) {
 
   /**
    * A resolved note that has left the code: it is marked in the gutter on the
-   * line it was written against, and opens from there. Under the other setting
-   * it stays where it is and folds itself to one line.
+   * line it was written against, and opens from there. Under the other two
+   * settings it stays where it was written — whole, or folded to a line or two
+   * (the card does that itself).
    */
   const marked = threads.filter(
     (thread) => resolvedNotes === 'gutter' && thread.status === 'resolved',

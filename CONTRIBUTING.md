@@ -200,11 +200,22 @@ below the element (above it in the footer), and moves the attribute aside so
 the platform's never doubles it. Nothing needs registering, so a control added
 later has its hint the moment it has a title.
 
-**⌘F finds in what the tab shows.** Every file in the diff tab, the one file
-in a file tab; ⌘⇧F searches every repository. It is taken in the capture
-phase, before a Monaco editor with focus can answer it with a find for that
-one editor — which is what made it depend on where the reader had last
-clicked.
+**Find reaches the diff or the file, and says which.** ⌘F opens onto what the
+tab shows — every file in the diff tab, the one file in a file tab — and ⌘F
+again flips it, so a reader who knows the thing is in this file can narrow to
+it without leaving the diff; the find bar's switch says which, and the file is
+the one being read, following the reader through the diff. ⌘⇧F searches every
+repository, as it always has, and so does Shift twice. The keys are taken in
+the capture phase, before a Monaco editor with focus can answer ⌘F with a find
+for that one editor — which is what made it depend on where the reader had
+last clicked. Any key between the two Shifts starts the count again, so typing
+capitals never sets it off.
+
+**A toggle's other choices are a hover away.** In the top bar a click does
+the quick thing and hovering opens every choice it stands for, with a line
+on each — a three-way setting cannot be one click, and an icon cannot say what
+its other states are. The panel replaces the button's hint, and hangs inside
+one hover area with the button, so the pointer can cross into it.
 
 **One frame, one bar, and Home and Settings are tabs in it.** The workspace
 is the frame every view is drawn in, mounted for the whole session. Home and

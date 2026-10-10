@@ -70,7 +70,7 @@ function editorOptions(
     // room for the resolved-note mark when resolved notes live out here; 12px
     // fits a dot and nothing that reads as anything, and the column costs the
     // code its width, so it is only wide while something is drawn in it
-    lineDecorationsWidth: markedGutter ? 20 : 12,
+    lineDecorationsWidth: markedGutter ? 24 : 12,
     overviewRulerBorder: false,
     hideCursorInOverviewRuler: true,
     scrollbar: {
@@ -895,8 +895,8 @@ export function FileView() {
             <h2 className="mb-2 font-semibold text-ink">Keyboard shortcuts</h2>
             <dl className="grid grid-cols-[4rem_1fr] gap-y-1 text-xs">
               <dt className="font-mono text-soft">⌘F</dt>
-              <dd className="text-ink">find in this review</dd>
-              <dt className="font-mono text-soft">⌘⇧F</dt>
+              <dd className="text-ink">find in this diff — again for just this file</dd>
+              <dt className="font-mono text-soft">⌘⇧F, ⇧ ⇧</dt>
               <dd className="text-ink">search every repository</dd>
               <dt className="font-mono text-soft">j / k</dt>
               <dd className="text-ink">next / previous changed file</dd>

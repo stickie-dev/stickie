@@ -388,6 +388,15 @@ interface ReviewState {
    * its own — Monaco's find is per editor, and a diff is many.
    */
   findOpen: boolean
+  /**
+   * What find reaches: every file of the diff, or the one file being read. It
+   * opens on what the tab shows — the diff tab is the whole diff, a file tab
+   * its file — and ⌘F pressed again while it is open flips it, so a reader who
+   * knows the thing is in this file can say so without leaving the diff.
+   */
+  findScope: 'diff' | 'file'
+  /** ⌘F while find is open: the other reach. From a file tab, "the diff" means going to it. */
+  flipFindScope: () => Promise<void>
   findQuery: string
   findCase: boolean
   findMatches: Match[]
@@ -397,6 +406,12 @@ interface ReviewState {
   openFind: (open: boolean) => void
   /** Runs the open query again, for a tab that now shows something else. */
   refind: () => Promise<void>
+  /**
+   * Find across every file of the review in front, from a file tab: the find
+   * bar's "this diff". It brings the diff forward and finds there, since the
+   * diff is the one place that shows every file at once.
+   */
+  findInDiff: () => Promise<void>
   setFindQuery: (query: string) => Promise<void>
   setFindCase: (on: boolean) => Promise<void>
   stepFind: (delta: number) => Promise<void>
@@ -904,11 +919,11 @@ export const useReview = create<ReviewState>((set, get) => {
   }
 
   /**
-   * Runs the current query over what the tab in front shows: every file of
-   * the diff in the diff tab, the one file in a file tab. ⌘F means "find in
-   * what I am looking at", whichever tab that is — it used to be the whole
-   * review from one place and Monaco's own find for the one editor from
-   * another, depending on where the reader had last clicked.
+   * Runs the current query over what find reaches (`findScope`): every file
+   * of the diff, or the one file being read — the selected one, which in the
+   * diff follows the reader from file to file. It used to be the whole review
+   * from one place and Monaco's own find for one editor from another,
+   * depending on where the reader had last clicked.
    *
    * It reads the same contents the diff is built from, through the same cache,
    * so a file already on screen costs nothing and a file further down costs one
@@ -917,10 +932,10 @@ export const useReview = create<ReviewState>((set, get) => {
    * is searched there instead, or it could not be found at all.
    */
   async function runFind(): Promise<void> {
-    const { session, findQuery, findCase, contentEpoch, viewMode } = get()
+    const { session, findQuery, findCase, contentEpoch, findScope } = get()
     const { selectedPath, selectedStatus } = get()
     const files =
-      viewMode === 'file' && selectedPath !== null
+      findScope === 'file' && selectedPath !== null
         ? [
             {
               path: selectedPath,
@@ -1140,6 +1155,7 @@ export const useReview = create<ReviewState>((set, get) => {
     sideBySideShown: false,
     collapseUnchanged: true,
     findOpen: false,
+    findScope: 'diff',
     findQuery: '',
     findCase: false,
     findMatches: [],
@@ -1990,6 +2006,8 @@ export const useReview = create<ReviewState>((set, get) => {
 
     openFind: (open) => {
       set({ findOpen: open })
+      // opening is always onto what the tab shows; flipping is a second ⌘F
+      if (open) set({ findScope: get().viewMode === 'file' ? 'file' : 'diff' })
       // the query survives closing: reopening to look for the same thing again
       // is the common case, and it costs nothing to remember
       if (!open) set({ findAt: 0 })
@@ -1997,6 +2015,34 @@ export const useReview = create<ReviewState>((set, get) => {
 
     refind: async () => {
       if (get().findOpen && get().findQuery !== '') await runFind()
+    },
+
+    flipFindScope: async () => {
+      const { findScope, viewMode, selectedPath } = get()
+      if (findScope === 'diff') {
+        if (selectedPath === null) return
+        set({ findScope: 'file' })
+        await get().refind()
+        return
+      }
+      if (viewMode === 'file') {
+        await get().findInDiff()
+        return
+      }
+      set({ findScope: 'diff' })
+      await get().refind()
+    },
+
+    findInDiff: async () => {
+      const { activeRepoId, session } = get()
+      if (activeRepoId === null || session === null) return
+      set({
+        viewMode: 'flow',
+        activeTabId: ensureFlowTab(activeRepoId, session.id).id,
+      })
+      get().bringReviewForward()
+      get().openFind(true)
+      await get().refind()
     },
 
     setFindQuery: async (query) => {

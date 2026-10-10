@@ -44,9 +44,14 @@ const resolved_choices: {
   why: string
 }[] = [
   {
+    value: 'shown',
+    label: 'Shown',
+    why: 'whole, where it was written',
+  },
+  {
     value: 'folded',
-    label: 'In the diff',
-    why: 'folded to one line, where it was written',
+    label: 'Folded',
+    why: 'a line or two, where it was written — click it to read the rest',
   },
   {
     value: 'gutter',

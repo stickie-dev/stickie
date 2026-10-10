@@ -107,22 +107,23 @@ export function Moon(props: IconProps) {
 }
 
 /**
- * Back and forward through where the reader has been. Arrows with a shaft
- * rather than chevrons: chevrons beside a row of tabs read as scrolling the
- * tabs, which is the one thing these do not do.
+ * Back and forward through where the reader has been — the cursor's own
+ * history, across tabs and reviews. An arrow meeting a bar: the shape editors
+ * use for jumping to a place, which plain arrows (leaving a page) and chevrons
+ * (scrolling a strip of tabs) both say something else about.
  */
-export function ArrowLeft(props: IconProps) {
+export function NavBack(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M19.5 12h-15M10.5 6 4.5 12l6 6" />
+      <path d="M5 5v14M19.5 12H9M13.5 7.5 9 12l4.5 4.5" />
     </Icon>
   )
 }
 
-export function ArrowRight(props: IconProps) {
+export function NavForward(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M4.5 12h15M13.5 6l6 6-6 6" />
+      <path d="M19 5v14M4.5 12H15M10.5 7.5 15 12l-4.5 4.5" />
     </Icon>
   )
 }
@@ -188,6 +189,29 @@ export function FoldLines(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M5 5h14M5 19h14M12 7.5v3M10 9l2 2 2-2M12 16.5v-3M10 15l2-2 2 2" />
+    </Icon>
+  )
+}
+
+/*
+ * Where resolved notes go: the whole note, a line or two of it, or only a mark
+ * in the gutter. The bubble shrinks with what is left of the note, so the three
+ * read as one setting turned down, not three unrelated things.
+ */
+export function ResolvedShown(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20 4.5H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3.5V20l4.5-3.5h8a1 1 0 0 0 1-1v-10a1 1 0 0 0-1-1Z" />
+      <path d="M7 8.5h10M7 11h10M7 13.5h6" />
+    </Icon>
+  )
+}
+
+export function ResolvedFolded(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20 7H4a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h3.5V17l4.5-3h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1Z" />
+      <path d="M7 10.5h10" />
     </Icon>
   )
 }
