@@ -373,6 +373,14 @@ interface ReviewState {
    * decides: wide enough for two columns, or not.
    */
   sideBySide: boolean | null
+  /**
+   * What is actually drawn, which the choice alone does not say: with no
+   * choice it follows the width of the diff, which only the view knows. The
+   * view writes it here so the toggle in the top bar can show the layout in
+   * front of the reader and switch to the other one — every click a change.
+   */
+  sideBySideShown: boolean
+  setSideBySideShown: (shown: boolean) => void
   setSideBySide: (side: boolean | null) => void
   /**
    * Find, in the review that is open. `matches` is every occurrence across the
@@ -387,6 +395,8 @@ interface ReviewState {
   findCapped: boolean
   findBusy: boolean
   openFind: (open: boolean) => void
+  /** Runs the open query again, for a tab that now shows something else. */
+  refind: () => Promise<void>
   setFindQuery: (query: string) => Promise<void>
   setFindCase: (on: boolean) => Promise<void>
   stepFind: (delta: number) => Promise<void>
@@ -894,7 +904,11 @@ export const useReview = create<ReviewState>((set, get) => {
   }
 
   /**
-   * Runs the current query over the review's files.
+   * Runs the current query over what the tab in front shows: every file of
+   * the diff in the diff tab, the one file in a file tab. ⌘F means "find in
+   * what I am looking at", whichever tab that is — it used to be the whole
+   * review from one place and Monaco's own find for the one editor from
+   * another, depending on where the reader had last clicked.
    *
    * It reads the same contents the diff is built from, through the same cache,
    * so a file already on screen costs nothing and a file further down costs one
@@ -903,8 +917,17 @@ export const useReview = create<ReviewState>((set, get) => {
    * is searched there instead, or it could not be found at all.
    */
   async function runFind(): Promise<void> {
-    const { session, findQuery, findCase, contentEpoch } = get()
-    const files = activeFiles(get())
+    const { session, findQuery, findCase, contentEpoch, viewMode } = get()
+    const { selectedPath, selectedStatus } = get()
+    const files =
+      viewMode === 'file' && selectedPath !== null
+        ? [
+            {
+              path: selectedPath,
+              status: selectedStatus === 'deleted' ? 'deleted' : 'modified',
+            },
+          ]
+        : activeFiles(get())
     const query = findQuery
     if (session === null || query === '') {
       set({ findMatches: [], findAt: 0, findCapped: false, findBusy: false })
@@ -1114,6 +1137,7 @@ export const useReview = create<ReviewState>((set, get) => {
     noteHighlight: null,
     splitMenuFor: null,
     sideBySide: null,
+    sideBySideShown: false,
     collapseUnchanged: true,
     findOpen: false,
     findQuery: '',
@@ -1960,12 +1984,19 @@ export const useReview = create<ReviewState>((set, get) => {
     setSplitMenu: (key) => set({ splitMenuFor: key }),
 
     setSideBySide: (side) => set({ sideBySide: side }),
+    setSideBySideShown: (shown) => {
+      if (get().sideBySideShown !== shown) set({ sideBySideShown: shown })
+    },
 
     openFind: (open) => {
       set({ findOpen: open })
       // the query survives closing: reopening to look for the same thing again
       // is the common case, and it costs nothing to remember
       if (!open) set({ findAt: 0 })
+    },
+
+    refind: async () => {
+      if (get().findOpen && get().findQuery !== '') await runFind()
     },
 
     setFindQuery: async (query) => {

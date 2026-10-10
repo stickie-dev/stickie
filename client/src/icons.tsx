@@ -106,11 +106,23 @@ export function Moon(props: IconProps) {
   )
 }
 
-/** Leaving a page for the one behind it — the chevrons walk history instead. */
+/**
+ * Back and forward through where the reader has been. Arrows with a shaft
+ * rather than chevrons: chevrons beside a row of tabs read as scrolling the
+ * tabs, which is the one thing these do not do.
+ */
 export function ArrowLeft(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M19.5 12h-15M10.5 6 4.5 12l6 6" />
+    </Icon>
+  )
+}
+
+export function ArrowRight(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4.5 12h15M13.5 6l6 6-6 6" />
     </Icon>
   )
 }
@@ -149,8 +161,8 @@ export function ChevronDown(props: IconProps) {
 
 /*
  * How a diff is drawn. Each is a frame with what is inside it changed, so the
- * set reads as one family in the top bar and the difference is the content:
- * two panes, one column, or a divider that gives way when there is no room.
+ * pair reads as one family in the top bar and the difference is the content:
+ * two panes, or one column.
  */
 
 export function Columns(props: IconProps) {
@@ -171,20 +183,20 @@ export function Inline(props: IconProps) {
   )
 }
 
-export function Fits(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <rect x="4" y="5" width="16" height="14" rx="2" />
-      <path d="M12 5v3M12 16v3M8.5 12h7M10 10.5 8.5 12l1.5 1.5M14 10.5l1.5 1.5-1.5 1.5" />
-    </Icon>
-  )
-}
-
 /** Unchanged lines folded away: the edges of a file, squeezed towards each other. */
 export function FoldLines(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M5 5h14M5 19h14M12 7.5v3M10 9l2 2 2-2M12 16.5v-3M10 15l2-2 2 2" />
+    </Icon>
+  )
+}
+
+/** Resolved notes moved out of the code: a gutter edge, and a tick beside it. */
+export function ResolvedGutter(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7 4v16M11 12.5l2.5 2.5L19 9.5" />
     </Icon>
   )
 }

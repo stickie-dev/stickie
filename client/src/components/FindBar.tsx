@@ -27,7 +27,20 @@ export function FindBar() {
   const capped = useReview((s) => s.findCapped)
   const busy = useReview((s) => s.findBusy)
   const step = useReview((s) => s.stepFind)
+  const refind = useReview((s) => s.refind)
+  const viewMode = useReview((s) => s.viewMode)
+  const selectedPath = useReview((s) => s.selectedPath)
   const input = useRef<HTMLInputElement>(null)
+
+  // what it searches is what the tab shows, so a tab showing something else
+  // has different answers to the same question
+  const scope =
+    viewMode === 'file' && selectedPath !== null
+      ? selectedPath.split('/').at(-1) ?? selectedPath
+      : 'this diff'
+  useEffect(() => {
+    void refind()
+  }, [viewMode, selectedPath, refind])
 
   useEffect(() => {
     if (open) {
@@ -54,7 +67,12 @@ export function FindBar() {
       <input
         ref={input}
         className={`w-52 text-xs ${field}`}
-        placeholder="find in this review"
+        placeholder={`find in ${scope}`}
+        title={
+          viewMode === 'file'
+            ? 'finds in the file this tab shows — in the diff tab, ⌘F finds across every file; ⌘⇧F searches every repository'
+            : 'finds across every file in this diff — in a file tab, ⌘F finds in that file; ⌘⇧F searches every repository'
+        }
         value={query}
         onChange={(e) => void setQuery(e.target.value)}
         onKeyDown={(e) => {

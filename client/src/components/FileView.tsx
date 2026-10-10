@@ -568,6 +568,10 @@ export function FileView() {
   }, [selectedPath, modifiedEditor, singleEditor])
 
   const sideBySide = sideBySideChoice ?? width >= side_by_side_min_width
+  const setSideBySideShown = useReview((s) => s.setSideBySideShown)
+  useEffect(() => {
+    setSideBySideShown(sideBySide)
+  }, [sideBySide, setSideBySideShown])
   const monaco_theme = theme === 'dark' ? 'stickie-dark' : 'stickie-light'
 
   const viewMode = useReview((s) => s.viewMode)

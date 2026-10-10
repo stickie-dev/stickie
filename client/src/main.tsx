@@ -5,9 +5,11 @@ import { App } from './App'
 import './index.css'
 import { registerWorker } from './install'
 import { tameUnfoldAll } from './collapsedRegions'
+import { installHints } from './hints'
 
 registerWorker()
 tameUnfoldAll()
+installHints()
 
 const root = document.getElementById('root')
 if (root === null) {

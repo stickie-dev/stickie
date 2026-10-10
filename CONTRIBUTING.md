@@ -183,10 +183,28 @@ shapes. `Comments (3)`, `Activity`, `Import MR` stay words, because the word
 carries what the shape cannot. The diff's drawing toggles are shapes too,
 because they are a row that must fit one line — and each shows its state
 (pressed is on, partly pressed is some files) and says in its title what it
-is now and what a click makes it, since a shape alone says neither; sending gets both, since the label counts what
-is about to go. A bar of pictograms is not denser than a bar of verbs, it is
-just quieter about what it does — and an icon-only button still needs its
+is now and what a click makes it, since a shape alone says neither. A toggle
+always changes something you can see: the layout switch flips between the two
+layouts actually drawn, rather than cycling through a "whatever fits" that on
+a wide window was the same picture. Sending gets both, since the label counts
+what is about to go. A bar of pictograms is not denser than a bar of verbs, it
+is just quieter about what it does — and an icon-only button still needs its
 `aria-label`, because the picture is not the name.
+
+**A hint is a `title`, and `hints.ts` draws it.** The platform's tooltip comes
+a second late, in the operating system's font, and in an installed window's
+title bar not reliably at all — and with half the top bar icons, a hint that
+does not appear is a control that cannot be learned. So write `title` as you
+always would; one listener on the page shows it quickly, in stickie's surface,
+below the element (above it in the footer), and moves the attribute aside so
+the platform's never doubles it. Nothing needs registering, so a control added
+later has its hint the moment it has a title.
+
+**⌘F finds in what the tab shows.** Every file in the diff tab, the one file
+in a file tab; ⌘⇧F searches every repository. It is taken in the capture
+phase, before a Monaco editor with focus can answer it with a find for that
+one editor — which is what made it depend on where the reader had last
+clicked.
 
 **One frame, one bar, and Home and Settings are tabs in it.** The workspace
 is the frame every view is drawn in, mounted for the whole session. Home and
@@ -301,8 +319,11 @@ is drawn — its layout, folding unchanged lines, wrapping — is a preference f
 the app, so it is a row of toggles in the top bar (`ViewToggles`) rather than
 a menu at the end of the tabs, where an unlabelled ⋮ sat directly under the
 browser's own. Copy prompt sits beside Submit review, since both are a review's
-notes reaching an agent; where resolved notes go is set once and lives in
-Settings.
+notes reaching an agent. Every toggle there is also a choice in Settings →
+Appearance, which holds the one the bar cannot: handing the layout back to the
+window. Back and forward walk where the reader has been, across tabs and
+reviews, so they sit beside the name rather than beside the tabs, where two
+chevrons read as scrolling them.
 
 ### Monaco, and four things it will do to you
 

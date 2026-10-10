@@ -7,7 +7,7 @@ import { fileIconUrl } from '../fileIcons'
 import type { Tab } from '../store'
 import { useReview } from '../store'
 import { tabLabels } from '../tabLabels'
-import { ChevronDown, ChevronLeft, ChevronRight, Close } from '../icons'
+import { ChevronDown, Close } from '../icons'
 import { btn, button_on, glass, icon_button, motion } from '../ui'
 import { OpenRepoMenu } from './OpenRepoMenu'
 
@@ -51,10 +51,6 @@ export function TabBar({ page }: { page: Page }) {
   const closeTab = useReview((s) => s.closeTab)
   const repos = useReview((s) => s.repos)
   const reviews = useReview((s) => s.sessionsById)
-  const navBack = useReview((s) => s.navBack)
-  const navForward = useReview((s) => s.navForward)
-  const canBack = useReview((s) => s.navIndex > 0)
-  const canForward = useReview((s) => s.navIndex < s.navHistory.length - 1)
   const stripRef = useRef<HTMLDivElement>(null)
   const widths = useRef(new Map<string, number>())
   const [room, setRoom] = useState(Number.POSITIVE_INFINITY)
@@ -278,29 +274,6 @@ export function TabBar({ page }: { page: Page }) {
           {hidden.length}
         </button>
       )}
-      {/*
-        Where you have been is about what is open, so the arrows sit with the
-        tabs rather than in the workspace bar above: the strip they walk is
-        the strip they are on.
-      */}
-      <button
-        className={`shrink-0 self-center ${icon_button}`}
-        title="back ( [ )"
-        aria-label="back"
-        disabled={!canBack}
-        onClick={() => void navBack()}
-      >
-        <ChevronLeft />
-      </button>
-      <button
-        className={`mr-1 shrink-0 self-center ${icon_button}`}
-        title="forward ( ] )"
-        aria-label="forward"
-        disabled={!canForward}
-        onClick={() => void navForward()}
-      >
-        <ChevronRight />
-      </button>
       {listing && hidden.length > 0 && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setListing(false)} />

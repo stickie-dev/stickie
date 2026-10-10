@@ -126,14 +126,15 @@ export function Workspace({ page }: { page: Page }) {
   useAutoRepin()
 
   /**
-   * ⌘F finds in the review you are reading; ⌘⇧F searches every repository.
+   * ⌘F finds in what the tab in front shows — every file in the diff tab, the
+   * one file in a file tab; ⌘⇧F searches every repository.
    *
-   * ⌘F used to do the second of those, which is a different question — and
-   * inside an editor it fell through to Monaco's own find, which searches that
-   * one file, so on a twenty-file diff it searched a twentieth of the screen.
-   * It is taken everywhere in the review now, including inside an editor, since
-   * that is where a reader's hand goes and the answer they want is the whole
-   * diff. The workspace search keeps ⌘⇧F and the Search button.
+   * Taken in the capture phase, before anything under the window sees it. A
+   * Monaco editor with focus answers ⌘F itself, with a find for that one
+   * editor, and stops the key there — so listening after it meant ⌘F found
+   * across the diff or in one file depending on whether the reader had last
+   * clicked into the code, which is the whole of why it was confusing. Now
+   * there is one find, and the tab decides what it covers.
    */
   useEffect(() => {
     if (!active) return
@@ -141,11 +142,12 @@ export function Workspace({ page }: { page: Page }) {
       if (!(event.metaKey || event.ctrlKey)) return
       if (event.key !== 'f' && event.key !== 'F') return
       event.preventDefault()
+      event.stopPropagation()
       if (event.shiftKey) setSearchOpen(true)
       else openFind(true)
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [active, setSearchOpen, openFind])
 
   const row = useRef<HTMLDivElement>(null)

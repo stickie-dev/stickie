@@ -1,5 +1,5 @@
 import { activeFiles, useReview, wrapFor } from '../store'
-import { Columns, Fits, FoldLines, Inline, WrapLines } from '../icons'
+import { Columns, FoldLines, Inline, ResolvedGutter, WrapLines } from '../icons'
 import { icon_button, icon_button_on, icon_button_part } from '../ui'
 
 /**
@@ -18,6 +18,7 @@ import { icon_button, icon_button_on, icon_button_part } from '../ui'
  */
 export function ViewToggles() {
   const sideBySide = useReview((s) => s.sideBySide)
+  const sideBySideShown = useReview((s) => s.sideBySideShown)
   const setSideBySide = useReview((s) => s.setSideBySide)
   const collapseUnchanged = useReview((s) => s.collapseUnchanged)
   const setCollapseUnchanged = useReview((s) => s.setCollapseUnchanged)
@@ -28,24 +29,20 @@ export function ViewToggles() {
   const wrapOverrides = useReview((s) => s.wrapOverrides)
   const toggleWrap = useReview((s) => s.toggleWrap)
   const setWrapAll = useReview((s) => s.setWrapAll)
+  const resolvedNotes = useReview((s) => s.resolvedNotes)
+  const setResolvedNotes = useReview((s) => s.setResolvedNotes)
+  const in_gutter = resolvedNotes === 'gutter'
 
-  // three states on one button, in a fixed order, the icon showing where it is
-  const layout =
-    sideBySide === true
-      ? { icon: <Columns />, now: 'side by side', next: false, then: 'inline' }
-      : sideBySide === false
-        ? {
-            icon: <Inline />,
-            now: 'inline',
-            next: null,
-            then: 'whatever the window fits',
-          }
-        : {
-            icon: <Fits />,
-            now: 'whatever the window fits',
-            next: true,
-            then: 'side by side',
-          }
+  // What is drawn, and the other one. It cycled through three states, one of
+  // them "whatever fits" — which on a wide window is side by side, so two
+  // clicks in every three changed the icon and nothing else. Now a click is
+  // always the other layout; "whatever fits" is in Settings for whoever wants
+  // the choice handed back to the window.
+  const layout = sideBySideShown
+    ? { icon: <Columns />, now: 'side by side', then: 'inline' }
+    : { icon: <Inline />, now: 'inline', then: 'side by side' }
+  const fitted =
+    sideBySide === null ? '\nchosen to fit the window until you pick one' : ''
 
   // in the diff, wrapping is every file at once; on one file, that file
   const in_flow = viewMode === 'flow'
@@ -73,9 +70,9 @@ export function ViewToggles() {
     >
       <button
         className={icon_button}
-        title={`${layout.now} — click for ${layout.then}`}
-        aria-label={`diff layout: ${layout.now}. Switch to ${layout.then}`}
-        onClick={() => setSideBySide(layout.next)}
+        title={`diff ${layout.now} — click for ${layout.then}${fitted}`}
+        aria-label={`show the diff ${layout.then}`}
+        onClick={() => setSideBySide(!sideBySideShown)}
       >
         {layout.icon}
       </button>
@@ -101,6 +98,19 @@ export function ViewToggles() {
         onClick={wrap.run}
       >
         <WrapLines />
+      </button>
+      <button
+        className={in_gutter ? icon_button_on : icon_button}
+        title={
+          in_gutter
+            ? 'resolved notes in the gutter, out of the code — click to fold them back into the diff'
+            : 'resolved notes folded into the diff — click to move them to the gutter'
+        }
+        aria-label="resolved notes in the gutter"
+        aria-pressed={in_gutter}
+        onClick={() => setResolvedNotes(in_gutter ? 'folded' : 'gutter')}
+      >
+        <ResolvedGutter />
       </button>
     </div>
   )

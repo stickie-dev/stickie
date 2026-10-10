@@ -1,6 +1,14 @@
 import { Link } from 'react-router'
 import { formatRoute } from '../routes'
-import { Check, Clipboard, Search, Send, Sliders } from '../icons'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Clipboard,
+  Search,
+  Send,
+  Sliders,
+} from '../icons'
 import { btn, button_on, icon_button, title_bar } from '../ui'
 import { ThemeToggle } from './ThemeToggle'
 import { ViewToggles } from './ViewToggles'
@@ -17,6 +25,10 @@ export function TopBar() {
   const session = useReview((s) => s.session)
   const copyPrompt = useReview((s) => s.copyPrompt)
   const promptCopied = useReview((s) => s.promptCopied)
+  const navBack = useReview((s) => s.navBack)
+  const navForward = useReview((s) => s.navForward)
+  const canBack = useReview((s) => s.navIndex > 0)
+  const canForward = useReview((s) => s.navIndex < s.navHistory.length - 1)
   const open_threads = threads.filter((t) => t.status === 'open').length
   const pending_count = threads.filter(
     (t) => t.pending && t.status === 'open',
@@ -38,6 +50,31 @@ export function TopBar() {
         <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
         <span className="font-semibold tracking-tight text-ink">stickie</span>
       </Link>
+      {/*
+        Where you have been crosses tabs and reviews, so it walks from the app's
+        bar rather than from beside the tabs, where two chevrons read as
+        scrolling them.
+      */}
+      <div className="ml-2 flex shrink-0 items-center">
+        <button
+          className={icon_button}
+          title={'back to where you were reading\nshortcut: ['}
+          aria-label="back"
+          disabled={!canBack}
+          onClick={() => void navBack()}
+        >
+          <ArrowLeft />
+        </button>
+        <button
+          className={icon_button}
+          title={'forward again\nshortcut: ]'}
+          aria-label="forward"
+          disabled={!canForward}
+          onClick={() => void navForward()}
+        >
+          <ArrowRight />
+        </button>
+      </div>
       <span className="grow" />
       <button
         className={`shrink-0 inline-flex items-center gap-1.5 ${btn()}`}

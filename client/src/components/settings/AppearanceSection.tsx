@@ -23,6 +23,21 @@ const font_choices: { value: FontScale; label: string; why: string }[] = [
   },
 ]
 
+const layout_choices: { value: boolean | null; label: string; why: string }[] =
+  [
+    {
+      value: null,
+      label: 'Whatever fits',
+      why: 'two columns when the window is wide enough, one when it is not',
+    },
+    {
+      value: true,
+      label: 'Side by side',
+      why: 'base on the left, source on the right',
+    },
+    { value: false, label: 'Inline', why: 'one column, changes in place' },
+  ]
+
 const resolved_choices: {
   value: ResolvedNotes
   label: string
@@ -49,6 +64,8 @@ export function AppearanceSection({ state, save, saving }: SettingsAccess) {
   const collapsed = useFieldValue(state?.collapsedFiles)
   const setCollapsedFiles = useReview((s) => s.setCollapsedFiles)
   const resolvedNotes = useReview((s) => s.resolvedNotes)
+  const sideBySide = useReview((s) => s.sideBySide)
+  const setSideBySide = useReview((s) => s.setSideBySide)
   const setResolvedNotes = useReview((s) => s.setResolvedNotes)
 
   return (
@@ -93,8 +110,31 @@ export function AppearanceSection({ state, save, saving }: SettingsAccess) {
         </div>
       </Field>
 
-      {/* set once and left, so it is here rather than in the top bar beside
-          the toggles that are changed while reading */}
+      {/* the top bar's toggles flip between two; here is the whole choice,
+          including handing it back to the window */}
+      <Field label="Diff layout">
+        <div className="space-y-2">
+          {layout_choices.map((choice) => (
+            <label
+              key={String(choice.value)}
+              className="flex cursor-pointer gap-2 text-xs"
+            >
+              <input
+                type="radio"
+                name="diff-layout"
+                className="mt-0.5 shrink-0"
+                checked={sideBySide === choice.value}
+                onChange={() => setSideBySide(choice.value)}
+              />
+              <span>
+                <span className="text-ink">{choice.label}</span>
+                <span className="block text-faint">{choice.why}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </Field>
+
       <Field
         label="Resolved notes"
         hint="Where a note goes once it is resolved. Either way it can be opened again from where it sits."
