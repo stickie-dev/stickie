@@ -341,7 +341,6 @@ export function CommentsPanel() {
   const selectRepo = useReview((s) => s.selectRepo)
   const openRef = useReview((s) => s.openRef)
   const toggleComments = useReview((s) => s.toggleComments)
-  const promptOrder = useReview((s) => s.promptOrder)
   const placeInPromptOrder = useReview((s) => s.placeInPromptOrder)
   // three tabs, not two: the merge request's discussion is a third thing to
   // look at, and it is not stickie's notes — it is read from GitLab and shown
@@ -368,12 +367,12 @@ export function CommentsPanel() {
       : threads
     if (!arranging) return [...filtered].sort((a, b) => a.id - b.id)
     const rank = new Map(
-      orderedThreadIds(threads, promptOrder).map((id, index) => [id, index]),
+      orderedThreadIds(threads).map((id, index) => [id, index]),
     )
     return [...filtered].sort(
       (a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0),
     )
-  }, [threads, openOnly, arranging, promptOrder])
+  }, [threads, openOnly, arranging])
 
   // a note arriving from an agent should be visible without hunting for it
   const seen = useRef<number[]>([])

@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
+import { lastPlace } from '../lastPlace'
 import type { Page } from '../routes'
 import { formatRoute } from '../routes'
 import { useReview } from '../store'
 import type { LowerPanel } from '../store'
-import { Comment, Commit, Files, History, Search, Sliders } from '../icons'
+import { Comment, Commit, Files, Gear, History, Search } from '../icons'
 import { bar_button, bar_button_on } from '../ui'
 
 function Place({
@@ -73,6 +74,9 @@ export function PanelBar({ page }: { page: Page }) {
   const threads = useReview((s) => s.threads)
   const unresolved = threads.filter((t) => t.status === 'open').length
   const settingsTab = useReview((s) => s.settingsTab)
+  const setSettingsTab = useReview((s) => s.setSettingsTab)
+  const navigate = useNavigate()
+  const inSettings = page.kind === 'settings'
 
   const lower = (panel: LowerPanel) => ({
     on: lowerPanel === panel,
@@ -127,13 +131,22 @@ export function PanelBar({ page }: { page: Page }) {
         <Comment />
       </Place>
       <span className="grow" />
+      {/* like every other place on the bar, a second click puts it away:
+          the tab closes, as from its own ×, and you are back where you were */}
       <Link
-        className={page.kind === 'settings' ? bar_button_on : bar_button}
-        title="settings"
+        className={inSettings ? bar_button_on : bar_button}
+        title={inSettings ? 'settings\nclick to close them' : 'settings'}
         aria-label="settings"
+        aria-current={inSettings ? 'page' : undefined}
         to={formatRoute({ kind: 'settings', section: settingsTab ?? 'identity' })}
+        onClick={(event) => {
+          if (!inSettings) return
+          event.preventDefault()
+          setSettingsTab(null)
+          void navigate(lastPlace())
+        }}
       >
-        <Sliders />
+        <Gear />
       </Link>
     </nav>
   )

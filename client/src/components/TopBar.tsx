@@ -2,7 +2,7 @@ import { Link } from 'react-router'
 import { formatRoute } from '../routes'
 import {
   Check,
-  Clipboard,
+  CopyPrompt,
   NavBack,
   NavForward,
   Send,
@@ -92,7 +92,7 @@ export function TopBar() {
         disabled={session === null}
         onClick={() => void copyPrompt()}
       >
-        {promptCopied ? <Check /> : <Clipboard />}
+        {promptCopied ? <Check /> : <CopyPrompt />}
       </button>
       <span className="ml-1.5" />
       <ViewToggles />

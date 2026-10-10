@@ -35,6 +35,7 @@ interface SessionRow {
   prev_base_ref: string | null
   mr_iid: number | null
   mr_project: string | null
+  archived_at: string | Date | null
 }
 
 interface ActorRow {
@@ -64,6 +65,7 @@ interface ThreadRow {
   origin: string | null
   external_id: string | null
   mr_discussion: string | null
+  prompt_position: number | null
   created_at: string | Date
   /** from the left join, not a column of threads */
   actor_name: string | null
@@ -347,6 +349,34 @@ export class Store {
        where r.removed_at is null order by s.id desc`,
     )
     return rows.map(sessionFromRow)
+  }
+
+  /** Puts a review away from the overview, or brings it back. Deletes nothing. */
+  async setArchived(sessionId: number, archived: boolean): Promise<void> {
+    await this.db.run('update sessions set archived_at = ? where id = ?', [
+      archived ? new Date().toISOString() : null,
+      sessionId,
+    ])
+  }
+
+  /**
+   * The order this review's notes go into the prompt in. `ids` is the whole
+   * arrangement: a note of this review left out of it goes back to following
+   * the placed ones by age, and an id of another review's note is ignored.
+   */
+  async setPromptOrder(sessionId: number, ids: number[]): Promise<void> {
+    await this.db.transaction(async () => {
+      await this.db.run(
+        'update threads set prompt_position = null where session_id = ?',
+        [sessionId],
+      )
+      for (const [position, id] of ids.entries()) {
+        await this.db.run(
+          'update threads set prompt_position = ? where id = ? and session_id = ?',
+          [position, id, sessionId],
+        )
+      }
+    })
   }
 
   async countOpenThreads(sessionId: number): Promise<number> {
@@ -862,6 +892,8 @@ export class Store {
       pending: toBool(row.pending),
       origin: row.origin,
       mrDiscussion: row.mr_discussion,
+      promptPosition:
+        row.prompt_position == null ? null : Number(row.prompt_position),
       createdAt: toText(row.created_at),
       actorName: row.actor_name,
       messages,
@@ -944,6 +976,7 @@ function sessionFromRow(row: SessionRow): Session {
       row.mr_iid == null || row.mr_project == null
         ? null
         : { iid: Number(row.mr_iid), projectPath: row.mr_project },
+    archivedAt: row.archived_at == null ? null : toText(row.archived_at),
   }
 }
 

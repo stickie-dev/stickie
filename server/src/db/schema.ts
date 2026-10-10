@@ -213,6 +213,9 @@ const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
       // it is attached rather than imported
       ['mr_iid', 'mr_iid integer'],
       ['mr_project', 'mr_project text'],
+      // when the review was put away from the overview. Null is the normal
+      // state; nothing is deleted, and restoring it is setting it back
+      ['archived_at', 'archived_at text'],
     ],
     postgres: [
       ['notes_issued', 'notes_issued integer not null default 0'],
@@ -223,6 +226,9 @@ const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
       // it is attached rather than imported
       ['mr_iid', 'mr_iid integer'],
       ['mr_project', 'mr_project text'],
+      // when the review was put away from the overview. Null is the normal
+      // state; nothing is deleted, and restoring it is setting it back
+      ['archived_at', 'archived_at timestamptz'],
     ],
   },
   threads: {
@@ -235,6 +241,9 @@ const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
       // the merge-request discussion this note was started from, so the one
       // that exists can be found again rather than a second one started
       ['mr_discussion', 'mr_discussion text'],
+      // where the note goes in the prompt, as the reviewer arranged it. Null
+      // for a note never placed, which follows the placed ones by age
+      ['prompt_position', 'prompt_position integer'],
     ],
     postgres: [
       ['pending', 'pending boolean not null default false'],
@@ -245,6 +254,9 @@ const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
       // the merge-request discussion this note was started from, so the one
       // that exists can be found again rather than a second one started
       ['mr_discussion', 'mr_discussion text'],
+      // where the note goes in the prompt, as the reviewer arranged it. Null
+      // for a note never placed, which follows the placed ones by age
+      ['prompt_position', 'prompt_position integer'],
     ],
   },
   messages: {

@@ -25,6 +25,8 @@ const phrases: Record<string, string> = {
   'review.repinned': 're-pinned the base',
   'review.imported': 'imported notes',
   'review.exported': 'took the notes to an agent',
+  'review.archived': 'archived this review',
+  'review.unarchived': 'brought this review back',
   'file.viewed': 'marked a file read',
   'file.unviewed': 'unmarked a file',
 }

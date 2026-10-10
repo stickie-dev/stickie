@@ -27,6 +27,10 @@ export const activity_actions = {
     'mr-attached',
     'mr-detached',
     'mr-replied',
+    // put away from the overview, and brought back. Nothing is deleted either
+    // way, which is why archiving is what the overview offers
+    'archived',
+    'unarchived',
   ],
   file: ['viewed', 'unviewed'],
   /**

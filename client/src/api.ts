@@ -314,6 +314,18 @@ export const api = {
       toJson<{ candidate: MergeRequest | null }>,
     ),
 
+  /** Put a review away from the overview, or bring it back. Deletes nothing. */
+  setArchived: (sessionId: number, archived: boolean) =>
+    request(`/api/sessions/${sessionId}/archived`, 'PUT', { archived }).then(
+      toJson<Session>,
+    ),
+
+  /** The whole order this review's notes go into the prompt in. */
+  setPromptOrder: (sessionId: number, ids: number[]) =>
+    request(`/api/sessions/${sessionId}/prompt-order`, 'PUT', { ids }).then(
+      toJson<{ ok: boolean }>,
+    ),
+
   /** Attach a merge request to this review, or pass null to take it off. */
   attachMr: (sessionId: number, iid: number | null) =>
     request(`/api/sessions/${sessionId}/mr`, 'PUT', { iid }).then(

@@ -13,7 +13,7 @@ import { TimeAgo } from './TimeAgo'
 import { useReview } from '../store'
 import { Loading, Skeleton, SkeletonRows } from './Skeleton'
 import { ask } from '../confirm'
-import { Refresh } from '../icons'
+import { Archive, Refresh, Unarchive } from '../icons'
 import {
   badge,
   btn,
@@ -50,6 +50,8 @@ const actions: Record<string, string> = {
   'review.repinned': 're-pinned the base',
   'review.imported': 'imported notes',
   'review.exported': 'took the notes to an agent',
+  'review.archived': 'archived the review',
+  'review.unarchived': 'brought the review back',
   'file.viewed': 'marked a file read',
   'file.unviewed': 'unmarked a file',
   'repo.added': 'added a repository',
@@ -114,6 +116,10 @@ interface ReviewRow {
   repoName: string
   /** the newest session: what this review is pinned to now */
   current: ReviewOverview
+  /** every session of the group, which archiving moves together */
+  sessionIds: number[]
+  /** put away from the list; the newest session speaks for the group */
+  archived: boolean
   /** how many bases it has been pinned to, this one included */
   bases: number
   notes: NoteCounts
@@ -152,6 +158,8 @@ function rows(reviews: ReviewOverview[]): ReviewRow[] {
         repoId: current.repoId,
         repoName: current.repoName,
         current,
+        sessionIds: sessions.map((r) => r.sessionId),
+        archived: current.archivedAt != null,
         bases: sessions.length,
         notes: {
           total: sum((r) => r.notes.total),
@@ -282,9 +290,12 @@ function Th({
 function ReviewsTable({
   reviews,
   loading,
+  onArchive,
 }: {
   reviews: ReviewRow[]
   loading: boolean
+  /** puts a row away, or brings an archived one back */
+  onArchive: (review: ReviewRow) => void
 }) {
   const navigate = useNavigate()
   const sorted = [...reviews].sort((a, b) => {
@@ -314,6 +325,7 @@ function ReviewsTable({
             Replies
           </Th>
           <Th>Last activity</Th>
+          <Th>{''}</Th>
         </tr>
       </thead>
       <tbody>
@@ -330,6 +342,7 @@ function ReviewsTable({
               'w-6',
               'w-6',
               'w-40',
+              'w-6',
             ]}
           />
         )}
@@ -349,7 +362,7 @@ function ReviewsTable({
             // which a click handler on its own would take away
             <tr
               key={review.key}
-              className={`cursor-pointer ${row}`}
+              className={`group cursor-pointer ${row}`}
               onClick={() => void navigate(to)}
             >
               <td className="px-2 py-2.5">
@@ -415,6 +428,29 @@ function ReviewsTable({
                   </>
                 )}
               </td>
+              <td className="px-2 py-1 text-right">
+                {/* on hover, like a repository's remove: it is the rare thing
+                    to do with a row, and a column of boxes is noise */}
+                <button
+                  className={`opacity-0 group-hover:opacity-100 focus:opacity-100 ${icon_button}`}
+                  title={
+                    review.archived
+                      ? 'bring this review back to the list'
+                      : 'archive this review — off the list and out of what agents are shown, every note kept'
+                  }
+                  aria-label={
+                    review.archived
+                      ? `bring back the review of ${review.repoName}`
+                      : `archive the review of ${review.repoName}`
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onArchive(review)
+                  }}
+                >
+                  {review.archived ? <Unarchive /> : <Archive />}
+                </button>
+              </td>
             </tr>
           )
         })}
@@ -432,6 +468,7 @@ export function OverviewPage() {
   const [overview, setOverview] = useState<Overview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showIdle, setShowIdle] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const [newPath, setNewPath] = useState('')
 
   const load = useCallback(async () => {
@@ -545,12 +582,38 @@ export function OverviewPage() {
     [navigate],
   )
 
+  /**
+   * Archiving, not deleting: the row leaves the list and the list agents are
+   * given, and every note and every line of the record stays. A delete would
+   * take notes out from under the activity record, which keeps saying what
+   * happened to them — and deciding what may be destroyed, and when, is a
+   * retention question that belongs with the audit work, not with a button.
+   * So nothing is asked first: an archive is undone from the list below.
+   */
+  const archiveReview = useCallback(
+    async (review: ReviewRow) => {
+      try {
+        for (const id of review.sessionIds) {
+          await api.setArchived(id, !review.archived)
+        }
+        await load()
+        setError(null)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [load],
+  )
+
   useEffect(() => {
     void load()
   }, [load, repos_in_store])
 
   const repos = overview?.repos ?? []
-  const all_rows = rows(overview?.reviews ?? [])
+  // archived rows leave everything the page counts, not only the table
+  const every_row = rows(overview?.reviews ?? [])
+  const archived = every_row.filter((r) => r.archived)
+  const all_rows = every_row.filter((r) => !r.archived)
   const substantial = all_rows.filter(worthListing)
   const idle = all_rows.filter((r) => !worthListing(r))
   const listed = showIdle ? all_rows : substantial
@@ -618,7 +681,11 @@ export function OverviewPage() {
           <section className="mb-10">
             <h2 className="mb-2 text-note font-semibold text-ink">Reviews</h2>
             <div className={`overflow-x-auto ${card}`}>
-              <ReviewsTable reviews={listed} loading={loading} />
+              <ReviewsTable
+                reviews={listed}
+                loading={loading}
+                onArchive={(review) => void archiveReview(review)}
+              />
             </div>
             <p className="mt-2 max-w-3xl text-dense leading-relaxed text-faint">
               A row is one branch, read from a working tree or from the
@@ -642,6 +709,39 @@ export function OverviewPage() {
                 </>
               )}
             </p>
+          </section>
+        )}
+
+        {/* what was put away, folded until asked for: the list above stays
+            the work in hand, and nothing archived is out of reach */}
+        {archived.length > 0 && (
+          <section className="mb-10">
+            <h2 className="mb-2 flex items-baseline gap-2 text-note font-semibold text-ink">
+              Archived
+              <span className="font-normal text-faint">{archived.length}</span>
+              <button
+                className="text-xs font-normal text-accent hover:underline"
+                onClick={() => setShowArchived(!showArchived)}
+              >
+                {showArchived ? 'hide' : 'show'}
+              </button>
+            </h2>
+            {showArchived && (
+              <>
+                <div className={`overflow-x-auto ${card}`}>
+                  <ReviewsTable
+                    reviews={archived}
+                    loading={false}
+                    onArchive={(review) => void archiveReview(review)}
+                  />
+                </div>
+                <p className="mt-2 max-w-3xl text-dense leading-relaxed text-faint">
+                  Off the list above and out of what agents are shown, with
+                  every note kept. Each still opens; writing a new note in one
+                  brings it back by itself.
+                </p>
+              </>
+            )}
           </section>
         )}
 

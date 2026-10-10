@@ -16,7 +16,11 @@ the only output.
   you and labelled *needs you* / *with agent* / *draft* / *clear*, with note
   counts, agent round-trips, and what it compares as a short sha and commit
   subject rather than forty characters of hex. Moving the base keeps the same
-  row, and so does the branch moving between checkouts. Plus one activity feed across every
+  row, and so does the branch moving between checkouts. A review you are done
+  with is archived from its row: it leaves the list and the list agents are
+  given, keeps every note, and is brought back from *Archived* below — or by
+  writing a new note in it. Nothing on the overview deletes a review's notes
+  but removing its repository. Plus one activity feed across every
   repository. A draft review in another repository used to be invisible until
   you switched to it. Registered repositories are listed below the reviews:
   add one by path, and remove one you are done with — which deletes its reviews

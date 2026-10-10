@@ -143,6 +143,88 @@ describe('Store', () => {
   })
 })
 
+describe('Store archiving and prompt order', () => {
+  async function review() {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const session = await store.getOrCreateSession(
+      repo.id,
+      'feature',
+      { kind: 'worktree', value: '/tmp/repo' },
+      'master',
+      'abc123',
+    )
+    const note = (line: number) =>
+      store.createThread(
+        session.id,
+        'app/main.py',
+        'source',
+        line,
+        line,
+        null,
+        'x = 1',
+        'user',
+        `note on ${String(line)}`,
+      )
+    return { store, session, note }
+  }
+
+  it('archives a review and brings it back without touching its notes', async () => {
+    const { store, session, note } = await review()
+    await note(1)
+    await store.setArchived(session.id, true)
+    const archived = await store.getSession(session.id)
+    expect(archived?.archivedAt).not.toBeNull()
+    expect(await store.listThreads(session.id)).toHaveLength(1)
+    await store.setArchived(session.id, false)
+    expect((await store.getSession(session.id))?.archivedAt).toBeNull()
+  })
+
+  it('reads notes back with the positions they were arranged in', async () => {
+    const { store, session, note } = await review()
+    const [a, b, c] = [await note(1), await note(2), await note(3)]
+    await store.setPromptOrder(session.id, [c.id, a.id])
+    const positions = new Map(
+      (await store.listThreads(session.id)).map((t) => [t.id, t.promptPosition]),
+    )
+    expect(positions.get(c.id)).toBe(0)
+    expect(positions.get(a.id)).toBe(1)
+    // left out of the arrangement: back to following by age
+    expect(positions.get(b.id)).toBeNull()
+  })
+
+  it('replaces the whole arrangement and ignores another review\'s notes', async () => {
+    const { store, session, note } = await review()
+    const a = await note(1)
+    const b = await note(2)
+    const other = await store.getOrCreateSession(
+      session.repoId,
+      'other',
+      { kind: 'ref', value: 'other' },
+      'master',
+      'abc123',
+    )
+    const stranger = await store.createThread(
+      other.id,
+      'x.py',
+      'source',
+      1,
+      1,
+      null,
+      'y',
+      'user',
+      'elsewhere',
+    )
+    await store.setPromptOrder(session.id, [a.id, b.id])
+    await store.setPromptOrder(session.id, [b.id, stranger.id])
+    const mine = await store.listThreads(session.id)
+    expect(mine.find((t) => t.id === b.id)?.promptPosition).toBe(0)
+    expect(mine.find((t) => t.id === a.id)?.promptPosition).toBeNull()
+    const theirs = await store.listThreads(other.id)
+    expect(theirs[0]?.promptPosition).toBeNull()
+  })
+})
+
 describe('Store actors', () => {
   it('returns the same actor for a name it has already seen', async () => {
     const store = await freshStore()

@@ -46,16 +46,17 @@ function Icon({
   )
 }
 
-/** Settings: the sliders rather than the gear, which next to Sun is a sun. */
-export function Sliders(props: IconProps) {
+/**
+ * Settings: the gear everyone looks for. It was sliders while it sat in the
+ * top bar beside Sun, where a gear reads as a second sun; at the foot of the
+ * panel bar it has nothing round beside it. Eight teeth, square-cut and
+ * softened by the round joins, around an open hub.
+ */
+export function Gear(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M4 7h8.2M16.8 7H20" />
-      <circle cx="14.5" cy="7" r="2.1" />
-      <path d="M4 12h3.2M11.8 12H20" />
-      <circle cx="9.5" cy="12" r="2.1" />
-      <path d="M4 17h9.2M17.8 17H20" />
-      <circle cx="15.5" cy="17" r="2.1" />
+      <path d="M9.87 5.02L10.35 2.64L13.65 2.64L14.13 5.02A7.3 7.3 0 0 1 15.43 5.55L17.45 4.22L19.78 6.55L18.45 8.57A7.3 7.3 0 0 1 18.98 9.87L21.36 10.35L21.36 13.65L18.98 14.13A7.3 7.3 0 0 1 18.45 15.43L19.78 17.45L17.45 19.78L15.43 18.45A7.3 7.3 0 0 1 14.13 18.98L13.65 21.36L10.35 21.36L9.87 18.98A7.3 7.3 0 0 1 8.57 18.45L6.55 19.78L4.22 17.45L5.55 15.43A7.3 7.3 0 0 1 5.02 14.13L2.64 13.65L2.64 10.35L5.02 9.87A7.3 7.3 0 0 1 5.55 8.57L4.22 6.55L6.55 4.22L8.57 5.55A7.3 7.3 0 0 1 9.87 5.02Z" />
+      <circle cx="12" cy="12" r="3" />
     </Icon>
   )
 }
@@ -233,6 +234,24 @@ export function WrapLines(props: IconProps) {
   )
 }
 
+/** Archive: a box with its lid on, put away rather than thrown away. */
+export function Archive(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 5h16v4H4zM5.5 9v9.5A1.5 1.5 0 0 0 7 20h10a1.5 1.5 0 0 0 1.5-1.5V9M10 13h4" />
+    </Icon>
+  )
+}
+
+/** Bring back from the archive: the same box, with something coming out. */
+export function Unarchive(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 5h16v4H4zM5.5 9v9.5A1.5 1.5 0 0 0 7 20h10a1.5 1.5 0 0 0 1.5-1.5V9M12 17.5V12M9.5 14.5 12 12l2.5 2.5" />
+    </Icon>
+  )
+}
+
 /** Lines in an order that can be changed: the prompt order. */
 export function Reorder(props: IconProps) {
   return (
@@ -258,11 +277,16 @@ export function Grip(props: IconProps) {
   )
 }
 
-export function Clipboard(props: IconProps) {
+/**
+ * Copy prompt: a clipboard with a terminal's prompt on it — what is copied is
+ * for pasting into an agent, not a plain copy of what is on screen.
+ */
+export function CopyPrompt(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M9 4h6a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" />
       <path d="M16 5.5h1.5A1.5 1.5 0 0 1 19 7v11.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 18.5V7a1.5 1.5 0 0 1 1.5-1.5H8" />
+      <path d="m8.5 11 2.5 2.5L8.5 16M13 16h3" />
     </Icon>
   )
 }

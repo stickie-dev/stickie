@@ -121,6 +121,7 @@ const session_schema = z
     baseRef: z.string(),
     baseSha: z.string(),
     prevBaseRef: z.string().nullable().optional(),
+    archivedAt: z.string().nullable().optional(),
     baseStale: z.boolean().optional(),
     baseDiverged: z.boolean().optional(),
     sourceGone: z.boolean().optional(),
@@ -305,6 +306,7 @@ const thread_schema = z
     pending: z.boolean(),
     origin: z.string().nullable(),
     mrDiscussion: z.string().nullable().optional(),
+    promptPosition: z.number().int().nullable().optional(),
     createdAt: z.string(),
     actorName: z.string().nullable(),
     messages: z.array(message_schema),
@@ -388,6 +390,7 @@ const review_overview_schema = z
     comparing: z.object({ source: rev_label_schema, base: rev_label_schema }),
     sourceGone: z.boolean().optional(),
     merged: z.boolean().optional(),
+    archivedAt: z.string().nullable(),
     notes: note_counts_schema,
     filesRead: z.number().int(),
     agentReplies: z.number().int(),
@@ -694,6 +697,20 @@ export function createApp(
       ...(threadId === undefined ? {} : { threadId }),
       ...(detail === undefined ? {} : { detail }),
     })
+    // a review being written in is not put away, whatever was decided about it
+    // before: archived and gaining notes is a review nobody can find on the
+    // overview while it is being worked on
+    if (action === 'created' && owner != null && owner.archivedAt != null) {
+      await store.setArchived(owner.id, false)
+      await record({
+        subject: 'review',
+        action: 'unarchived',
+        actorId,
+        repoId: owner.repoId,
+        sessionId: owner.id,
+        detail: { because: 'a note was written in it' },
+      })
+    }
   }
 
   app.onError((error, c) => c.json({ error: errorMessage(error) }, 500))
@@ -1070,6 +1087,81 @@ export function createApp(
 
   app.openapi(
     createRoute({
+      method: 'put',
+      path: '/api/sessions/{id}/archived',
+      tags: ['sessions'],
+      summary: 'Archive a review, or bring it back',
+      description:
+        'Archiving puts a review away from the overview and from the list ' +
+        'agents are given; it deletes nothing, and the review still opens by ' +
+        'its address. Both directions are recorded. Writing a new note in an ' +
+        'archived review brings it back by itself.',
+      request: {
+        params: id_param,
+        body: json_body(z.object({ archived: z.boolean() })),
+      },
+      responses: {
+        200: json_response(session_schema, 'The review'),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const session = await store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      const { archived } = c.req.valid('json')
+      // asking for what is already so changes nothing, and records nothing
+      if (archived !== (session.archivedAt != null)) {
+        await store.setArchived(session.id, archived)
+        await record({
+          subject: 'review',
+          action: archived ? 'archived' : 'unarchived',
+          actorId: (await identity.human(session.repoPath)).actor.id,
+          repoId: session.repoId,
+          sessionId: session.id,
+        })
+      }
+      const updated = (await store.getSession(session.id)) ?? session
+      return c.json(updated, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/sessions/{id}/prompt-order',
+      tags: ['sessions'],
+      summary: 'Arrange the order notes go into the prompt',
+      description:
+        '`ids` is the whole arrangement, as thread ids: notes of this review ' +
+        'left out follow the placed ones by age, and ids of other reviews\' ' +
+        'notes are ignored. The prompt and `get_review_notes` read in this ' +
+        'order. Not recorded as activity: it changes what order an agent ' +
+        'reads in, not what anyone said.',
+      request: {
+        params: id_param,
+        body: json_body(z.object({ ids: z.array(z.number().int()) })),
+      },
+      responses: {
+        200: json_response(z.object({ ok: z.boolean() }), 'Arranged'),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const session = await store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      await store.setPromptOrder(session.id, c.req.valid('json').ids)
+      // every client showing this review re-reads its notes, order included
+      emit({ type: 'thread', action: 'updated', sessionId: session.id })
+      return c.json({ ok: true }, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
       method: 'post',
       path: '/api/sessions/{id}/repin',
       tags: ['sessions'],
@@ -1383,12 +1475,15 @@ export function createApp(
         'many notes are waiting on it. `repo` and `branch` match loosely — a ' +
         'substring of the path, the name or the branch — because the caller ' +
         'knows where it is without knowing which of those the server would ' +
-        'compare. `format=markdown` answers in text instead of JSON.',
+        'compare. `format=markdown` answers in text instead of JSON. Archived ' +
+        'reviews are left out unless `include_archived` is set: they were put ' +
+        'away because nobody is working on them.',
       request: {
         query: z.object({
           repo: z.string().optional(),
           branch: z.string().optional(),
           with_notes: flag_query,
+          include_archived: flag_query,
           format: z.enum(['json', 'markdown']).optional(),
         }),
       },
@@ -1405,8 +1500,11 @@ export function createApp(
       },
     }),
     async (c) => {
-      const { repo, branch, with_notes, format } = c.req.valid('query')
-      const sessions = await store.listSessions()
+      const { repo, branch, with_notes, include_archived, format } =
+        c.req.valid('query')
+      const sessions = (await store.listSessions()).filter(
+        (session) => include_archived === true || session.archivedAt == null,
+      )
       const listed: ReviewListing[] = []
       for (const session of sessions) {
         listed.push({
@@ -1631,6 +1729,7 @@ export function createApp(
                 },
               },
               ...sourceFacts(session),
+              archivedAt: session.archivedAt ?? null,
               ...rollup,
             }
           }),
@@ -2131,7 +2230,8 @@ export function createApp(
       description:
         'The manual paste path: every unresolved note, including the pending ' +
         'batch, with the instruction block from settings. `order` lists ' +
-        'thread ids first, in that order; the rest follow by age. ' +
+        'thread ids first, in that order; the rest follow by age. Without ' +
+        '`order`, the order the reviewer arranged is used. ' +
         '`include_resolved` adds the notes already answered, for revisiting ' +
         'one rather than working through what is outstanding.',
       request: {
@@ -2167,7 +2267,10 @@ export function createApp(
       )
       const wanted =
         order === undefined
-          ? []
+          ? unresolved
+              .filter((t) => t.promptPosition != null)
+              .sort((a, b) => (a.promptPosition ?? 0) - (b.promptPosition ?? 0))
+              .map((t) => t.id)
           : order
               .split(',')
               .map((id) => Number(id.trim()))

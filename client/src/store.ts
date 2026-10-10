@@ -518,8 +518,6 @@ interface ReviewState {
     body: string,
     as?: NoteDefault,
   ) => Promise<void>
-  /** the order Copy prompt uses; ids not listed follow by age */
-  promptOrder: number[]
   /** puts a note just before or after another in the prompt order */
   placeInPromptOrder: (threadId: number, targetId: number, after: boolean) => void
   /** comma-separated extensions that open soft-wrapped, from settings */
@@ -696,19 +694,17 @@ export function collapsedFor(
 }
 
 /**
- * The prompt order as ids: whatever the user arranged, then anything newer
- * that has not been placed yet.
+ * The prompt order as ids: the notes the reviewer placed, in the order they
+ * were placed in, then anything newer that has not been placed yet. The
+ * positions are kept on the notes, in the database, so the order is the same
+ * in every browser and is the one an agent reads in.
  */
-export function orderedThreadIds(
-  threads: Thread[],
-  order: number[],
-): number[] {
-  const known = new Set(threads.map((t) => t.id))
-  const placed = order.filter((id) => known.has(id))
-  const rest = threads
-    .map((t) => t.id)
-    .filter((id) => !placed.includes(id))
-  return [...placed, ...rest]
+export function orderedThreadIds(threads: Thread[]): number[] {
+  const placed = threads
+    .filter((t) => t.promptPosition != null)
+    .sort((a, b) => (a.promptPosition ?? 0) - (b.promptPosition ?? 0))
+  const rest = threads.filter((t) => t.promptPosition == null)
+  return [...placed, ...rest].map((t) => t.id)
 }
 
 function message(error: unknown): string {
@@ -2286,7 +2282,6 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
 
-    promptOrder: [],
 
     addNote: async (scope, body, as) => {
       const { session, selectedPath, noteDefault } = get()
@@ -2308,8 +2303,21 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     placeInPromptOrder: (threadId, targetId, after) => {
-      const current = orderedThreadIds(get().threads, get().promptOrder)
-      set({ promptOrder: placeId(current, threadId, targetId, after) })
+      const { session, threads } = get()
+      if (session === null) return
+      const next = placeId(orderedThreadIds(threads), threadId, targetId, after)
+      const position = new Map(next.map((id, index) => [id, index]))
+      // shown at once; the server is told, and tells every other client
+      set({
+        threads: threads.map((t) => ({
+          ...t,
+          promptPosition: position.get(t.id) ?? null,
+        })),
+      })
+      void api.setPromptOrder(session.id, next).catch((error: unknown) => {
+        get().pushToast('error', `prompt order: ${message(error)}`)
+        void get().syncThreads(session.id)
+      })
     },
 
     copyPrompt: async () => {
@@ -2319,7 +2327,7 @@ export const useReview = create<ReviewState>((set, get) => {
         await navigator.clipboard.writeText(
           await api.prompt(
             session.id,
-            orderedThreadIds(get().threads, get().promptOrder),
+            orderedThreadIds(get().threads),
           ),
         )
         set({ promptCopied: true })

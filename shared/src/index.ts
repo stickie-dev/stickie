@@ -75,6 +75,11 @@ export interface Session {
    * replies to either side of it.
    */
   mr?: { iid: number; projectPath: string } | null
+  /**
+   * When the review was archived: put away from the overview and from the
+   * list agents are given, with every note kept. Null when it is not.
+   */
+  archivedAt?: string | null
   /** the base ref has moved on from baseSha, and the pin can follow it */
   baseStale?: boolean
   /**
@@ -185,6 +190,11 @@ export interface Thread {
    * to iterate, and a second one beside it is two places to look.
    */
   mrDiscussion?: string | null
+  /**
+   * Where the note goes in the prompt, as the reviewer arranged it. Null for
+   * a note never placed; those follow the placed ones, oldest first.
+   */
+  promptPosition?: number | null
   createdAt: string
   /** who raised the note; null for imported and pre-actor threads */
   actorName: string | null
@@ -248,6 +258,8 @@ export interface ReviewOverview {
   sourceGone?: boolean
   /** its branch is already contained in the base: the work has landed */
   merged?: boolean
+  /** when it was put away from the overview; null when it is not */
+  archivedAt?: string | null
   notes: NoteCounts
   /** how many files were opened and marked read */
   filesRead: number
