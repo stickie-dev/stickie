@@ -34,6 +34,69 @@ function step(strip: Element): void {
   strip.dispatchEvent(new MouseEvent('mouseup', shape))
 }
 
+/** Marks a band's middle row once its actions have been added. */
+const decorated = 'stickieActions'
+
+/**
+ * Says on the band what a click on it does.
+ *
+ * The band's own gestures are real but invisible: two four-pixel strips that
+ * step, an icon that steps both ends, a double-click on the line count that
+ * opens everything. A reader who has never been told any of that sees "100
+ * hidden lines" and nothing to press. So the three of them are written out
+ * beside the count, as words, and each does what the hidden gesture does —
+ * nothing here has its own idea of how much to open.
+ *
+ * Only on the side being read: side by side, both editors draw a band for the
+ * same region, and one set of actions is enough to drive it.
+ */
+function decorate(center: HTMLElement): void {
+  if (center.dataset[decorated] !== undefined) return
+  const widget = center.parentElement
+  const count = center.children[1]
+  if (widget === null || count === undefined) return
+  center.dataset[decorated] = ''
+  const actions = document.createElement('span')
+  actions.className = 'ml-3 inline-flex items-center gap-1.5 text-meta text-faint'
+  const add = (label: string, run: () => void) => {
+    if (actions.childElementCount > 0) {
+      const dot = document.createElement('span')
+      dot.textContent = '·'
+      dot.setAttribute('aria-hidden', 'true')
+      actions.append(dot)
+    }
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = label
+    button.className = 'hover:text-ink hover:underline'
+    button.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      run()
+    })
+    actions.append(button)
+  }
+  const n = String(reveal_line_count)
+  add(`show ${n} above`, () => {
+    const strip = widget.querySelector(':scope > .top')
+    if (strip !== null) step(strip)
+  })
+  add(`show ${n} below`, () => {
+    const strip = widget.querySelector(':scope > .bottom')
+    if (strip !== null) step(strip)
+  })
+  add('show all', () => {
+    // the editor's own way of opening the whole region, so this and the
+    // double-click on the count can never disagree about what "all" is
+    count.querySelector('span')?.dispatchEvent(
+      new MouseEvent('dblclick', { bubbles: true, button: 0 }),
+    )
+  })
+  center.append(actions)
+}
+
+const bands_to_decorate = `.editor.modified ${band} > .center`
+
 /**
  * Makes the one button on a collapsed region open a few lines rather than all
  * of them.
@@ -56,6 +119,25 @@ function step(strip: Element): void {
  * that names them by selector outlives all of that.
  */
 export function tameUnfoldAll(): void {
+  // Bands come and go with the files on screen, and the editor builds them
+  // whenever it likes, so they are found as they appear: one pass per burst of
+  // changes, and a pass that finds every band already decorated does nothing.
+  // A timer rather than a frame, because this needs the DOM and not a paint —
+  // a band built while the tab is in the background is ready when it returns.
+  let queued = false
+  new MutationObserver(() => {
+    if (queued) return
+    queued = true
+    setTimeout(() => {
+      queued = false
+      for (const center of document.querySelectorAll<HTMLElement>(
+        bands_to_decorate,
+      )) {
+        decorate(center)
+      }
+    }, 0)
+  }).observe(document.body, { childList: true, subtree: true })
+
   document.addEventListener(
     'click',
     (event) => {
