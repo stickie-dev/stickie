@@ -278,7 +278,7 @@ and the review — source, base, search, the panels, the theme, settings. The
 menu at the end of the tabs is the diff: how it is drawn, and what can be done
 with it. The status bar carries counts, so nothing else should.
 
-### Monaco, and three things it will do to you
+### Monaco, and four things it will do to you
 
 **A selection is painted under the diff's colours.** Monaco renders one line's
 overlays as siblings in DOM order at `z-index: auto`: the selection first, then
@@ -307,6 +307,17 @@ step. So its click is intercepted and steps both ends instead, and its
 tooltip is corrected on hover, since the widget writes that once when it is
 built. The whole region stays one double-click away on the line count,
 which is the editor's own gesture and its own tooltip.
+
+**Changing a read-only diff's text opens every collapsed region in it.**
+The React wrapper writes new text into a read-only editor with `setValue`,
+which throws away every decoration in the model — and the diff editor keeps
+its collapsed regions *as* decorations. With none left, it finds no hidden
+region anywhere, decides nothing was folded, and opens the lot, while the
+setting still says "collapsed". So never hand `DiffEditor` text that changes
+while it is on screen: use `ReviewDiff`, which writes the same document's new
+text as the smallest whole-line edit (`lineEdit`) and gives a different
+document a fresh editor. An agent editing a file, and switching files in the
+single-file view, were both doing this.
 
 **A form inside a view zone keeps no state of its own.** `useState` for an open
 menu read back false on the very next click. Zone-local state goes in the store

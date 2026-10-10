@@ -316,6 +316,12 @@ interface ReviewState {
     mode: RemoveMode,
   ) => Promise<{ deleted: boolean; notes: number }>
   selectRepo: (repoId: number) => Promise<void>
+  /**
+   * A repository's review, opened from inside another one — the `+` beside
+   * the tabs. With a source it is that one; without, wherever this repository
+   * was last read from, or its main checkout.
+   */
+  openRepo: (repoId: number, source?: ReviewSource) => Promise<void>
   setSource: (source: ReviewSource, baseRef?: string) => Promise<void>
   setBase: (baseRef: string | undefined) => Promise<void>
   openFile: (path: string, status?: ChangedFile['status'] | 'unchanged') => Promise<void>
@@ -1649,6 +1655,33 @@ export const useReview = create<ReviewState>((set, get) => {
           : {}),
       })
       return answer
+    },
+
+    openRepo: async (repoId, source) => {
+      if (source !== undefined) {
+        const was = get().perRepo[repoId]
+        const same =
+          was?.source.kind === source.kind && was.source.value === source.value
+        set({
+          perRepo: {
+            ...get().perRepo,
+            // another source is other work, read against its own default base
+            // rather than whatever the last one was being read against
+            [repoId]: {
+              ...was,
+              source,
+              baseRef: same ? was.baseRef : undefined,
+            },
+          },
+        })
+      }
+      // it lands on the diff, the way a new tab would
+      set({ viewMode: 'flow' })
+      await get().selectRepo(repoId)
+      const review = get().session
+      if (review !== null && review.repoId === repoId) {
+        set({ activeTabId: ensureFlowTab(repoId, review.id).id })
+      }
     },
 
     selectRepo: async (repoId) => {

@@ -5,10 +5,13 @@ import { useReview } from '../store'
 import { tabLabels } from '../tabLabels'
 import { ChevronDown, ChevronLeft, ChevronRight, Close } from '../icons'
 import { btn, button_on, glass, icon_button, motion } from '../ui'
+import { OpenRepoMenu } from './OpenRepoMenu'
 import { ViewMenu } from './ViewMenu'
 
 /** Room kept for the overflow button when not every tab fits. */
 const overflow_reserve = 52
+/** Room kept for the `+` that follows the last tab shown. */
+const open_reserve = 32
 const fallback_width = 140
 
 /**
@@ -119,7 +122,7 @@ export function TabBar() {
     const hidden: Tab[] = []
     for (const tab of tabs) {
       const width = widthOf(tab)
-      if (hidden.length === 0 && used + width <= room - reserve) {
+      if (hidden.length === 0 && used + width <= room - reserve - open_reserve) {
         shown.push(tab)
         used += width
       } else {
@@ -142,7 +145,15 @@ export function TabBar() {
     ].sort((a, b) => tabs.indexOf(a) - tabs.indexOf(b))
   }
 
-  if (tabs.length === 0) return null
+  // closing the last tab is somewhere a reader can be, and it is exactly where
+  // opening something is the only thing left to do
+  if (tabs.length === 0) {
+    return (
+      <div className="flex shrink-0 items-stretch border-b border-edge bg-surface px-2 py-1 text-xs">
+        <OpenRepoMenu />
+      </div>
+    )
+  }
 
   const tabButton = (tab: Tab) => {
     const is_active = tab.id === activeTabId
@@ -195,6 +206,8 @@ export function TabBar() {
         className="flex min-w-0 grow items-stretch gap-0.5 overflow-hidden px-1"
       >
         {shown.map(tabButton)}
+        {/* after the last tab, where opening one more is looked for */}
+        <OpenRepoMenu />
       </div>
       {hidden.length > 0 && (
         <button

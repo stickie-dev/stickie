@@ -158,6 +158,15 @@ export function Kebab(props: IconProps) {
   )
 }
 
+/** The same reach as `Close`, so the two read as a pair in the tab strip. */
+export function Plus(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 5.5v13M5.5 12h13" />
+    </Icon>
+  )
+}
+
 export function Close(props: IconProps) {
   return (
     <Icon {...props}>
