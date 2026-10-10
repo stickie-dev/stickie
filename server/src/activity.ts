@@ -31,6 +31,11 @@ export const activity_actions = {
     // way, which is why archiving is what the overview offers
     'archived',
     'unarchived',
+    // kept from expiring, and let go again; and deleted for having been left
+    // alone, which says how many notes went with it in a row that outlives them
+    'kept',
+    'unkept',
+    'expired',
   ],
   file: ['viewed', 'unviewed'],
   /**

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { NoteDefault, RemoveMode, RepinMode, SubmitKey } from '../../api'
 import { Field, Mono, Section } from './parts'
+import { field } from '../../ui'
 import type { SettingsAccess } from './useSettings'
 
 const choices: { value: RepinMode; label: string; why: string }[] = [
@@ -60,7 +61,103 @@ const remove_choices: { value: RemoveMode; label: string; why: string }[] = [
   },
 ]
 
-export function ReviewsSection({ state, save }: SettingsAccess) {
+/** What a days field holds: digits, or nothing for never. */
+function daysFrom(text: string): number | null | 'bad' {
+  const trimmed = text.trim()
+  if (trimmed === '') return null
+  const value = Number(trimmed)
+  return Number.isInteger(value) && value >= 1 && value <= 3650 ? value : 'bad'
+}
+
+/**
+ * The two numbers of the expiry policy. Saved together when either field is
+ * left, and only as a pair that makes sense: deleting before archiving would
+ * take away the warning archiving is for, and the server refuses it anyway.
+ */
+function Expiry({ state, save }: SettingsAccess) {
+  const [archive, setArchive] = useState('')
+  const [remove, setRemove] = useState('')
+  useEffect(() => {
+    if (state !== null) {
+      setArchive(
+        state.archiveAfterDays === null ? '' : String(state.archiveAfterDays),
+      )
+      setRemove(
+        state.deleteAfterDays === null ? '' : String(state.deleteAfterDays),
+      )
+    }
+  }, [state])
+
+  const a = daysFrom(archive)
+  const d = daysFrom(remove)
+  const problem =
+    a === 'bad' || d === 'bad'
+      ? 'A whole number of days from 1 to 3650, or empty for never.'
+      : a !== null && d !== null && d <= a
+        ? 'Deleting has to come later than archiving — archiving is the warning.'
+        : null
+
+  const commit = () => {
+    if (state === null || problem !== null || a === 'bad' || d === 'bad') return
+    if (a === state.archiveAfterDays && d === state.deleteAfterDays) return
+    void save({ archiveAfterDays: a, deleteAfterDays: d }, { quiet: true })
+  }
+
+  const days = (
+    value: string,
+    set: (text: string) => void,
+    label: string,
+  ) => (
+    <span className="flex items-center gap-2">
+      <input
+        // not `field_classes`: that is full width, and a number of days is
+        // four digits at most
+        className={`w-16 py-1.5 font-mono text-xs ${field}`}
+        inputMode="numeric"
+        placeholder="never"
+        aria-label={label}
+        value={value}
+        onChange={(e) => set(e.target.value)}
+        onBlur={commit}
+      />
+      <span className="text-faint">days</span>
+    </span>
+  )
+
+  return (
+    <Field
+      label="Reviews left alone"
+      hint={
+        <>
+          Left alone means nothing in the record — no note, reply, resolution
+          or file marked read — no opening it, and no commit on its branch.
+          Archived reviews wait in the overview's Archived list, so nothing is
+          deleted without having sat there for at least the difference between
+          the two. Deleting takes the notes and keeps the record of them. A
+          review marked <Mono>keep</Mono> on the overview is never touched.
+          Empty is never.
+        </>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+        <span className="flex items-center gap-2">
+          <span className="text-ink">archive after</span>
+          {days(archive, setArchive, 'archive after this many days')}
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="text-ink">delete after</span>
+          {days(remove, setRemove, 'delete after this many days')}
+        </span>
+      </div>
+      {problem !== null && (
+        <p className="mt-1 text-xs text-rose-500">{problem}</p>
+      )}
+    </Field>
+  )
+}
+
+export function ReviewsSection(access: SettingsAccess) {
+  const { state, save } = access
   const [mode, setMode] = useState<RepinMode>('always')
   const [submit, setSubmit] = useState<SubmitKey>('enter')
   const [note, setNote] = useState<NoteDefault>('draft')
@@ -205,6 +302,7 @@ export function ReviewsSection({ state, save }: SettingsAccess) {
         </div>
       </Field>
 
+      <Expiry {...access} />
     </Section>
   )
 }

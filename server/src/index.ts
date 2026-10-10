@@ -7,6 +7,7 @@ import type { WSContext } from 'hono/ws'
 import type { ClientEvent } from '@stickie/shared'
 import { createApp } from './app.js'
 import { openDatabase } from './db.js'
+import { sweep } from './expiry.js'
 import { isGitRepo, repoRoot } from './git.js'
 import { Store } from './store.js'
 import { WatchHub } from './watcher.js'
@@ -75,3 +76,15 @@ const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
   console.log(`stickie server on http://localhost:${info.port}`)
 })
 injectWebSocket(server)
+
+// reviews left alone are archived and then deleted (Settings → Reviews). The
+// policy counts in days, so looking a few times a day is as often as it can
+// matter; a failed sweep is tried again at the next one
+const sweep_every_ms = 6 * 60 * 60 * 1000
+const sweepQuietly = () => {
+  sweep(store).catch((error: unknown) => {
+    console.error('stickie: expiry sweep failed:', error)
+  })
+}
+sweepQuietly()
+setInterval(sweepQuietly, sweep_every_ms).unref()

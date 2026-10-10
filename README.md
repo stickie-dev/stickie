@@ -19,10 +19,13 @@ the only output.
   row, and so does the branch moving between checkouts. A review you are done
   with is archived from its row: it leaves the list and the list agents are
   given, keeps every note, and is brought back from *Archived* below — or by
-  writing a new note in it. Nothing on the overview deletes a review's notes
-  but removing its repository. Plus one activity feed across every
-  repository. A draft review in another repository used to be invisible until
-  you switched to it. Registered repositories are listed below the reviews:
+  writing a new note in it. A review left alone — no note, reply or read
+  mark, not opened, no commit on its branch — is archived after 60 days and
+  deleted after 90, both set in Settings → Reviews; it sits in *Archived*
+  for at least the difference first, a row says when it is due, and *keep*
+  on the row exempts it. Deleting takes the notes and keeps the activity
+  record of them. A draft review in another repository used to be invisible
+  until you switched to it. Registered repositories are listed below the reviews:
   add one by path, and remove one you are done with — which deletes its reviews
   and notes, or keeps them out of the way so that adding the path back brings
   them again, whichever Settings → Reviews says, asked about by name and note

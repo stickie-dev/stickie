@@ -8,8 +8,12 @@ import { Close, Refresh } from '../icons'
 import { icon_button } from '../ui'
 
 /**
- * What happened in this review, newest first. Reading the record back is what
- * keeps it honest — a table nothing looks at accumulates wrong rows quietly.
+ * What happened, newest first: in this review, or everywhere — every
+ * repository and review, including what outlived its review, a repository
+ * removed or a review expired. Everywhere was a table on the overview; with
+ * a panel for the record, a second copy of it there was one more place to
+ * look. Reading the record back is what keeps it honest — a table nothing
+ * looks at accumulates wrong rows quietly.
  */
 
 const phrases: Record<string, string> = {
@@ -27,8 +31,22 @@ const phrases: Record<string, string> = {
   'review.exported': 'took the notes to an agent',
   'review.archived': 'archived this review',
   'review.unarchived': 'brought this review back',
+  'review.kept': 'kept this review from expiring',
+  'review.unkept': 'let this review expire again',
+  'review.expired': 'deleted this review after it was left alone',
   'file.viewed': 'marked a file read',
   'file.unviewed': 'unmarked a file',
+  'repo.added': 'added a repository',
+  'repo.removed': 'removed a repository, and its reviews with it',
+  'repo.unregistered': 'took a repository out of the workspace',
+}
+
+type Scope = 'review' | 'everywhere'
+
+/** Who did it: what stickie did by itself says so rather than "someone". */
+function actorOf(entry: ActivityEntry): string {
+  if (entry.actorName !== null) return entry.actorName
+  return entry.detail?.automatic === true ? 'stickie' : 'someone'
 }
 
 function detailText(entry: ActivityEntry): string | null {
@@ -51,6 +69,13 @@ function detailText(entry: ActivityEntry): string | null {
     parts.push(`${String(d.imported)} imported`)
   }
   if (typeof d.toBaseSha === 'string') parts.push(d.toBaseSha.slice(0, 8))
+  // without it, four commit inspections in a row read as one line repeated
+  else if (typeof d.baseSha === 'string' && parts.length === 0) {
+    parts.push(d.baseSha.slice(0, 8))
+  }
+  if (typeof d.idleDays === 'number') {
+    parts.push(`left alone ${String(d.idleDays)} days`)
+  }
   return parts.length === 0 ? null : parts.join(' · ')
 }
 
@@ -59,18 +84,25 @@ export function ActivityPanel() {
   const threads = useReview((s) => s.threads)
   const viewed = useReview((s) => s.viewed)
   const showLower = useReview((s) => s.showLower)
+  const repos = useReview((s) => s.repos)
+  const [chosen, setChosen] = useState<Scope>('review')
+  // with no review open there is only everywhere to show
+  const scope: Scope = session === null ? 'everywhere' : chosen
   const [entries, setEntries] = useState<ActivityEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (session === null) return
     try {
-      setEntries(await api.activity(session.id))
+      setEntries(
+        scope === 'everywhere' || session === null
+          ? await api.workspaceActivity()
+          : await api.activity(session.id),
+      )
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [session])
+  }, [session, scope])
 
   // notes and viewed files are the two things the client changes, so their
   // state is the signal that something was recorded — no poll needed
@@ -95,6 +127,40 @@ export function ActivityPanel() {
           {entries === null ? '' : entries.length}
         </span>
         <span className="grow" />
+        <div
+          className="flex overflow-hidden rounded-md bg-overlay"
+          role="group"
+          aria-label="activity in"
+        >
+          {(
+            [
+              {
+                key: 'review',
+                label: 'review',
+                why: 'what happened in the review that is open',
+              },
+              {
+                key: 'everywhere',
+                label: 'all',
+                why: 'across every repository and review, including removed repositories and expired reviews',
+              },
+            ] as const
+          ).map((choice) => (
+            <button
+              key={choice.key}
+              className={`px-1.5 py-0.5 ${scope === choice.key ? 'bg-accent text-white' : 'text-soft hover:text-ink'}`}
+              title={choice.why}
+              aria-pressed={scope === choice.key}
+              disabled={choice.key === 'review' && session === null}
+              onClick={() => {
+                setEntries(null)
+                setChosen(choice.key)
+              }}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
         <button
           className={icon_button}
           title="reload"
@@ -141,12 +207,21 @@ export function ActivityPanel() {
                   className="w-16 shrink-0 text-right text-faint"
                 />
                 <span className="text-ink">
-                  <span className="font-medium">
-                    {entry.actorName ?? 'someone'}
-                  </span>{' '}
+                  {scope === 'everywhere' && entry.repoId !== null && (
+                    <span className="text-faint">
+                      {repos.find((r) => r.id === entry.repoId)?.name ?? ''}{' '}
+                    </span>
+                  )}
+                  <span className="font-medium">{actorOf(entry)}</span>{' '}
                   <span className="text-soft">
-                    {phrases[`${entry.subject}.${entry.action}`] ??
-                      `${entry.subject} ${entry.action}`}
+                    {/* across every review, "this review" is not one */}
+                    {(
+                      phrases[`${entry.subject}.${entry.action}`] ??
+                      `${entry.subject} ${entry.action}`
+                    ).replace(
+                      'this review',
+                      scope === 'everywhere' ? 'a review' : 'this review',
+                    )}
                   </span>
                 </span>
               </div>

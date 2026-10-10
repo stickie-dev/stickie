@@ -89,6 +89,10 @@ export interface SettingsState {
   removeMode: RemoveMode
   submitKey: SubmitKey
   noteDefault: NoteDefault
+  /** days left alone before a review is archived; null is never */
+  archiveAfterDays: number | null
+  /** days left alone before a review is deleted; null is never */
+  deleteAfterDays: number | null
   identity: {
     chosenName: string
     perRepo: {
@@ -278,6 +282,12 @@ export const api = {
       toJson<Thread>,
     ),
 
+  /** The record across every repository and review, newest first. */
+  workspaceActivity: (limit?: number) =>
+    fetch(
+      `/api/activity${limit === undefined ? '' : `?limit=${String(limit)}`}`,
+    ).then(toJson<ActivityEntry[]>),
+
   activity: (sessionId: number, limit?: number) =>
     fetch(
       `/api/sessions/${String(sessionId)}/activity${limit === undefined ? '' : `?limit=${String(limit)}`}`,
@@ -301,6 +311,8 @@ export const api = {
     removeMode?: RemoveMode
     submitKey?: SubmitKey
     noteDefault?: NoteDefault
+    archiveAfterDays?: number | null
+    deleteAfterDays?: number | null
   }) =>
     fetch('/api/settings', {
       method: 'PUT',
@@ -317,6 +329,12 @@ export const api = {
   /** Put a review away from the overview, or bring it back. Deletes nothing. */
   setArchived: (sessionId: number, archived: boolean) =>
     request(`/api/sessions/${sessionId}/archived`, 'PUT', { archived }).then(
+      toJson<Session>,
+    ),
+
+  /** Keep a review from expiring, or let it go again. */
+  setKept: (sessionId: number, kept: boolean) =>
+    request(`/api/sessions/${sessionId}/kept`, 'PUT', { kept }).then(
       toJson<Session>,
     ),
 

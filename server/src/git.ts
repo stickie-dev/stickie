@@ -281,6 +281,25 @@ export function parseRefNames(out: string): string[] {
     .filter((name) => name !== '' && !name.includes(' -> '))
 }
 
+/**
+ * When each local branch last had a commit, by name. One call for the whole
+ * repository: the expiry sweep asks it of every repository it looks at, and
+ * a commit on a review's branch is the review's work still going on.
+ */
+export async function branchTipDates(repo: string): Promise<Map<string, string>> {
+  const out = await gitOrNull(repo, [
+    'for-each-ref',
+    '--format=%(refname:short)%09%(committerdate:iso-strict)',
+    'refs/heads',
+  ])
+  const dates = new Map<string, string>()
+  for (const line of (out ?? '').split('\n')) {
+    const [name = '', when = ''] = line.split('\t')
+    if (name !== '' && when !== '') dates.set(name, when)
+  }
+  return dates
+}
+
 /** Every local branch, for asking whether one still exists. */
 export async function listBranchNames(repo: string): Promise<string[]> {
   const out = await gitOrNull(repo, [

@@ -32,10 +32,19 @@ import {
   filterReviews,
   renderReviewList,
 } from './export.js'
+import {
+  dueDates,
+  idleness,
+  policyProblem,
+  readClock,
+  readPolicy,
+  sweep,
+} from './expiry.js'
 import { Identity } from './identity.js'
 import type { Fetcher } from './mcp.js'
 import { handleMessage } from './mcp.js'
 import {
+  branchTipDates,
   changedFiles,
   commitFiles,
   defaultBranch,
@@ -122,6 +131,7 @@ const session_schema = z
     baseSha: z.string(),
     prevBaseRef: z.string().nullable().optional(),
     archivedAt: z.string().nullable().optional(),
+    keptAt: z.string().nullable().optional(),
     baseStale: z.boolean().optional(),
     baseDiverged: z.boolean().optional(),
     sourceGone: z.boolean().optional(),
@@ -391,6 +401,9 @@ const review_overview_schema = z
     sourceGone: z.boolean().optional(),
     merged: z.boolean().optional(),
     archivedAt: z.string().nullable(),
+    keptAt: z.string().nullable(),
+    archivesAt: z.string().nullable(),
+    deletesAt: z.string().nullable(),
     notes: note_counts_schema,
     filesRead: z.number().int(),
     agentReplies: z.number().int(),
@@ -410,7 +423,6 @@ const overview_schema = z
       }),
     ),
     reviews: z.array(review_overview_schema),
-    recent: z.array(activity_schema),
   })
   .openapi('Overview')
 
@@ -1057,6 +1069,9 @@ export function createApp(
       hub.ensureWatch(
         body.source.kind === 'worktree' ? body.source.value : repo.path,
       )
+      // opened: what keeps a review from expiring when nothing else happens
+      // in it but being read
+      await store.markSeen(session.id)
       // an existing review comes back with the base it is pinned to, which may
       // have been left behind since; saying so here is what lets a fresh load
       // offer the re-pin rather than waiting for the next file change
@@ -1124,6 +1139,44 @@ export function createApp(
       }
       const updated = (await store.getSession(session.id)) ?? session
       return c.json(updated, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/sessions/{id}/kept',
+      tags: ['sessions'],
+      summary: 'Keep a review from expiring, or let it go again',
+      description:
+        'A kept review is never archived or deleted for being left alone, ' +
+        'whatever Settings → Reviews says. Both directions are recorded.',
+      request: {
+        params: id_param,
+        body: json_body(z.object({ kept: z.boolean() })),
+      },
+      responses: {
+        200: json_response(session_schema, 'The review'),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const session = await store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      const { kept } = c.req.valid('json')
+      if (kept !== (session.keptAt != null)) {
+        await store.setKept(session.id, kept)
+        await record({
+          subject: 'review',
+          action: kept ? 'kept' : 'unkept',
+          actorId: (await identity.human(session.repoPath)).actor.id,
+          repoId: session.repoId,
+          sessionId: session.id,
+        })
+      }
+      return c.json((await store.getSession(session.id)) ?? session, 200)
     },
   )
 
@@ -1543,12 +1596,16 @@ export function createApp(
       },
     }),
     async (c) => {
-      const [repos, sessions, rollups, recent] = await Promise.all([
-        store.listRepos(),
-        store.listSessions(),
-        store.summarizeSessions(),
-        store.listActivity({}, 40),
-      ])
+      const [repos, sessions, rollups, expiry_facts, policy, since] =
+        await Promise.all([
+          store.listRepos(),
+          store.listSessions(),
+          store.summarizeSessions(),
+          store.expiryFacts(),
+          readPolicy(store),
+          readClock(store),
+        ])
+      const facts_of = new Map(expiry_facts.map((f) => [f.sessionId, f]))
 
       // a sha means nothing to read; its subject does. Gathered per repository
       // over the distinct revisions its reviews name, so the number of git
@@ -1611,11 +1668,13 @@ export function createApp(
        */
       const branch_names = new Map<number, Set<string>>()
       const landed = new Map<number, Map<string, Set<string>>>()
+      // when each branch last had a commit, which keeps a review from expiring
+      const tip_dates = new Map<number, Map<string, string>>()
       await Promise.all(
         repos.map(async (repo) => {
           const mine = sessions.filter((s) => s.repoId === repo.id)
           const bases = [...new Set(mine.map((s) => s.baseRef))]
-          const [names, merged] = await Promise.all([
+          const [names, merged, tips] = await Promise.all([
             listBranchNames(repo.path).catch(() => []),
             Promise.all(
               bases.map(
@@ -1626,9 +1685,11 @@ export function createApp(
                   ] as const,
               ),
             ),
+            branchTipDates(repo.path).catch(() => new Map<string, string>()),
           ])
           branch_names.set(repo.id, new Set(names))
           landed.set(repo.id, new Map(merged))
+          tip_dates.set(repo.id, tips)
         }),
       )
 
@@ -1670,6 +1731,22 @@ export function createApp(
             landed.get(session.repoId)?.get(session.baseRef)?.has(branch) ??
             false,
         }
+      }
+
+      /** When this review goes, if it is left alone; see expiry.ts. */
+      const dueOf = (
+        session: Session,
+      ): { archivesAt: string | null; deletesAt: string | null } => {
+        const facts = facts_of.get(session.id)
+        if (facts === undefined) return { archivesAt: null, deletesAt: null }
+        const tip =
+          facts.branch === null
+            ? null
+            : (tip_dates.get(session.repoId)?.get(facts.branch) ?? null)
+        const due = dueDates(idleness(facts, since, tip), policy)
+        const iso = (at: number | null) =>
+          at === null ? null : new Date(at).toISOString()
+        return { archivesAt: iso(due.archivesAt), deletesAt: iso(due.deletesAt) }
       }
 
       const empty: SessionRollup = {
@@ -1730,10 +1807,11 @@ export function createApp(
               },
               ...sourceFacts(session),
               archivedAt: session.archivedAt ?? null,
+              keptAt: session.keptAt ?? null,
+              ...dueOf(session),
               ...rollup,
             }
           }),
-          recent,
         },
         200,
       )
@@ -2476,6 +2554,29 @@ export function createApp(
   app.openapi(
     createRoute({
       method: 'get',
+      path: '/api/activity',
+      tags: ['sessions'],
+      summary: 'What happened across the whole workspace, newest first',
+      description:
+        'The same record as a review\'s activity, for every repository and ' +
+        'review at once — including what outlived its review: a repository ' +
+        'removed, a review expired.',
+      request: {
+        query: z.object({ limit: z.coerce.number().int().min(1).max(1000).optional() }),
+      },
+      responses: {
+        200: json_response(z.array(activity_schema), 'Activity'),
+      },
+    }),
+    async (c) => {
+      const { limit } = c.req.valid('query')
+      return c.json(await store.listActivity({}, limit ?? 200), 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
       path: '/api/sessions/{id}/activity',
       tags: ['sessions'],
       summary: 'What happened in this review, newest first',
@@ -2588,6 +2689,10 @@ export function createApp(
             /** whether a new note is a draft or goes straight to the agent */
             noteDefault: z.enum(note_defaults),
             resolvedNotes: z.enum(resolved_notes_modes),
+            /** days left alone before a review is archived; null is never */
+            archiveAfterDays: z.number().int().nullable(),
+            /** days left alone before a review is deleted; null is never */
+            deleteAfterDays: z.number().int().nullable(),
             identity: z.object({
               /** '' when nothing was set by hand and git config decides */
               chosenName: z.string(),
@@ -2630,8 +2735,11 @@ export function createApp(
       const config = gitlabConfig(settings)
       const stored_note_default = await store.getSetting('note_default')
       const stored_resolved_notes = await store.getSetting('resolved_notes')
+      const expiry = await readPolicy(store)
       return c.json(
         {
+          archiveAfterDays: expiry.archiveAfterDays,
+          deleteAfterDays: expiry.deleteAfterDays,
           gitlabUrl: settings.url,
           gitlabTokenEnv: settings.tokenEnv,
           hasStoredToken: settings.token !== null && settings.token !== '',
@@ -2710,6 +2818,9 @@ export function createApp(
             submitKey: z.enum(submit_keys).optional(),
             noteDefault: z.enum(note_defaults).optional(),
             resolvedNotes: z.enum(resolved_notes_modes).optional(),
+            /** null turns that step off */
+            archiveAfterDays: z.number().int().min(1).max(3650).nullable().optional(),
+            deleteAfterDays: z.number().int().min(1).max(3650).nullable().optional(),
           }),
         ),
       },
@@ -2723,6 +2834,35 @@ export function createApp(
     }),
     async (c) => {
       const body = c.req.valid('json')
+      // checked before anything is stored, against what the other number is
+      // now, so a refused pair leaves both as they were
+      if (body.archiveAfterDays !== undefined || body.deleteAfterDays !== undefined) {
+        const current = await readPolicy(store)
+        const wanted = {
+          archiveAfterDays:
+            body.archiveAfterDays === undefined
+              ? current.archiveAfterDays
+              : body.archiveAfterDays,
+          deleteAfterDays:
+            body.deleteAfterDays === undefined
+              ? current.deleteAfterDays
+              : body.deleteAfterDays,
+        }
+        const problem = policyProblem(wanted)
+        if (problem !== null) return c.json({ error: problem }, 400)
+        // '0' rather than '': clearing a setting brings back its default, and
+        // off has to be said
+        await store.setSetting(
+          'archive_after_days',
+          wanted.archiveAfterDays === null ? '0' : String(wanted.archiveAfterDays),
+        )
+        await store.setSetting(
+          'delete_after_days',
+          wanted.deleteAfterDays === null ? '0' : String(wanted.deleteAfterDays),
+        )
+        // new numbers take effect now, not at the next sweep hours away
+        void sweep(store)
+      }
       if (body.gitlabUrl !== undefined) {
         await store.setSetting('gitlab_url', body.gitlabUrl)
       }

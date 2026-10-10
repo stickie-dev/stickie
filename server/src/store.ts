@@ -36,6 +36,7 @@ interface SessionRow {
   mr_iid: number | null
   mr_project: string | null
   archived_at: string | Date | null
+  kept_at: string | Date | null
 }
 
 interface ActorRow {
@@ -352,11 +353,88 @@ export class Store {
   }
 
   /** Puts a review away from the overview, or brings it back. Deletes nothing. */
-  async setArchived(sessionId: number, archived: boolean): Promise<void> {
+  async setArchived(
+    sessionId: number,
+    archived: boolean,
+    at = new Date(),
+  ): Promise<void> {
     await this.db.run('update sessions set archived_at = ? where id = ?', [
-      archived ? new Date().toISOString() : null,
+      archived ? at.toISOString() : null,
       sessionId,
     ])
+  }
+
+  /** Keeps a review from expiring, or lets it go again. */
+  async setKept(sessionId: number, kept: boolean): Promise<void> {
+    await this.db.run('update sessions set kept_at = ? where id = ?', [
+      kept ? new Date().toISOString() : null,
+      sessionId,
+    ])
+  }
+
+  /** The review was opened: looking at it is using it. */
+  async markSeen(sessionId: number): Promise<void> {
+    await this.db.run('update sessions set seen_at = ? where id = ?', [
+      new Date().toISOString(),
+      sessionId,
+    ])
+  }
+
+  /**
+   * Deletes a review with its notes, replies and read marks. Its activity
+   * rows stay: they are plain ids, not foreign keys, so the record of what
+   * happened outlives what it happened to.
+   */
+  async deleteSession(sessionId: number): Promise<void> {
+    await this.db.run('delete from sessions where id = ?', [sessionId])
+  }
+
+  /**
+   * What the expiry policy needs about every review, in one query: when it
+   * was made, last opened, last had anything recorded, archived and kept, and
+   * how many notes it holds.
+   *
+   * An archive stickie made on its own is left out of "last recorded": it is
+   * not anyone using the review, and counting it would restart the clock it
+   * was the first step of. One a person made counts, as does bringing it back.
+   */
+  async expiryFacts(): Promise<ExpiryFacts[]> {
+    const rows = await this.db.all<{
+      id: number
+      repo_id: number
+      repo_path: string
+      branch: string | null
+      created_at: string | Date
+      seen_at: string | Date | null
+      archived_at: string | Date | null
+      kept_at: string | Date | null
+      last_at: string | Date | null
+      notes: number | string
+    }>(
+      `select s.id, s.repo_id, r.path as repo_path, s.branch, s.created_at,
+         s.seen_at, s.archived_at, s.kept_at,
+         (select max(a.at) from activity a
+            where a.session_id = s.id
+              and not (a.subject = 'review' and a.action = 'archived'
+                       and a.actor_id is null)) as last_at,
+         (select count(*) from threads t where t.session_id = s.id) as notes
+       from sessions s join repos r on r.id = s.repo_id
+       where r.removed_at is null`,
+    )
+    const text = (value: string | Date | null) =>
+      value == null ? null : toText(value)
+    return rows.map((row) => ({
+      sessionId: row.id,
+      repoId: row.repo_id,
+      repoPath: row.repo_path,
+      branch: row.branch,
+      createdAt: toText(row.created_at),
+      seenAt: text(row.seen_at),
+      archivedAt: text(row.archived_at),
+      keptAt: text(row.kept_at),
+      lastRecordedAt: text(row.last_at),
+      notes: Number(row.notes),
+    }))
   }
 
   /**
@@ -901,6 +979,19 @@ export class Store {
   }
 }
 
+export interface ExpiryFacts {
+  sessionId: number
+  repoId: number
+  repoPath: string
+  branch: string | null
+  createdAt: string
+  seenAt: string | null
+  archivedAt: string | null
+  keptAt: string | null
+  lastRecordedAt: string | null
+  notes: number
+}
+
 export interface SessionRollup {
   notes: NoteCounts
   filesRead: number
@@ -977,6 +1068,7 @@ function sessionFromRow(row: SessionRow): Session {
         ? null
         : { iid: Number(row.mr_iid), projectPath: row.mr_project },
     archivedAt: row.archived_at == null ? null : toText(row.archived_at),
+    keptAt: row.kept_at == null ? null : toText(row.kept_at),
   }
 }
 

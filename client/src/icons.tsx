@@ -243,6 +243,15 @@ export function Archive(props: IconProps) {
   )
 }
 
+/** Keep: a bookmark — this one stays, whatever the expiry setting says. */
+export function Keep(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7 4.5h10v15.5l-5-3.5-5 3.5z" />
+    </Icon>
+  )
+}
+
 /** Bring back from the archive: the same box, with something coming out. */
 export function Unarchive(props: IconProps) {
   return (

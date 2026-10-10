@@ -13,7 +13,7 @@ import { TimeAgo } from './TimeAgo'
 import { useReview } from '../store'
 import { Loading, Skeleton, SkeletonRows } from './Skeleton'
 import { ask } from '../confirm'
-import { Archive, Refresh, Unarchive } from '../icons'
+import { Archive, Keep, Refresh, Unarchive } from '../icons'
 import {
   badge,
   btn,
@@ -21,6 +21,7 @@ import {
   enter,
   field,
   icon_button,
+  icon_button_on,
   page,
   row,
   th,
@@ -52,6 +53,8 @@ const actions: Record<string, string> = {
   'review.exported': 'took the notes to an agent',
   'review.archived': 'archived the review',
   'review.unarchived': 'brought the review back',
+  'review.kept': 'kept the review from expiring',
+  'review.unkept': 'let the review expire again',
   'file.viewed': 'marked a file read',
   'file.unviewed': 'unmarked a file',
   'repo.added': 'added a repository',
@@ -120,6 +123,11 @@ interface ReviewRow {
   sessionIds: number[]
   /** put away from the list; the newest session speaks for the group */
   archived: boolean
+  /** kept from expiring */
+  kept: boolean
+  /** when it is archived and deleted if left alone; null when it will not be */
+  archivesAt: string | null
+  deletesAt: string | null
   /** how many bases it has been pinned to, this one included */
   bases: number
   notes: NoteCounts
@@ -160,6 +168,9 @@ function rows(reviews: ReviewOverview[]): ReviewRow[] {
         current,
         sessionIds: sessions.map((r) => r.sessionId),
         archived: current.archivedAt != null,
+        kept: current.keptAt != null,
+        archivesAt: current.archivesAt ?? null,
+        deletesAt: current.deletesAt ?? null,
         bases: sessions.length,
         notes: {
           total: sum((r) => r.notes.total),
@@ -184,6 +195,20 @@ function rows(reviews: ReviewOverview[]): ReviewRow[] {
       },
     ]
   })
+}
+
+const day_ms = 86_400_000
+
+/** How far off an expiry is shown from: further than this is not news. */
+const expiry_warning_days = 14
+
+/** Whole days until a moment, never below zero. */
+function daysUntil(at: string): number {
+  return Math.max(0, Math.ceil((Date.parse(at) - Date.now()) / day_ms))
+}
+
+function inDays(days: number): string {
+  return days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${String(days)}d`
 }
 
 /**
@@ -239,22 +264,12 @@ function Comparing({ row }: { row: ReviewRow }) {
 }
 
 /**
- * What an activity row points at. A note event has a path; a review event has
- * none, and without something here four commit inspections in a row read as
- * the same line repeated.
+ * Who moved a row last. An archive with nobody behind it is stickie's own, by
+ * the expiry setting — a person archiving is always on the record by name.
  */
-function where(detail: Record<string, unknown> | null): string {
-  if (detail === null) return ''
-  if (typeof detail.path === 'string' && detail.path !== '') {
-    const line =
-      typeof detail.startLine === 'number' && detail.startLine > 0
-        ? `:L${String(detail.startLine)}`
-        : ''
-    return `${detail.path}${line}`
-  }
-  if (typeof detail.baseSha === 'string') return detail.baseSha.slice(0, 8)
-  if (typeof detail.toBaseSha === 'string') return detail.toBaseSha.slice(0, 8)
-  return ''
+function actorOf(review: ReviewRow): string {
+  if (review.lastActorName !== null) return review.lastActorName
+  return review.lastAction === 'review.archived' ? 'stickie' : 'someone'
 }
 
 /** A zero is a dash, so a column of numbers can be read down. */
@@ -291,11 +306,14 @@ function ReviewsTable({
   reviews,
   loading,
   onArchive,
+  onKeep,
 }: {
   reviews: ReviewRow[]
   loading: boolean
   /** puts a row away, or brings an archived one back */
   onArchive: (review: ReviewRow) => void
+  /** keeps a row from expiring, or lets it go again */
+  onKeep: (review: ReviewRow) => void
 }) {
   const navigate = useNavigate()
   const sorted = [...reviews].sort((a, b) => {
@@ -387,6 +405,27 @@ function ReviewsTable({
                       gone
                     </span>
                   )}
+                  {/* what will happen to it, once it is close enough to matter;
+                      an archived review always says, since the next step is
+                      the last */}
+                  {review.archived && review.deletesAt !== null && (
+                    <span
+                      title={`deleted ${new Date(review.deletesAt).toLocaleDateString()} unless something happens in it first — its notes go, the record of them stays. Keep it, or bring it back, to stop that.`}
+                      className={`${badge} whitespace-nowrap bg-rose-500/10 text-rose-600 dark:text-rose-300`}
+                    >
+                      deleted {inDays(daysUntil(review.deletesAt))}
+                    </span>
+                  )}
+                  {!review.archived &&
+                    review.archivesAt !== null &&
+                    daysUntil(review.archivesAt) <= expiry_warning_days && (
+                      <span
+                        title={`archived ${new Date(review.archivesAt).toLocaleDateString()} unless something happens in it first — a note, a reply, opening it, a commit on its branch`}
+                        className={`${badge} whitespace-nowrap bg-amber-500/15 text-amber-700 dark:text-amber-300`}
+                      >
+                        archived {inDays(daysUntil(review.archivesAt))}
+                      </span>
+                    )}
                   {review.merged && !review.sourceGone && (
                     <span
                       title={`already contained in ${review.current.baseRef} — this branch has landed`}
@@ -420,17 +459,39 @@ function ReviewsTable({
                     <TimeAgo at={review.lastActivityAt} /> ·{' '}
                     <span
                       className="inline-block max-w-40 truncate align-bottom"
-                      title={review.lastActorName ?? 'someone'}
+                      title={actorOf(review)}
                     >
-                      {review.lastActorName ?? 'someone'}
+                      {actorOf(review)}
                     </span>{' '}
                     {actions[review.lastAction] ?? review.lastAction}
                   </>
                 )}
               </td>
-              <td className="px-2 py-1 text-right">
-                {/* on hover, like a repository's remove: it is the rare thing
-                    to do with a row, and a column of boxes is noise */}
+              <td className="px-2 py-1 text-right whitespace-nowrap">
+                {/* on hover, like a repository's remove: they are the rare
+                    things to do with a row, and a column of boxes is noise.
+                    Keep stays lit once set, since it says something about
+                    the row */}
+                <button
+                  className={
+                    review.kept
+                      ? icon_button_on
+                      : `opacity-0 group-hover:opacity-100 focus:opacity-100 ${icon_button}`
+                  }
+                  title={
+                    review.kept
+                      ? 'kept: never archived or deleted for being left alone\nclick to let it expire again'
+                      : 'keep this review — never archived or deleted for being left alone'
+                  }
+                  aria-label={`keep the review of ${review.repoName}`}
+                  aria-pressed={review.kept}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onKeep(review)
+                  }}
+                >
+                  <Keep />
+                </button>
                 <button
                   className={`opacity-0 group-hover:opacity-100 focus:opacity-100 ${icon_button}`}
                   title={
@@ -605,6 +666,21 @@ export function OverviewPage() {
     [load],
   )
 
+  const keepReview = useCallback(
+    async (review: ReviewRow) => {
+      try {
+        for (const id of review.sessionIds) {
+          await api.setKept(id, !review.kept)
+        }
+        await load()
+        setError(null)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [load],
+  )
+
   useEffect(() => {
     void load()
   }, [load, repos_in_store])
@@ -617,7 +693,6 @@ export function OverviewPage() {
   const substantial = all_rows.filter(worthListing)
   const idle = all_rows.filter((r) => !worthListing(r))
   const listed = showIdle ? all_rows : substantial
-  const repo_names = new Map(repos.map((repo) => [repo.id, repo.name]))
   const needs_you = all_rows.filter((r) => statusOf(r) === 'needs-you').length
   const drafts = all_rows.reduce((n, r) => n + r.notes.pending, 0)
 
@@ -685,6 +760,7 @@ export function OverviewPage() {
                 reviews={listed}
                 loading={loading}
                 onArchive={(review) => void archiveReview(review)}
+                onKeep={(review) => void keepReview(review)}
               />
             </div>
             <p className="mt-2 max-w-3xl text-dense leading-relaxed text-faint">
@@ -733,12 +809,14 @@ export function OverviewPage() {
                     reviews={archived}
                     loading={false}
                     onArchive={(review) => void archiveReview(review)}
+                    onKeep={(review) => void keepReview(review)}
                   />
                 </div>
                 <p className="mt-2 max-w-3xl text-dense leading-relaxed text-faint">
                   Off the list above and out of what agents are shown, with
                   every note kept. Each still opens; writing a new note in one
-                  brings it back by itself.
+                  brings it back by itself. One left alone long enough is
+                  deleted, as Settings → Reviews says, unless it is kept.
                 </p>
               </>
             )}
@@ -871,62 +949,6 @@ export function OverviewPage() {
           </div>
         </section>
 
-        <section>
-          <h2 className="mb-2 text-note font-semibold text-ink">Activity</h2>
-          <div className={`overflow-x-auto ${card}`}>
-            <table className="w-full border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-edge">
-                  <Th>When</Th>
-                  <Th>Repository</Th>
-                  <Th>Who</Th>
-                  <Th>Did what</Th>
-                  <Th>Where</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {(overview?.recent ?? []).map((entry) => (
-                  <tr key={entry.id} className={row}>
-                    <td className="px-2 py-1.5 whitespace-nowrap text-faint">
-                      <TimeAgo at={entry.at} />
-                    </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap text-soft">
-                      {repo_names.get(entry.repoId ?? -1) ?? ''}
-                    </td>
-                    <td className="max-w-48 truncate px-2 py-1.5 text-ink">
-                      <span title={entry.actorName ?? 'someone'}>
-                        {entry.actorName ?? 'someone'}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1.5 text-soft">
-                      {actions[`${entry.subject}.${entry.action}`] ??
-                        `${entry.subject} ${entry.action}`}
-                    </td>
-                    <td className="px-2 py-1.5 font-mono text-faint">
-                      {where(entry.detail)}
-                    </td>
-                  </tr>
-                ))}
-                {loading && (
-                  <SkeletonRows
-                    rows={6}
-                    columns={['w-16', 'w-20', 'w-24', 'w-40', 'w-32']}
-                  />
-                )}
-                {overview !== null && overview.recent.length === 0 && (
-                  <tr>
-                    <td className="px-2 py-2 text-faint" colSpan={5}>
-                      Nothing recorded yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-2 text-dense text-faint">
-            From the append-only record, across every repository, newest first.
-          </p>
-        </section>
         </div>
       </div>
     </div>

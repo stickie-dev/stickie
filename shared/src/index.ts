@@ -80,6 +80,11 @@ export interface Session {
    * list agents are given, with every note kept. Null when it is not.
    */
   archivedAt?: string | null
+  /**
+   * When the reviewer said to keep it: it is then never archived or deleted
+   * for being left alone. Null when it is not kept.
+   */
+  keptAt?: string | null
   /** the base ref has moved on from baseSha, and the pin can follow it */
   baseStale?: boolean
   /**
@@ -260,6 +265,15 @@ export interface ReviewOverview {
   merged?: boolean
   /** when it was put away from the overview; null when it is not */
   archivedAt?: string | null
+  /** when it was kept from expiring; null when it is not */
+  keptAt?: string | null
+  /**
+   * When it will be archived, and when deleted, if nothing happens in it
+   * before then. Null when that will not happen: it is kept, the setting is
+   * off, or (for archiving) it already is.
+   */
+  archivesAt?: string | null
+  deletesAt?: string | null
   notes: NoteCounts
   /** how many files were opened and marked read */
   filesRead: number
@@ -298,8 +312,6 @@ export interface Overview {
   repos: RepoOverview[]
   /** newest review first */
   reviews: ReviewOverview[]
-  /** the most recent entries across every repository */
-  recent: ActivityEntry[]
 }
 
 export interface FsEvent {

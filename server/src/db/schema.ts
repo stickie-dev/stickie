@@ -216,6 +216,12 @@ const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
       // when the review was put away from the overview. Null is the normal
       // state; nothing is deleted, and restoring it is setting it back
       ['archived_at', 'archived_at text'],
+      // when the reviewer said to keep it: never archived or deleted for being
+      // left alone. Null is the normal state
+      ['kept_at', 'kept_at text'],
+      // the last time it was opened. Looking at a review is using it, and the
+      // activity record only notes the first time
+      ['seen_at', 'seen_at text'],
     ],
     postgres: [
       ['notes_issued', 'notes_issued integer not null default 0'],
@@ -229,6 +235,12 @@ const added_columns: Record<string, Record<Dialect, [string, string][]>> = {
       // when the review was put away from the overview. Null is the normal
       // state; nothing is deleted, and restoring it is setting it back
       ['archived_at', 'archived_at timestamptz'],
+      // when the reviewer said to keep it: never archived or deleted for being
+      // left alone. Null is the normal state
+      ['kept_at', 'kept_at timestamptz'],
+      // the last time it was opened. Looking at a review is using it, and the
+      // activity record only notes the first time
+      ['seen_at', 'seen_at timestamptz'],
     ],
   },
   threads: {
