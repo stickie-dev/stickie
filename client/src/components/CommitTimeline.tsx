@@ -6,7 +6,8 @@ import type { CommitBetween } from '../api'
 import { languageFor } from '../languages'
 import { useReview, wrapFor } from '../store'
 import { Loading, Skeleton, SkeletonCode } from './Skeleton'
-import { badge, btn, reveal_line_count } from '../ui'
+import { badge, btn, icon_button, icon_button_on, reveal_line_count } from '../ui'
+import { WrapLines } from '../icons'
 
 interface Step {
   /** the commit this column arrives at */
@@ -234,11 +235,17 @@ function FileTimeline({
         </span>
         <span className="grow" />
         <button
-          className={`shrink-0 ${btn()}`}
-          title="soft-wrap long lines in this file"
+          className={`shrink-0 ${wrap ? icon_button_on : icon_button}`}
+          title={
+            wrap
+              ? 'long lines in this file wrap\nclick to stop wrapping them'
+              : 'long lines in this file run on\nclick to soft-wrap them'
+          }
+          aria-label="wrap long lines in this file"
+          aria-pressed={wrap}
           onClick={() => toggleWrap(file.path)}
         >
-          {wrap ? 'no wrap' : 'wrap'}
+          <WrapLines />
         </button>
       </div>
       {steps === null ? (

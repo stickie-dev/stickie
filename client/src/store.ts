@@ -40,6 +40,7 @@ import {
   storeTabs,
   storeTree,
 } from './persistence'
+import { placeId } from './reorder'
 
 /**
  * Where a note is being written. A note is composed in one of three places —
@@ -519,7 +520,8 @@ interface ReviewState {
   ) => Promise<void>
   /** the order Copy prompt uses; ids not listed follow by age */
   promptOrder: number[]
-  moveInPromptOrder: (threadId: number, delta: number) => void
+  /** puts a note just before or after another in the prompt order */
+  placeInPromptOrder: (threadId: number, targetId: number, after: boolean) => void
   /** comma-separated extensions that open soft-wrapped, from settings */
   wrapExtensions: string
   setWrapExtensions: (extensions: string) => void
@@ -2305,16 +2307,9 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
 
-    moveInPromptOrder: (threadId, delta) => {
+    placeInPromptOrder: (threadId, targetId, after) => {
       const current = orderedThreadIds(get().threads, get().promptOrder)
-      const from = current.indexOf(threadId)
-      const to = from + delta
-      if (from === -1 || to < 0 || to >= current.length) return
-      const next = [...current]
-      const [moved] = next.splice(from, 1)
-      if (moved === undefined) return
-      next.splice(to, 0, moved)
-      set({ promptOrder: next })
+      set({ promptOrder: placeId(current, threadId, targetId, after) })
     },
 
     copyPrompt: async () => {

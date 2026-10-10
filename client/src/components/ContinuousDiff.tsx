@@ -17,8 +17,8 @@ import { CommentLayer } from './CommentLayer'
 import { ReviewDiff } from './ReviewDiff'
 import { FileName } from './FileName'
 import { Loading, SkeletonCode } from './Skeleton'
-import { ChevronDown, ChevronRight } from '../icons'
-import { btn, card, icon_button, reveal_line_count } from '../ui'
+import { ChevronDown, ChevronRight, WrapLines } from '../icons'
+import { card, icon_button, icon_button_on, reveal_line_count } from '../ui'
 
 type Attach = (
   instance: editor.IStandaloneCodeEditor,
@@ -232,11 +232,17 @@ function DiffSection({
         </label>
         <span className="grow" />
         <button
-          className={`shrink-0 ${btn()}`}
-          title="soft-wrap long lines in this file (also in the right-click menu)"
+          className={`shrink-0 ${wrap ? icon_button_on : icon_button}`}
+          title={
+            wrap
+              ? 'long lines in this file wrap\nclick to stop wrapping them (also in the right-click menu)'
+              : 'long lines in this file run on\nclick to soft-wrap them (also in the right-click menu)'
+          }
+          aria-label="wrap long lines in this file"
+          aria-pressed={wrap}
           onClick={() => toggleWrap(file.path)}
         >
-          {wrap ? 'no wrap' : 'wrap'}
+          <WrapLines />
         </button>
       </div>
       {folded && (

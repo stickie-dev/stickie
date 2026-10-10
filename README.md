@@ -83,8 +83,8 @@ the only output.
   different note
 - **Comments panel** — every note in the session in one list, in posting
   order, scrolling to new arrivals; notes still being written stay editable
-  here while you browse elsewhere for references, and *prompt order* lets you
-  arrange what *Copy prompt* emits
+  here while you browse elsewhere for references, and the prompt-order toggle
+  shows the order *Copy prompt* emits, where notes are dragged into place
 - **Multi-repo workspace** — every registered repository lives in one
   project tree (PyCharm attach-style); click into any repo's files, and
   cross-repo references (`@repo:path:L10`) capture naturally while a note

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { MergeRequest, MrThread, NoteDefault } from '../api'
 import { GrowingTextarea } from './GrowingTextarea'
 import { DraftForm } from './DraftForm'
@@ -17,9 +18,18 @@ import {
   StatusBadge,
 } from './NoteCard'
 import { ThreadCard } from './ThreadCard'
-import { ChevronDown, ChevronRight, Close } from '../icons'
+import { ChevronDown, ChevronRight, Close, Grip, Reorder } from '../icons'
+import { dropAt } from '../reorder'
 import { Loading, SkeletonCard } from './Skeleton'
-import { badge, btn, card, field, field_flush, icon_button } from '../ui'
+import {
+  badge,
+  btn,
+  card,
+  field,
+  field_flush,
+  icon_button,
+  icon_button_on,
+} from '../ui'
 
 /** A composer for notes that carry no code anchor. */
 function NoteComposer({ onDone }: { onDone: () => void }) {
@@ -106,8 +116,8 @@ function NoteComposer({ onDone }: { onDone: () => void }) {
  * reply, edit, or resolve without hunting through files. Notes still being
  * written stay here too, so a note survives — and stays editable — while
  * other files are visited to collect references. The list is in posting
- * order and follows new arrivals; *prompt order* switches it to the
- * arrangement Copy prompt uses, where notes can be moved by hand.
+ * order and follows new arrivals; the prompt-order toggle switches it to the
+ * arrangement Copy prompt uses, where each note has a handle to drag it by.
  */
 /**
  * The attached merge request's discussion, read from GitLab.
@@ -332,7 +342,7 @@ export function CommentsPanel() {
   const openRef = useReview((s) => s.openRef)
   const toggleComments = useReview((s) => s.toggleComments)
   const promptOrder = useReview((s) => s.promptOrder)
-  const moveInPromptOrder = useReview((s) => s.moveInPromptOrder)
+  const placeInPromptOrder = useReview((s) => s.placeInPromptOrder)
   // three tabs, not two: the merge request's discussion is a third thing to
   // look at, and it is not stickie's notes — it is read from GitLab and shown
   const tab = useReview((s) => s.commentsTab)
@@ -346,6 +356,11 @@ export function CommentsPanel() {
   const [arranging, setArranging] = useState(false)
   const [composing, setComposing] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
+  /** the note being dragged, and where letting go would put it */
+  const [dragging, setDragging] = useState<{
+    id: number
+    over: { id: number; after: boolean } | null
+  } | null>(null)
 
   const visible = useMemo(() => {
     const filtered = openOnly
@@ -371,6 +386,53 @@ export function CommentsPanel() {
     const node = listRef.current?.querySelector(`[data-thread="${newest}"]`)
     node?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [threads, arranging])
+
+  /*
+   * A note is dragged by its handle rather than by the card, since the card is
+   * text to select and buttons to press. Pointer events and not the browser's
+   * drag and drop: the drop is worked out from where the cards are, so the gap
+   * between two of them is a place to land too, and the list scrolls when the
+   * pointer is held at either end of it.
+   */
+  const startDrag = (id: number, event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    const handle = event.currentTarget
+    handle.setPointerCapture(event.pointerId)
+    let over: { id: number; after: boolean } | null = null
+    setDragging({ id, over })
+    const move = (e: PointerEvent) => {
+      const list = listRef.current
+      if (list === null) return
+      const box = list.getBoundingClientRect()
+      if (e.clientY < box.top + 24) list.scrollBy(0, -16)
+      else if (e.clientY > box.bottom - 24) list.scrollBy(0, 16)
+      const cards = [
+        ...list.querySelectorAll<HTMLElement>('[data-thread]'),
+      ].map((node) => {
+        const rect = node.getBoundingClientRect()
+        return {
+          id: Number(node.dataset.thread),
+          top: rect.top,
+          bottom: rect.bottom,
+        }
+      })
+      over = dropAt(cards, e.clientY)
+      setDragging({ id, over })
+    }
+    const end = (e: PointerEvent) => {
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', end)
+      handle.removeEventListener('pointercancel', end)
+      if (e.type === 'pointerup' && over !== null) {
+        placeInPromptOrder(id, over.id, over.after)
+      }
+      setDragging(null)
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', end)
+    handle.addEventListener('pointercancel', end)
+  }
 
   // what each filter would show, so the choice does not have to be made blind
   const unresolved = threads.filter((t) => t.status !== 'resolved').length
@@ -464,11 +526,17 @@ export function CommentsPanel() {
         </div>
         <span className="grow" />
         <button
-          className={`rounded px-1.5 py-0.5 ${arranging ? 'bg-accent/15 text-accent' : 'text-soft hover:bg-overlay hover:text-ink'}`}
-          title="show the order Copy prompt uses, and rearrange it"
+          className={arranging ? icon_button_on : icon_button}
+          title={
+            arranging
+              ? 'prompt order: the order Copy prompt uses — drag a note by its handle to move it\nclick for the order they were written in'
+              : 'the order they were written in\nclick for the order Copy prompt uses, and rearrange it'
+          }
+          aria-label="prompt order"
+          aria-pressed={arranging}
           onClick={() => setArranging(!arranging)}
         >
-          prompt order
+          <Reorder />
         </button>
       </div>
       {tab === 'mr' && (
@@ -484,7 +552,21 @@ export function CommentsPanel() {
         className={`min-h-0 grow space-y-3 overflow-y-auto px-2 py-3 ${tab === 'mr' ? 'hidden' : ''}`}
       >
         {visible.map((thread, index) => (
-          <div key={thread.id} data-thread={thread.id}>
+          <div
+            key={thread.id}
+            data-thread={thread.id}
+            className={`relative ${dragging?.id === thread.id ? 'opacity-40' : ''}`}
+          >
+            {/* where the note being dragged would land, in the gap beside
+                this one */}
+            {dragging !== null &&
+              dragging.over?.id === thread.id &&
+              dragging.id !== thread.id && (
+                <span
+                  className={`absolute inset-x-0 h-0.5 rounded-full bg-accent ${dragging.over.after ? '-bottom-[7px]' : '-top-[7px]'}`}
+                  aria-hidden="true"
+                />
+              )}
             <div className="mb-1 flex items-center gap-2">
               {thread.startLine === 0 ? (
                 <span className="min-w-0 truncate font-mono text-xs text-soft">
@@ -502,23 +584,25 @@ export function CommentsPanel() {
               <span className="grow" />
               {/* the card carries its own time now, in its header */}
               {arranging && (
-                <span className="flex shrink-0 items-center gap-0.5 text-xs text-soft">
-                  <span className="mr-1 text-faint">{index + 1}</span>
+                <span className="flex shrink-0 items-center gap-1 text-xs">
+                  <span className="text-faint tabular-nums">{index + 1}</span>
+                  {/* the arrow keys move it too, against the note shown next
+                      to it, for anyone not dragging */}
                   <button
-                    className={btn('text', 'px-1.5 py-0.5')}
-                    title="earlier in the prompt"
-                    disabled={index === 0}
-                    onClick={() => moveInPromptOrder(thread.id, -1)}
+                    className={`cursor-grab touch-none active:cursor-grabbing ${icon_button}`}
+                    title={'drag to move it in the prompt\nor ↑ ↓ while this is focused'}
+                    aria-label={`move note ${String(index + 1)} in the prompt`}
+                    onPointerDown={(e) => startDrag(thread.id, e)}
+                    onKeyDown={(e) => {
+                      const above = e.key === 'ArrowUp' ? visible[index - 1] : undefined
+                      const below = e.key === 'ArrowDown' ? visible[index + 1] : undefined
+                      if (above === undefined && below === undefined) return
+                      e.preventDefault()
+                      if (above !== undefined) placeInPromptOrder(thread.id, above.id, false)
+                      if (below !== undefined) placeInPromptOrder(thread.id, below.id, true)
+                    }}
                   >
-                    ↑
-                  </button>
-                  <button
-                    className={btn('text', 'px-1.5 py-0.5')}
-                    title="later in the prompt"
-                    disabled={index === visible.length - 1}
-                    onClick={() => moveInPromptOrder(thread.id, 1)}
-                  >
-                    ↓
+                    <Grip />
                   </button>
                 </span>
               )}

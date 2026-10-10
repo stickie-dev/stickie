@@ -233,6 +233,31 @@ export function WrapLines(props: IconProps) {
   )
 }
 
+/** Lines in an order that can be changed: the prompt order. */
+export function Reorder(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 7h10M4 12h10M4 17h10M19 5v14M16.5 7.5 19 5l2.5 2.5M16.5 16.5 19 19l2.5-2.5" />
+    </Icon>
+  )
+}
+
+/** Something to take hold of and drag. */
+export function Grip(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <g fill="currentColor" stroke="none">
+        <circle cx="9" cy="6" r="1.5" />
+        <circle cx="15" cy="6" r="1.5" />
+        <circle cx="9" cy="12" r="1.5" />
+        <circle cx="15" cy="12" r="1.5" />
+        <circle cx="9" cy="18" r="1.5" />
+        <circle cx="15" cy="18" r="1.5" />
+      </g>
+    </Icon>
+  )
+}
+
 export function Clipboard(props: IconProps) {
   return (
     <Icon {...props}>
