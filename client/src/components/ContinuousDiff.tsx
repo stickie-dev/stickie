@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { DiffEditor, Editor } from '@monaco-editor/react'
+import { Editor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import type { ChangedFile, FileContent, Side } from '@stickie/shared'
 import { cachedFile } from '../fileCache'
@@ -14,6 +14,7 @@ import {
 import { languageFor } from '../languages'
 import { collapsedFor, useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
+import { ReviewDiff } from './ReviewDiff'
 import { FileName } from './FileName'
 import { Loading, SkeletonCode } from './Skeleton'
 import { ChevronDown, ChevronRight } from '../icons'
@@ -264,7 +265,8 @@ function DiffSection({
       )}
       {!folded && loaded && !binary && has_both && (
         <div className="overflow-hidden rounded-b-lg" style={{ height }}>
-          <DiffEditor
+          <ReviewDiff
+            document={`${String(sessionId)}:${file.path}`}
             original={base?.content ?? ''}
             modified={source?.content ?? ''}
             language={language}

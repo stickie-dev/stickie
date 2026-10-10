@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { DiffEditor, Editor } from '@monaco-editor/react'
+import { Editor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { editor_font, monaco } from '../monacoSetup'
 import type { ChangedFile, Side } from '@stickie/shared'
@@ -11,6 +11,7 @@ import { languageFor } from '../languages'
 import { formatRoute } from '../routes'
 import { activeFiles, collapsedFor, fontShift, useReview, wrapFor } from '../store'
 import { CommentLayer } from './CommentLayer'
+import { ReviewDiff } from './ReviewDiff'
 import { CommitTimeline } from './CommitTimeline'
 import { ContinuousDiff } from './ContinuousDiff'
 import { Loading, SkeletonCode } from './Skeleton'
@@ -811,7 +812,8 @@ export function FileView() {
         )}
         {!binary && !loading && has_both && (
           <>
-            <DiffEditor
+            <ReviewDiff
+              document={`${String(session?.id ?? 0)}:${sourceContent?.path ?? baseContent?.path ?? ''}`}
               original={baseContent?.content ?? ''}
               modified={sourceContent?.content ?? ''}
               language={language}
