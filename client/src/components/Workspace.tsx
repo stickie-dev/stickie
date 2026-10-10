@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { paneWidth } from '../panes'
+import type { Page } from '../routes'
 import { glass } from '../ui'
 import { useReview } from '../store'
 import { ActivityPanel } from './ActivityPanel'
@@ -7,6 +8,7 @@ import { CommentsPanel } from './CommentsPanel'
 import { CommitsPanel } from './CommitsPanel'
 import { FileTree } from './FileTree'
 import { FileView } from './FileView'
+import { PageArea } from './PageArea'
 import { SearchOverlay } from './SearchOverlay'
 import { SidePane } from './SidePane'
 import { StatusBar } from './StatusBar'
@@ -105,15 +107,18 @@ function useAutoRepin(): void {
 /**
  * The review surface: everything whose state is expensive to rebuild —
  * mounted Monaco editors, the flow's scroll position and section heights, the
- * tab set. It is mounted on the first visit to a review address and then
- * stays mounted for the rest of the session, with the other pages drawn over
- * it, so coming back lands the reader exactly where they left.
+ * tab set. It is the one frame every view is drawn in, mounted for the whole
+ * session: Home and Settings are tabs in it, shown in the main area over the
+ * review, so the tree, the tabs and the footer never move and coming back to
+ * the review lands the reader exactly where they left.
  *
- * `active` is false while a page covers it: `inert` takes the covered tree out
- * of focus and the accessibility tree, and anything listening on `window`
- * checks `reviewActive` for itself.
+ * `page` says what is in front. While it is Home or Settings, only the review
+ * underneath them is `inert` — the tree, the tab strip and the footer are
+ * still the reader's — and anything listening on `window` checks
+ * `reviewActive` for itself.
  */
-export function Workspace({ active }: { active: boolean }) {
+export function Workspace({ page }: { page: Page }) {
+  const active = page.kind !== 'home' && page.kind !== 'settings'
   const setSearchOpen = useReview((s) => s.setSearchOpen)
   const commentsOpen = useReview((s) => s.commentsOpen)
   const activityOpen = useReview((s) => s.activityOpen)
@@ -154,7 +159,7 @@ export function Workspace({ active }: { active: boolean }) {
   const treeRatio = useReview((s) => s.paneRatios.tree)
 
   return (
-    <div className="flex h-full min-h-0 flex-col" inert={!active}>
+    <div className="flex h-full min-h-0 flex-col">
       <TopBar />
       <div className="flex min-h-0 grow flex-col">
         {/* the row the pane fractions are of; measured here rather than from
@@ -171,16 +176,22 @@ export function Workspace({ active }: { active: boolean }) {
           </aside>
           <PaneResizer pane="tree" side="left" bounds={bounds} />
           <main className="relative flex min-w-0 grow flex-col">
-            <TabBar />
-            <div className="min-h-0 grow">
-              <FileView />
+            <TabBar page={page} />
+            <div className="relative min-h-0 grow">
+              <div className="h-full" inert={!active}>
+                <FileView />
+              </div>
+              {!active && (
+                <div className="stickie-scroll absolute inset-0 z-20 overflow-auto bg-surface">
+                  <PageArea page={page} />
+                </div>
+              )}
             </div>
             {/*
-              Gated like the others: the find bar is `absolute z-40` and the
-              page layer drawn over the workspace is z-30, so an open find bar
-              stayed on top of settings — visible, and unclickable, because
-              `inert` had taken the whole covered tree out. Its state lives in
-              the store, so it comes back exactly as it was.
+              Only over the review: the find bar searches the diff, and drawn
+              over Home or Settings it would float over a page it cannot find
+              anything in. Its state lives in the store, so it comes back
+              exactly as it was.
             */}
             {active && <FindBar />}
           </main>
@@ -194,10 +205,12 @@ export function Workspace({ active }: { active: boolean }) {
           {activityOpen && <ActivityPanel />}
         </div>
         <UsagesPanel />
-        <StatusBar />
+        <StatusBar reviewInFront={active} />
       </div>
-      {active && <DraftPill />}
-      {active && <SearchOverlay />}
+      {/* nothing covers the frame any more, so these are the reader's on
+          every tab: a note still being written, and search across everything */}
+      <DraftPill />
+      <SearchOverlay />
     </div>
   )
 }

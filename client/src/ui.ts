@@ -114,17 +114,22 @@ export const eyebrow =
   'text-meta font-medium tracking-[0.08em] text-faint uppercase'
 
 /**
- * The frame every full page is laid out in: fluid, so a laptop has no gutters
- * at all, with a ceiling so a table on a 34-inch screen does not stretch to
- * the width of the desk. One token because the overview and settings had
- * 72rem and 64rem, which made the left edge jump when you moved between them —
- * the thing a reader notices even when neither width is wrong.
+ * The frame Home and Settings are laid out in: fluid, so a laptop has no
+ * gutters at all, with a ceiling so a table on a 34-inch screen does not
+ * stretch to the width of the desk. One token because the overview and
+ * settings had 72rem and 64rem, which made the left edge jump when you moved
+ * between them — the thing a reader notices even when neither width is wrong.
+ *
+ * Aligned to the start of the tab rather than centred in it. Centred, each
+ * page sat in the middle of the window while the review beside it ran from
+ * edge to edge, and moving between them read as moving between applications;
+ * as tabs in the same frame they start where the diff starts.
  *
  * Prose and fields keep their own measure inside it (`Section` is 2xl): a
  * table wants width, a paragraph wants about eighty characters, and one frame
  * can hold both as long as it does not force either.
  */
-export const page = 'mx-auto w-full max-w-[100rem] px-6'
+export const page = 'w-full max-w-[100rem] px-6'
 
 /**
  * The bar across the top of a page, and the line under it.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
 import type { SettingsSection } from '../../routes'
 import { formatRoute, settings_sections } from '../../routes'
 import { AgentsSection } from './AgentsSection'
@@ -10,12 +10,9 @@ import { IdentitySection } from './IdentitySection'
 import { PromptSection } from './PromptSection'
 import { ReviewsSection } from './ReviewsSection'
 import { StorageSection } from './StorageSection'
-import { ThemeToggle } from '../ThemeToggle'
 import { useSettings } from './useSettings'
 import { Loading, Skeleton, SkeletonLines } from '../Skeleton'
-import { ArrowLeft } from '../../icons'
-import { enter, icon_button, motion, page, title_bar } from '../../ui'
-import { lastPlace } from '../../lastPlace'
+import { enter, motion, page } from '../../ui'
 
 const titles: Record<SettingsSection, string> = {
   identity: 'Identity',
@@ -64,7 +61,6 @@ const anchor = (name: SettingsSection) => `settings-${name}`
  */
 export function SettingsPage({ section }: { section: SettingsSection }) {
   const access = useSettings()
-  const navigate = useNavigate()
   const loading = access.state === null
 
   /** Which anchor is lit. The scroll owns this; the address only starts it. */
@@ -120,38 +116,13 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
 
   return (
     <div className="min-h-full">
-      <header className={`sticky top-0 z-10 py-2.5 text-xs ${title_bar}`}>
-        <div
-          className={`stickie-titlebar-pad [--titlebar-pad:1.5rem] flex items-center gap-2.5 ${page}`}
-        >
-        <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
-        <span className="font-semibold tracking-tight text-ink">stickie</span>
-        <span className="text-faint">settings</span>
-        <span className="grow" />
-        {/*
-          Back to what the reader was looking at, which is not the same as one
-          step back in history: every settings section is an address, so history
-          walks Identity, Storage, GitLab before it ever leaves the page.
-          `lastPlace` is the last address that was not settings, and '/' when
-          settings was loaded directly.
-        */}
-        <ThemeToggle />
-        <button
-          className={icon_button}
-          title="back to what you were looking at"
-          aria-label="back to what you were looking at"
-          onClick={() => void navigate(lastPlace())}
-        >
-          <ArrowLeft />
-        </button>
-        </div>
-      </header>
-      {/* the same frame as the overview, so the left edge does not move when a
-          reader comes here from it */}
+      {/* a tab now: the app's bar is above it, and closing the tab is the way
+          back. The same frame as the overview, so the left edge does not move
+          when a reader goes from one to the other */}
       <div className={`flex ${page}`}>
         {/* sticky, since the page scrolls as one now and a section can be
             taller than the window */}
-        <nav className="sticky top-12 h-fit w-48 shrink-0 space-y-0.5 py-3">
+        <nav className="sticky top-0 h-fit w-48 shrink-0 space-y-0.5 py-3">
           {settings_sections.map((name) => (
             <Link
               key={name}

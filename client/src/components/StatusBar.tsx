@@ -3,6 +3,10 @@ import { activeFiles, useReview } from '../store'
 import { btn } from '../ui'
 import { SourceAndBase } from './SourceAndBase'
 
+/** The bar's frame, with the height a row of its buttons gives it either way. */
+const bar =
+  'relative flex min-h-[2.125rem] shrink-0 items-center gap-1 border-t border-edge bg-panel px-3 py-1 text-dense'
+
 interface Sibling {
   name: string
   path: string
@@ -20,7 +24,7 @@ interface Sibling {
  * path: the path changes length with every file, and a control that moves
  * every time you open something has to be looked for every time.
  */
-export function StatusBar() {
+export function StatusBar({ reviewInFront }: { reviewInFront: boolean }) {
   const repos = useReview((s) => s.repos)
   const activeRepoId = useReview((s) => s.activeRepoId)
   const selectedPath = useReview((s) => s.selectedPath)
@@ -37,7 +41,24 @@ export function StatusBar() {
   const [open, setOpen] = useState<number | null>(null)
 
   const repo = repos.find((r) => r.id === activeRepoId)
-  if (repo === undefined) return null
+  const live = (
+    <span
+      className={`ml-2 shrink-0 ${connected ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}
+      title={connected ? 'watching for changes' : 'not connected'}
+    >
+      ●
+    </span>
+  )
+  // Home and Settings keep the bar, at its height, so nothing above it moves
+  // when the reader changes tabs — but it stops describing a review that is
+  // not the one in front.
+  if (repo === undefined || !reviewInFront) {
+    return (
+      <div className={`${bar} justify-end`}>
+        {live}
+      </div>
+    )
+  }
 
   const segments =
     viewMode === 'commits' || selectedPath === null
@@ -148,7 +169,7 @@ export function StatusBar() {
   }
 
   return (
-    <div className="relative flex shrink-0 items-center gap-1 border-t border-edge bg-panel px-3 py-1 text-dense">
+    <div className={bar}>
       <button
         className={`shrink-0 ${btn()}`}
         title="make this repository active"
@@ -193,12 +214,7 @@ export function StatusBar() {
         {files.length} changed · {seen} viewed · {unresolved} unresolved
         {drafts > 0 ? ` · ${drafts} draft` : ''}
       </span>
-      <span
-        className={`ml-2 shrink-0 ${connected ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}
-        title={connected ? 'watching for changes' : 'not connected'}
-      >
-        ●
-      </span>
+      {live}
     </div>
   )
 }

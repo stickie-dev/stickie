@@ -9,12 +9,11 @@ import type {
 import { api } from '../api'
 import { formatRoute } from '../routes'
 import { timeValue } from '../time'
-import { ThemeToggle } from './ThemeToggle'
 import { TimeAgo } from './TimeAgo'
 import { useReview } from '../store'
 import { Loading, Skeleton, SkeletonRows } from './Skeleton'
 import { ask } from '../confirm'
-import { Refresh, Sliders } from '../icons'
+import { Refresh } from '../icons'
 import {
   badge,
   btn,
@@ -25,7 +24,6 @@ import {
   page,
   row,
   th,
-  title_bar,
 } from '../ui'
 
 /**
@@ -574,41 +572,12 @@ export function OverviewPage() {
   return (
     <div className="min-h-full">
       {/*
-        The bars stay full width — they belong to the window. What is read sits
-        in a column with a ceiling on it and centred, because on a wide screen
-        a table pinned to the left edge leaves the reader's eyes travelling
-        across empty space to reach the numbers on the right.
+        A tab now, in the frame every view shares, so the bar above is the
+        app's and this has none of its own; reload is the one thing the old
+        bar held that was about the overview, and it sits with what it reloads.
       */}
-      <header className={`sticky top-0 z-10 py-2.5 text-xs ${title_bar}`}>
-        <div
-          className={`stickie-titlebar-pad [--titlebar-pad:1.5rem] flex items-center gap-2.5 ${page}`}
-        >
-        <img src="/stickie.svg" alt="" className="h-4.5 w-4.5" />
-        <span className="font-semibold tracking-tight text-ink">stickie</span>
-        <span className="text-faint">overview</span>
-        <span className="grow" />
-        <button
-          className={icon_button}
-          title="reload"
-          aria-label="reload"
-          onClick={() => void load()}
-        >
-          <Refresh />
-        </button>
-        <ThemeToggle />
-        <Link
-          className={icon_button}
-          to={formatRoute({ kind: 'settings', section: 'identity' })}
-          title="settings"
-          aria-label="settings"
-        >
-          <Sliders />
-        </Link>
-        </div>
-      </header>
-
       <div>
-        <div className={`${page} pt-2 pb-10 ${enter}`}>
+        <div className={`${page} pt-5 pb-10 ${enter}`}>
         {error !== null && (
           <p className="mb-4 rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-600 dark:text-rose-300">
             {error}
@@ -624,9 +593,19 @@ export function OverviewPage() {
           </Loading>
         ) : (
           <>
-            <p className="mb-1 text-lede leading-snug font-medium text-ink">
-              {headline}
-            </p>
+            <div className="mb-1 flex items-center gap-2">
+              <p className="text-lede leading-snug font-medium text-ink">
+                {headline}
+              </p>
+              <button
+                className={icon_button}
+                title="reload the overview"
+                aria-label="reload the overview"
+                onClick={() => void load()}
+              >
+                <Refresh />
+              </button>
+            </div>
             <p className="mb-6 text-xs text-faint">
               {drafts > 0
                 ? `${String(drafts)} ${drafts === 1 ? 'note is still a draft' : 'notes are still drafts'}, so no agent can see ${drafts === 1 ? 'it' : 'them'} yet.`

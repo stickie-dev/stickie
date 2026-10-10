@@ -185,9 +185,16 @@ is about to go. A bar of pictograms is not denser than a bar of verbs, it is
 just quieter about what it does — and an icon-only button still needs its
 `aria-label`, because the picture is not the name.
 
-**All three headers wear the same bar.** `title_bar`: the overview, settings
-and the review sit on `surface` under a half-pixel rule, with the same
-controls in the same order at the right end. Installed, that bar *is* the
+**One frame, one bar, and Home and Settings are tabs in it.** The workspace
+is the frame every view is drawn in, mounted for the whole session. Home and
+Settings lead the tab strip and are shown in the main area over the review
+(`PageArea`), so the tree, the tabs and the footer never move and the review
+keeps its editors underneath. They used to be pages drawn over the whole
+window, each with a bar of its own and a centred layout, and moving between
+them and a review read as moving between applications.
+
+So there is one bar, `TopBar`, on `surface` under a half-pixel rule, and it
+holds only what is the same whichever tab is in front. Installed, that bar *is* the
 window's title bar — the manifest asks for `window-controls-overlay`, so there
 is no strip of browser chrome above it; `.stickie-titlebar` makes it draggable and
 `.stickie-titlebar-pad` keeps its contents out from under the window buttons at
@@ -197,7 +204,7 @@ extensions button stay in that band — they are not the page's to remove — bu
 they now sit on stickie's surface rather than on a blue strip. The review's used to be a
 panel-filled strip of its own with a full hairline under it, a few pixels
 above the tab strip's own — two lines, and moving between the three pages read
-as moving between three applications. Half a pixel is one device pixel on a 2×
+as moving between applications. Half a pixel is one device pixel on a 2×
 screen and lighter than a hairline on a 1× one, which is the whole intent: it
 should say "the chrome ends here", not "this is the edge of a box".
 
@@ -228,11 +235,12 @@ should be squinted at to fit another line — and tightens the line from 1.7× t
 1.6×. That is the only place a component is allowed to know which mode it is
 in.
 
-**One frame per page.** `page` is fluid with a ceiling: no gutters on a laptop,
-and a nine-column table does not stretch across a 34-inch screen. Prose keeps
-its own measure inside it (`Section` is 2xl). Both full pages use it for their
-header *and* their content, so the left edge does not move when a reader goes
-from one to the other.
+**Home and Settings share one frame.** `page` is fluid with a ceiling: no
+gutters on a laptop, and a nine-column table does not stretch across a 34-inch
+screen. Prose keeps its own measure inside it (`Section` is 2xl). It is aligned
+to the start of the tab rather than centred in it, so both begin where the diff
+begins, and the left edge does not move when a reader goes from one to the
+other.
 
 **A page has one scroller.** Two nested ones both reserve a scrollbar gutter,
 which puts a header back out of step with the content under it — and a page
@@ -240,13 +248,20 @@ that centres its content shifts by half a scrollbar the moment it overflows.
 So: `scrollbar-gutter: stable` (`.stickie-scroll`) on the one scroller, the header
 sticky inside it.
 
-**Anything the workspace floats belongs behind `active`.** The review stays
-mounted under the pages drawn over it, and is `inert` while covered. A
-floating child that is not gated on `active` — the find bar, the search
-overlay, the draft pill — keeps painting over the page on top of it and cannot
-be clicked, because `inert` has taken it out of the tree it is drawn above:
-visible and dead, which is the worst of the two. Their state lives in the
-store, so gating the mount costs nothing.
+**Only the review is covered, and only by Home or Settings.** While one of
+them is in front, the review underneath is `inert` and nothing else is: the
+tree, the tabs, the footer, the search overlay and the draft pill are the
+reader's on every tab. What floats over the *review* — the find bar — is gated
+on the review being in front, or it paints over a page it cannot find
+anything in. Its state lives in the store, so gating the mount costs nothing.
+
+Using the tree or a review's tab while Home or Settings is in front brings the
+review forward, and that is decided by `reviewAsk`, never by the workspace
+changing. The workspace settles on its own — restoring the last session's
+tabs, starting a review — and none of that may pull a reader off a settings
+page they opened directly. An action a person takes on a review raises
+`bringReviewForward()` once it has landed; nothing else moves the address off
+Home or Settings.
 
 **A box you write a note in is `GrowingTextarea`.** All four of them — the
 draft in the diff, the panel's composer, a reply, an edit — start at two rows,
@@ -273,10 +288,13 @@ an explicit **apply**. Since a save re-reads the whole settings object,
 `useFieldValue` keeps a field the reader is editing from being overwritten by
 a save somewhere else on the page.
 
-**Where a control lives says what it acts on.** The top bar is the workspace
-and the review — source, base, search, the panels, the theme, settings. The
-menu at the end of the tabs is the diff: how it is drawn, and what can be done
-with it. The status bar carries counts, so nothing else should.
+**Where a control lives says what it acts on.** The top bar is the app —
+search, the panels, the theme, settings — and the same on every tab. The footer
+is the review in front, described: where you are in it, what it is of and read
+against (changeable where they are shown, with their warnings), and what it
+still owes you. Off a review it keeps its height and its connection dot, and
+stops describing a review that is not the one being looked at. The menu at the
+end of the tabs is the diff: how it is drawn, and what can be done with it.
 
 ### Monaco, and four things it will do to you
 

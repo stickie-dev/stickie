@@ -1,4 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
+import { lastPlace } from '../lastPlace'
+import type { Page } from '../routes'
+import { formatRoute } from '../routes'
 import { fileIconUrl } from '../fileIcons'
 import type { Tab } from '../store'
 import { useReview } from '../store'
@@ -24,8 +28,24 @@ const fallback_width = 140
  * rather than by asking for it, so closing one is hiding a view and not
  * discarding anything: going back to that repo's diff makes it again. A tab
  * that alone refused to close read as a tab that was stuck.
+ *
+ * Home and Settings lead the strip. They are not tabs of a review — they
+ * belong to the address, not the store — so they sit outside the measured
+ * strip, and which tab is lit follows what is in front: a review tab is only
+ * lit while a review is. Home is the one tab that does not close, since it is
+ * where every review is reached from.
  */
-export function TabBar() {
+export function TabBar({ page }: { page: Page }) {
+  const navigate = useNavigate()
+  const settingsTab = useReview((s) => s.settingsTab)
+  const setSettingsTab = useReview((s) => s.setSettingsTab)
+  const bringReviewForward = useReview((s) => s.bringReviewForward)
+  const front =
+    page.kind === 'home'
+      ? 'home'
+      : page.kind === 'settings'
+        ? 'settings'
+        : 'review'
   const tabs = useReview((s) => s.tabs)
   const activeTabId = useReview((s) => s.activeTabId)
   const activateTab = useReview((s) => s.activateTab)
@@ -147,16 +167,40 @@ export function TabBar() {
 
   // closing the last tab is somewhere a reader can be, and it is exactly where
   // opening something is the only thing left to do
-  if (tabs.length === 0) {
-    return (
-      <div className="flex shrink-0 items-stretch border-b border-edge bg-surface px-2 py-1 text-xs">
-        <OpenRepoMenu />
-      </div>
-    )
+  /** A review's tab, chosen — which from Home or Settings means going back to it. */
+  const choose = (id: number) => {
+    void activateTab(id).then(() => bringReviewForward())
   }
 
+  const fixedTab = (
+    label: string,
+    lit: boolean,
+    open: () => void,
+    close?: () => void,
+  ) => (
+    <div
+      className={`group flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 ${motion} ${
+        lit
+          ? 'bg-panel text-ink shadow-soft'
+          : 'text-soft hover:bg-overlay/70 hover:text-ink'
+      }`}
+    >
+      <button onClick={open}>{label}</button>
+      {close !== undefined && (
+        <button
+          className={`shrink-0 rounded-sm px-0.5 text-faint opacity-0 group-hover:opacity-100 hover:bg-overlay hover:text-ink ${motion}`}
+          title="close tab"
+          aria-label={`close ${label}`}
+          onClick={close}
+        >
+          <Close className="h-3 w-3" />
+        </button>
+      )}
+    </div>
+  )
+
   const tabButton = (tab: Tab) => {
-    const is_active = tab.id === activeTabId
+    const is_active = front === 'review' && tab.id === activeTabId
     const icon =
       tab.kind === 'file' && tab.path !== undefined
         ? fileIconUrl(tab.path.split('/').at(-1) ?? '')
@@ -174,7 +218,7 @@ export function TabBar() {
         <button
           className="flex min-w-0 items-center gap-1.5"
           title={titleOf(tab)}
-          onClick={() => void activateTab(tab.id)}
+          onClick={() => choose(tab.id)}
         >
           {tab.kind === 'flow' ? (
             <span className="shrink-0 text-meta text-faint">⇄</span>
@@ -201,6 +245,22 @@ export function TabBar() {
 
   return (
     <div className="relative flex shrink-0 items-stretch border-b border-edge bg-surface px-1 py-1 text-xs">
+      <div className="flex shrink-0 items-stretch gap-0.5 pl-1">
+        {fixedTab('Home', front === 'home', () => void navigate('/'))}
+        {settingsTab !== null &&
+          fixedTab(
+            'Settings',
+            front === 'settings',
+            () =>
+              void navigate(
+                formatRoute({ kind: 'settings', section: settingsTab }),
+              ),
+            () => {
+              setSettingsTab(null)
+              if (front === 'settings') void navigate(lastPlace())
+            },
+          )}
+      </div>
       <div
         ref={stripRef}
         className="flex min-w-0 grow items-stretch gap-0.5 overflow-hidden px-1"
@@ -255,7 +315,7 @@ export function TabBar() {
                 <button
                   className="flex min-w-0 grow items-baseline gap-2 text-left"
                   onClick={() => {
-                    void activateTab(tab.id)
+                    choose(tab.id)
                     setListing(false)
                   }}
                 >

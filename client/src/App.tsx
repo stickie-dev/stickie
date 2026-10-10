@@ -3,10 +3,6 @@ import { Navigate, useLocation, useNavigate } from 'react-router'
 import type { ClientEvent, Thread } from '@stickie/shared'
 import { api } from './api'
 import './monacoSetup'
-import { AddRepo } from './components/AddRepo'
-import { OverviewPage } from './components/OverviewPage'
-import { OverviewSkeleton } from './components/OverviewSkeleton'
-import { SettingsPage } from './components/settings/SettingsPage'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { Toasts } from './components/Toasts'
 import { Workspace } from './components/Workspace'
@@ -66,6 +62,9 @@ function useRouteSync(
   const repos = useReview((s) => s.repos)
   const openAddress = useReview((s) => s.openAddress)
   const clearNoteHighlight = useReview((s) => s.clearNoteHighlight)
+  const reviewAsk = useReview((s) => s.reviewAsk)
+  /** The last ask acted on; see `reviewAsk`. */
+  const seen_ask = useRef(reviewAsk)
   const synced = useRef<{ address: string; here: string }>({
     address: '',
     here: '',
@@ -141,10 +140,20 @@ function useRouteSync(
       return
     }
 
-    // the store moved on its own: mirror it, and push so back walks the tabs.
-    // Only while the review is the page on screen — the workspace stays mounted
-    // and keeps settling underneath, and that must not drag the reader off a
-    // settings address they loaded directly.
+    // Home and Settings are in front: the workspace keeps settling underneath
+    // — restoring tabs, starting reviews — and none of that may drag the
+    // reader off them. Only a person asking for a review does, by using the
+    // tree or the tabs that are still right there.
+    if (page?.kind === 'home' || page?.kind === 'settings') {
+      if (reviewAsk !== seen_ask.current) {
+        seen_ask.current = reviewAsk
+        if (here !== null) navigate(formatRoute({ kind: 'review', ...here }))
+      }
+      return
+    }
+    seen_ask.current = reviewAsk
+
+    // the store moved on its own: mirror it, and push so back walks the tabs
     if (page?.kind !== 'review') return
     if (signature(here) !== last.here) {
       synced.current = { address, here: signature(here) }
@@ -159,6 +168,7 @@ function useRouteSync(
     openAddress,
     clearNoteHighlight,
     navigate,
+    reviewAsk,
   ])
 }
 
@@ -237,29 +247,6 @@ function useNoteAddress(page: Page | null, address: string): Here | null {
   return landed?.address === address ? landed.here : null
 }
 
-/**
- * What a non-review address shows. Drawn over the workspace rather than in
- * place of it, so the review surface behind keeps its editors and its scroll.
- */
-function PageLayer({ page }: { page: Page | null }) {
-  const repos = useReview((s) => s.repos)
-  const reposLoaded = useReview((s) => s.reposLoaded)
-
-  if (page === null) return <Navigate to="/" replace />
-
-  if (page.kind === 'settings') return <SettingsPage section={page.section} />
-
-  // the root is the overview, and the way in to a workspace with no repos yet.
-  // "No repositories" is an answer, so it waits to be sure of it rather than
-  // offering to add the first one every time a cold load takes a moment
-  if (page.kind === 'home') {
-    if (!reposLoaded) return <OverviewSkeleton />
-    return repos.length === 0 ? <AddRepo /> : <OverviewPage />
-  }
-
-  return null
-}
-
 export function App() {
   const location = useLocation()
   const init = useReview((s) => s.init)
@@ -282,12 +269,12 @@ export function App() {
   const note_here = useNoteAddress(page, address)
   useRouteSync(page, here, note_here)
 
-  // the workspace is expensive to build and cheap to keep, so it mounts on
-  // the first review address and is never taken down again
-  const [workspaceMounted, setWorkspaceMounted] = useState(on_review)
+  // settings is a tab that stays open once opened, on whichever section it
+  // was last on, until it is closed
+  const setSettingsTab = useReview((s) => s.setSettingsTab)
   useEffect(() => {
-    if (on_review) setWorkspaceMounted(true)
-  }, [on_review])
+    if (page?.kind === 'settings') setSettingsTab(page.section)
+  }, [page, setSettingsTab])
 
   useEffect(() => {
     setReviewActive(on_review)
@@ -362,12 +349,7 @@ export function App() {
         </div>
       )}
       <div className="relative min-h-0 grow">
-        {workspaceMounted && <Workspace active={on_review} />}
-        {!on_review && (
-          <div className="stickie-scroll absolute inset-0 z-30 overflow-auto bg-surface">
-            <PageLayer page={page} />
-          </div>
-        )}
+        {page === null ? <Navigate to="/" replace /> : <Workspace page={page} />}
       </div>
       <Toasts />
       <ConfirmDialog />

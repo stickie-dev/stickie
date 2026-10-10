@@ -26,7 +26,7 @@ import { cachedFile, prefetchFile } from './fileCache'
 import { flowReveal } from './flowNav'
 import type { Haystack, Match } from './find'
 import { findMatches as scanForMatches } from './find'
-import type { TabRef } from './routes'
+import type { SettingsSection, TabRef } from './routes'
 import type { PaneName } from './panes'
 import {
   previous_comments_tab,
@@ -200,6 +200,22 @@ interface ReviewState {
    * `inert` withholds focus from a subtree, not events from `window`.
    */
   reviewActive: boolean
+  /**
+   * Raised by something a person did that is about a review — a file in the
+   * tree, a review's tab, a commit, a search hit. Home and Settings are tabs
+   * in the same frame as the review, so the tree and the tabs are right there
+   * while they are in front; using them has to bring the review forward.
+   *
+   * A count rather than anything the address could be worked out from,
+   * because the workspace also changes on its own — restoring the last
+   * session's tabs, starting a review — and that must never pull a reader off
+   * a settings page they opened directly. Only this says a person asked.
+   */
+  reviewAsk: number
+  bringReviewForward: () => void
+  /** The settings tab, and which section it was last on; null when closed. */
+  settingsTab: SettingsSection | null
+  setSettingsTab: (section: SettingsSection | null) => void
   /** flow = continuous GitLab-style scroll of every changed file */
   viewMode: 'flow' | 'file' | 'commits'
   /**
@@ -1113,6 +1129,8 @@ export const useReview = create<ReviewState>((set, get) => {
     sidePane: null,
     searchOpen: false,
     reviewActive: false,
+    reviewAsk: 0,
+    settingsTab: null,
     activityOpen: false,
     viewMode: 'flow',
     commits: [],
@@ -1180,6 +1198,7 @@ export const useReview = create<ReviewState>((set, get) => {
         await get().selectRepo(target.id)
       }
       await get().openRef(hit.path, hit.line)
+      get().bringReviewForward()
     },
 
     openRef: async (path, line) => {
@@ -1201,6 +1220,7 @@ export const useReview = create<ReviewState>((set, get) => {
         }
       }
       await get().openRef(path, line)
+      get().bringReviewForward()
     },
 
     openSide: (repoId, path, line) => {
@@ -1293,6 +1313,8 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
     setReviewActive: (active) => set({ reviewActive: active }),
+    bringReviewForward: () => set({ reviewAsk: get().reviewAsk + 1 }),
+    setSettingsTab: (section) => set({ settingsTab: section }),
 
     navBack: async () => {
       const { navHistory, navIndex } = get()
@@ -1443,6 +1465,7 @@ export const useReview = create<ReviewState>((set, get) => {
       }
       if (!activeFiles(get()).some((f) => f.path === path)) {
         await get().openFile(path, status)
+        get().bringReviewForward()
         return
       }
       const review = get().session
@@ -1453,6 +1476,7 @@ export const useReview = create<ReviewState>((set, get) => {
       })
       get().showFileInFlow(path)
       get().flowSelect(path)
+      get().bringReviewForward()
     },
 
     openFileInRepo: async (repoId, path, status) => {
@@ -1460,6 +1484,7 @@ export const useReview = create<ReviewState>((set, get) => {
         await get().selectRepo(repoId)
       }
       await get().openFile(path, status)
+      get().bringReviewForward()
     },
 
     flowSelect: (path) => {
@@ -1518,6 +1543,7 @@ export const useReview = create<ReviewState>((set, get) => {
         viewMode: 'commits',
         activeTabId: ensureCommitsTab(repoId, review).id,
       })
+      get().bringReviewForward()
       let files: { path: string; shas: string[] }[]
       try {
         files = await api.commitFiles(repoId, shas)
@@ -1682,6 +1708,7 @@ export const useReview = create<ReviewState>((set, get) => {
       if (review !== null && review.repoId === repoId) {
         set({ activeTabId: ensureFlowTab(repoId, review.id).id })
       }
+      get().bringReviewForward()
     },
 
     selectRepo: async (repoId) => {
@@ -1847,10 +1874,12 @@ export const useReview = create<ReviewState>((set, get) => {
         get().showFileInFlow(draft.path)
         get().flowSelect(draft.path)
         flowReveal(draft.path, draft.endLine)
+        get().bringReviewForward()
         return
       }
       await get().openFile(draft.path)
       set({ reveal: { path: draft.path, line: draft.endLine, side: draft.side } })
+      get().bringReviewForward()
     },
 
     noteDraftSurface: (id, surface) => {
