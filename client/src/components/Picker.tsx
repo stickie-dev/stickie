@@ -37,6 +37,7 @@ export function Picker({
   title,
   label,
   className = '',
+  placement = 'below',
 }: {
   value: string
   groups: PickerGroup[]
@@ -45,6 +46,11 @@ export function Picker({
   /** names the control for a screen reader, since there is no `<label>` on it */
   label: string
   className?: string
+  /**
+   * Which way the list opens. Below by default; above for a picker in the
+   * footer, where below is the edge of the window.
+   */
+  placement?: 'below' | 'above'
 }) {
   const [open, setOpen] = useState(false)
   const [at, setAt] = useState(0)
@@ -162,9 +168,11 @@ export function Picker({
             role="listbox"
             aria-label={label}
             tabIndex={-1}
-            // downward from the trigger, and never taller than the room under
-            // it: the one thing the platform's own popup would not do here
-            className={`absolute top-full left-0 z-50 mt-1 max-h-[min(24rem,calc(100vh-5rem))] w-max min-w-full overflow-y-auto rounded-lg py-1 ${glass}`}
+            // away from the edge it sits against, and never taller than the
+            // room on that side: the one thing the platform's popup would not do
+            className={`absolute left-0 z-50 max-h-[min(24rem,calc(100vh-5rem))] w-max min-w-full overflow-y-auto rounded-lg py-1 ${glass} ${
+              placement === 'above' ? 'bottom-full mb-1' : 'top-full mt-1'
+            }`}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 e.preventDefault()

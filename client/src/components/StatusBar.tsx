@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { activeFiles, useReview } from '../store'
 import { btn } from '../ui'
+import { SourceAndBase } from './SourceAndBase'
 
 interface Sibling {
   name: string
@@ -10,9 +11,14 @@ interface Sibling {
 }
 
 /**
- * Bottom bar: where you are, and what the review still owes you. Every path
- * segment opens what sits beside it — folders and files at that level — so
- * the bar navigates rather than just reporting.
+ * Bottom bar: the review in front, described — where you are in it, what it
+ * is of and read against, and what it still owes you. Every path segment
+ * opens what sits beside it, and the source and base can be changed where
+ * they are shown, so the bar navigates rather than just reporting.
+ *
+ * Source and base sit at the right with the counts rather than after the
+ * path: the path changes length with every file, and a control that moves
+ * every time you open something has to be looked for every time.
  */
 export function StatusBar() {
   const repos = useReview((s) => s.repos)
@@ -180,6 +186,9 @@ export function StatusBar() {
         </span>
       )}
       <span className="grow" />
+      <div className="mr-3 flex min-w-0 shrink items-center gap-2">
+        <SourceAndBase />
+      </div>
       <span className="shrink-0 text-faint">
         {files.length} changed · {seen} viewed · {unresolved} unresolved
         {drafts > 0 ? ` · ${drafts} draft` : ''}
