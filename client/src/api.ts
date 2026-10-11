@@ -93,6 +93,10 @@ export interface SettingsState {
   archiveAfterDays: number | null
   /** days left alone before a review is deleted; null is never */
   deleteAfterDays: number | null
+  /** days the activity record is kept; null is for ever */
+  activityKeepDays: number | null
+  /** the port stickie starts on, the one it is on now, and whether env decides */
+  port: { configured: number; running: number; fromEnv: boolean }
   identity: {
     chosenName: string
     perRepo: {
@@ -313,6 +317,8 @@ export const api = {
     noteDefault?: NoteDefault
     archiveAfterDays?: number | null
     deleteAfterDays?: number | null
+    activityKeepDays?: number | null
+    port?: number | null
   }) =>
     fetch('/api/settings', {
       method: 'PUT',

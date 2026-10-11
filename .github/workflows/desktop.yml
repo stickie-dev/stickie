@@ -1,0 +1,47 @@
+name: desktop
+
+# Installers for the desktop app, each built on the platform it is for: the
+# server's ripgrep is fetched for the machine it is installed on, so a Linux
+# AppImage built on a Mac would search with a Mac binary. Run by hand, or by
+# pushing a version tag; the installers are attached to the run.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14 # Apple Silicon
+            flags: --mac
+          - os: macos-13 # Intel
+            flags: --mac
+          - os: windows-latest
+            flags: --win
+          - os: ubuntu-latest
+            flags: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: node desktop/scripts/stage.mjs
+      - run: pnpm --filter @stickie/desktop exec electron-builder --config electron-builder.json ${{ matrix.flags }} --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stickie-${{ matrix.os }}
+          path: |
+            desktop/release/*.dmg
+            desktop/release/*.exe
+            desktop/release/*.AppImage
+          if-no-files-found: error

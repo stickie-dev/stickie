@@ -152,15 +152,13 @@
 }
 
 /*
- * The installed window's title bar, drawn by stickie.
+ * The desktop app's title bar, drawn by stickie.
  *
- * With `window-controls-overlay` the page owns the whole window, the band
- * Chrome used to fill with a title included, and `env(titlebar-area-*)`
- * describes the part of that band that is ours: everything except the
- * operating system's buttons at one end and the browser's own — the menu, and
- * the extensions button when there is one — at the other. Those are not ours
- * to remove; what changes is that they now sit on stickie's surface instead of
- * on a strip of chrome above it.
+ * The app's window has no title bar of its own: the page's top bar is it, and
+ * the operating system's window buttons sit over one end of it — on the left
+ * on macOS, on the right elsewhere. desktop.ts marks the page `stickie-desktop`
+ * and says which end; the bar leaves that end free and can be dragged to move
+ * the window, everything pressable in it excepted.
  *
  * The header stays in normal flow rather than being pinned to the band. It can
  * wrap onto a second row on a narrow window, and a bar positioned into a
@@ -170,46 +168,54 @@
  * overview and settings the header's frame is the same one the content below
  * uses, and padding the header itself would move that frame's edge away from
  * the table under it. `--titlebar-pad` is each bar's own resting padding, so
- * a window with nothing reserved on one side keeps the padding it had.
+ * the end without buttons keeps the padding it had.
  *
- * None of this reaches a browser tab: the media query does not match there.
+ * None of this reaches a browser tab: nothing marks the page there. It used to
+ * key off a browser's installed web app (`window-controls-overlay`), which is
+ * no longer offered.
  */
-@media (display-mode: window-controls-overlay) {
-  .stickie-titlebar {
-    /*
-     * The bar's own vertical padding goes, so its one row is the height of the
-     * band and its buttons sit on the same line as the browser's rather than
-     * five pixels below them. `min-height` keeps the band's full height when
-     * the row is shorter; a bar that wraps grows past it, which is the right
-     * way round.
-     */
-    padding-block: 2px;
-    min-height: env(titlebar-area-height, 0px);
-    -webkit-app-region: drag;
-  }
+.stickie-desktop .stickie-titlebar {
+  /*
+   * Tall enough for the window buttons whatever the bar holds, and no taller:
+   * a bar that wraps grows past it, which is the right way round.
+   */
+  min-height: 40px;
+  -webkit-app-region: drag;
+}
 
-  /* anything that can be pressed opts out, or pressing it moves the window */
-  .stickie-titlebar a,
-  .stickie-titlebar button,
-  .stickie-titlebar input,
-  .stickie-titlebar label,
-  .stickie-titlebar select {
-    -webkit-app-region: no-drag;
-  }
+/* anything that can be pressed opts out, or pressing it moves the window */
+.stickie-desktop .stickie-titlebar a,
+.stickie-desktop .stickie-titlebar button,
+.stickie-desktop .stickie-titlebar input,
+.stickie-desktop .stickie-titlebar label,
+.stickie-desktop .stickie-titlebar select {
+  -webkit-app-region: no-drag;
+}
 
-  .stickie-titlebar-pad {
-    padding-left: max(
-      var(--titlebar-pad, 0.75rem),
-      calc(env(titlebar-area-x, 0px) + 0.5rem)
-    );
-    padding-right: max(
-      var(--titlebar-pad, 0.75rem),
-      calc(
-        100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) +
-          0.5rem
-      )
-    );
-  }
+/*
+ * Where the buttons are is read, not assumed: Electron reports the part of the
+ * band that is the page's as `env(titlebar-area-*)`, in the page's own pixels,
+ * so it holds at any zoom and for any size of button. A fixed 84px cleared
+ * macOS's buttons until macOS 26 made them larger. The numbers after the
+ * commas are only for a window that reports nothing.
+ */
+/* macOS: the three buttons at the left */
+.stickie-desktop-mac .stickie-titlebar-pad {
+  padding-left: max(
+    var(--titlebar-pad, 0.75rem),
+    calc(env(titlebar-area-x, 88px) + 0.5rem)
+  );
+}
+
+/* Windows and Linux: minimise, maximise and close, at the right */
+.stickie-desktop-other .stickie-titlebar-pad {
+  padding-right: max(
+    var(--titlebar-pad, 0.75rem),
+    calc(
+      100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 148px)) +
+        0.5rem
+    )
+  );
 }
 
 /*

@@ -13,7 +13,10 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter @stickie/server --filter @stickie/client dev",
-    "build": "pnpm --filter @stickie/client build && pnpm --filter @stickie/server build",
+    "build": "pnpm --filter @stickie/client build && pnpm --filter @stickie/server build && pnpm --filter @stickie/desktop build",
+    "desktop": "pnpm build && pnpm --filter @stickie/desktop start",
+    "desktop:dev": "pnpm --filter @stickie/desktop build && pnpm --filter @stickie/desktop exec electron . --dev",
+    "desktop:dist": "pnpm build && node desktop/scripts/stage.mjs && pnpm --filter @stickie/desktop exec electron-builder --config electron-builder.json",
     "start": "node server/dist/index.js",
     "test": "pnpm --recursive test",
     "typecheck": "pnpm --recursive typecheck",

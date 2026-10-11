@@ -1,4 +1,5 @@
 import { createInterface } from 'node:readline'
+import { configuredPort } from './config.js'
 import { handleMessage, httpFetcher } from './mcp.js'
 
 /**
@@ -11,7 +12,9 @@ const flag = process.argv.indexOf('--url')
 const base =
   (flag === -1 ? undefined : process.argv[flag + 1]) ??
   process.env.STICKIE_URL ??
-  `http://localhost:${process.env.PORT ?? '4870'}`
+  // the port stickie is set to, which an agent's MCP setup should not have to
+  // repeat: changing it in Settings is then changing it here too
+  `http://localhost:${String(configuredPort())}`
 
 const fetcher = httpFetcher(base.replace(/\/$/, ''))
 const lines = createInterface({ input: process.stdin })

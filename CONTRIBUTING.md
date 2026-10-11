@@ -2,7 +2,8 @@
 
 stickie is a pnpm workspace: `client/` (Vite + React + Monaco), `server/`
 (Hono + node:sqlite + git CLI), `shared/` (boundary types, consumed as
-source), `agents/` (per-agent adapters).
+source), `desktop/` (the Electron app around the server), `agents/`
+(per-agent adapters).
 
 ## Setup
 
@@ -11,7 +12,15 @@ Node ≥ 22 and pnpm ≥ 9 required.
 ```sh
 pnpm install
 pnpm dev          # client :5173 (proxies /api and /ws), server :4870
+pnpm desktop:dev  # the desktop app, showing :5173, beside pnpm dev
 ```
+
+Both ports come from one place, `config.ts`, which everything that reaches
+the server reads — `stickie`, the desktop app, the MCP bridge and Vite:
+`STICKIE_PORT` (or `--port`) and `STICKIE_DEV_PORT`, else `port` and `devPort` in
+`~/.stickie/config.json` (Settings → App writes `port`), else 4870 and 5173.
+`STICKIE_CONFIG` names another config file, which is how a second copy runs
+beside the one in use without either changing the other's.
 
 ## Checks
 
@@ -104,10 +113,15 @@ things it gets right that cost a review's notes when they were wrong:
 
 ## The record
 
-`activity` is append-only by convention: nothing in `Store` updates or deletes
-a row and there is deliberately no method to, and its foreign keys are plain
-integers with no cascade so deleting a note does not delete the record that it
-existed. Its `detail` blob holds what the route already knew — path, lines,
+`activity` is append-only by convention: nothing in `Store` updates a row,
+and its foreign keys are plain integers with no cascade so deleting a note
+does not delete the record that it existed. It is not kept for ever, though:
+nothing reads it back but the Activity panel yet — no audit trail is built on
+it — so rows older than Settings → Reviews says (90 days unless changed) are
+dropped by the expiry sweep, `pruneActivity` being the one delete. Nothing
+may depend on an old row being there: expiry reads a review's notes and
+replies for when it was last busy rather than trusting the record to still
+hold it. Its `detail` blob holds what the route already knew — path, lines,
 base sha, counts — so a row still says something once what it points at is
 gone.
 
@@ -226,14 +240,16 @@ window, each with a bar of its own and a centred layout, and moving between
 them and a review read as moving between applications.
 
 So there is one bar, `TopBar`, on `surface` under a half-pixel rule, and it
-holds only what is the same whichever tab is in front. Installed, that bar *is* the
-window's title bar — the manifest asks for `window-controls-overlay`, so there
-is no strip of browser chrome above it; `.stickie-titlebar` makes it draggable and
-`.stickie-titlebar-pad` keeps its contents out from under the window buttons at
-either end. The padding goes inside the frame rather than around it, so the
-header's frame still lines up with the content below. Chrome's own menu and
-extensions button stay in that band — they are not the page's to remove — but
-they now sit on stickie's surface rather than on a blue strip. The review's used to be a
+holds only what is the same whichever tab is in front. In the desktop app that
+bar *is* the window's title bar: the window has none of its own, `desktop.ts`
+marks the page `stickie-desktop` with the end the window buttons are at,
+`.stickie-titlebar` makes the bar draggable, and `.stickie-titlebar-pad` keeps its
+contents out from under the buttons. The padding goes inside the frame rather
+than around it, so the header's frame still lines up with the content below.
+It used to key off a browser's installed web app (`window-controls-overlay`),
+which left Chrome's own menu and extensions button in the band; the app has
+none, and Electron does not report that overlay to the page on macOS anyway,
+so the class is what says it. The review's used to be a
 panel-filled strip of its own with a full hairline under it, a few pixels
 above the tab strip's own — two lines, and moving between the three pages read
 as moving between applications. Half a pixel is one device pixel on a 2×

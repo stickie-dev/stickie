@@ -158,11 +158,40 @@ the only output.
 
 ## As an app
 
-stickie carries a web manifest and a service worker, so a browser that installs
-web apps will offer to give it its own window and icon — Chrome and Edge put
-"Install" in the address bar or their menu, Safari calls it "Add to Dock".
-Settings → App has a button for it when the browser is offering, and says so
-when it is not. Installed or not it is the same local server on the same port.
+stickie runs in a browser tab, or as a desktop app of its own (Electron, in
+`desktop/`) for macOS, Windows and Linux. The app runs the same server inside
+itself on the same port, so a browser tab and an agent's MCP bridge reach it
+exactly as they reach `stickie` from a terminal; its window is one more client.
+If a `stickie` is already serving the port, the app uses it instead of starting
+a second server over the same database, and a `stickie` started while the app is
+open hands its repository to the app and opens a tab.
+
+Closing the window either leaves stickie serving from the menu bar or quits it —
+asked the first time, changeable in Settings → App, where the app also gives
+the MCP command for itself (its own binary, run as Node, so no Node install
+is needed).
+
+```sh
+pnpm desktop        # build, then run the app from the repository
+pnpm desktop:dev    # the app on `pnpm dev`: client changes appear as saved
+pnpm desktop:dist   # an installer for this machine, in desktop/release/
+```
+
+Working on stickie does not need an installer rebuilt: an installed app uses a
+stickie already serving its port, the dev server included, and
+`pnpm desktop:dev` shows Vite's page (`--dev=<url>` for another) so a saved
+client change is in the window at once. In that mode the app starts no
+server of its own, and waits for `pnpm dev` if it is not up yet.
+
+Installers are built on the platform they are for — the `desktop` workflow
+does all four (macOS on Apple Silicon and Intel, Windows, Linux). They are
+not signed: macOS asks before the first launch (right-click → Open).
+
+A browser no longer offers to install stickie as its own web app. That install
+could only ever be the browser's app, with the browser's buttons in its title
+bar, and no browser lets a page point its install button at a real app; a
+copy installed that way still works and says, in Settings → App, that it is
+the old way.
 
 ## Run
 
@@ -175,6 +204,12 @@ pnpm start          # serves UI + API on http://localhost:4870
 `node bin/stickie.js [path] [--port n] [--db file] [--no-open]` additionally
 registers a repo (default: cwd) and opens the browser. During development:
 `pnpm dev` (client on :5173 proxying to the server on :4870).
+
+The port is 4870 unless set otherwise in Settings → App, which keeps it in
+`~/.stickie/config.json` so `stickie`, the desktop app and the MCP bridge all follow
+it; `--port` or `STICKIE_PORT` override it for one run. If the desktop app finds
+the port held by another program it offers the nearest free one. Vite's port
+for working on stickie is `STICKIE_DEV_PORT`, or `devPort` in the same file.
 
 `pnpm package` assembles the publishable npm package under `dist-pkg/`, which
 carries two binaries: `stickie` (the server) and `stickie-mcp` (the MCP bridge).

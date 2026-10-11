@@ -391,8 +391,8 @@ export class Store {
 
   /**
    * What the expiry policy needs about every review, in one query: when it
-   * was made, last opened, last had anything recorded, archived and kept, and
-   * how many notes it holds.
+   * was made, last opened, last had anything recorded or written, archived
+   * and kept, and how many notes it holds.
    *
    * An archive stickie made on its own is left out of "last recorded": it is
    * not anyone using the review, and counting it would restart the clock it
@@ -409,6 +409,7 @@ export class Store {
       archived_at: string | Date | null
       kept_at: string | Date | null
       last_at: string | Date | null
+      last_message_at: string | Date | null
       notes: number | string
     }>(
       `select s.id, s.repo_id, r.path as repo_path, s.branch, s.created_at,
@@ -417,6 +418,9 @@ export class Store {
             where a.session_id = s.id
               and not (a.subject = 'review' and a.action = 'archived'
                        and a.actor_id is null)) as last_at,
+         (select max(m.created_at) from messages m
+            join threads t on t.id = m.thread_id
+            where t.session_id = s.id) as last_message_at,
          (select count(*) from threads t where t.session_id = s.id) as notes
        from sessions s join repos r on r.id = s.repo_id
        where r.removed_at is null`,
@@ -433,6 +437,7 @@ export class Store {
       archivedAt: text(row.archived_at),
       keptAt: text(row.kept_at),
       lastRecordedAt: text(row.last_at),
+      lastMessageAt: text(row.last_message_at),
       notes: Number(row.notes),
     }))
   }
@@ -681,6 +686,23 @@ export class Store {
    * Appends to the record. Nothing in this class updates or deletes an
    * activity row; there is deliberately no method to.
    */
+  /**
+   * Drops activity older than `days`. Nothing reads the record further back
+   * than that yet — no audit trail is built on it — so keeping every row
+   * forever was keeping it for nothing. Returns how many went.
+   */
+  async pruneActivity(days: number): Promise<number> {
+    const cutoff =
+      this.db.dialect === 'sqlite'
+        ? `datetime('now', '-${String(Math.floor(days))} days')`
+        : `now() - interval '${String(Math.floor(days))} days'`
+    const before = await this.db.get<{ n: number | string }>(
+      `select count(*) as n from activity where at < ${cutoff}`,
+    )
+    await this.db.run(`delete from activity where at < ${cutoff}`)
+    return Number(before?.n ?? 0)
+  }
+
   async recordActivity(entry: ActivityInput): Promise<void> {
     await this.db.run(
       `insert into activity
@@ -989,6 +1011,12 @@ export interface ExpiryFacts {
   archivedAt: string | null
   keptAt: string | null
   lastRecordedAt: string | null
+  /**
+   * The newest note or reply, read from the notes themselves: the activity
+   * record is pruned, and a review must not look idle because the rows saying
+   * it was busy have been dropped.
+   */
+  lastMessageAt: string | null
   notes: number
 }
 

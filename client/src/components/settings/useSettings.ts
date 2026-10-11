@@ -58,7 +58,7 @@ export function useSettings(): SettingsAccess {
         setSubmitKey(fresh.submitKey)
         setNoteDefault(fresh.noteDefault)
         if (result.restartRequired) {
-          pushToast('info', 'saved — restart stickie to use the new database')
+          pushToast('info', 'saved — it takes effect when stickie is started again')
         } else if (options?.quiet !== true) {
           pushToast('info', 'saved')
         }

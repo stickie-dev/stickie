@@ -7,6 +7,7 @@ import { ConfirmDialog } from './components/ConfirmDialog'
 import { Toasts } from './components/Toasts'
 import { Workspace } from './components/Workspace'
 import type { Page, TabRef } from './routes'
+import { desktop } from './desktop'
 import { rememberPlace } from './lastPlace'
 import { formatRoute, isReviewRoute, parseRoute, sameTab } from './routes'
 import type { Tab } from './store'
@@ -249,6 +250,7 @@ function useNoteAddress(page: Page | null, address: string): Here | null {
 
 export function App() {
   const location = useLocation()
+  const navigate = useNavigate()
   const init = useReview((s) => s.init)
   const error = useReview((s) => s.error)
   const refresh = useReview((s) => s.refresh)
@@ -296,7 +298,31 @@ export function App() {
     for (const tag of document.querySelectorAll('meta[name="theme-color"]')) {
       tag.setAttribute('content', surface)
     }
+    // the desktop window's own buttons, on Windows and Linux, are drawn by
+    // the app over the page's top bar and have to be told its colours
+    desktop?.setTitleBarColors({
+      color: surface,
+      symbolColor: getComputedStyle(document.documentElement)
+        .getPropertyValue('--ink')
+        .trim(),
+    })
   }, [theme])
+
+  // the desktop app's menu asks for things only the page can do
+  useEffect(
+    () =>
+      desktop?.onCommand((command) => {
+        if (command === 'settings') {
+          void navigate(
+            formatRoute({
+              kind: 'settings',
+              section: useReview.getState().settingsTab ?? 'identity',
+            }),
+          )
+        }
+      }),
+    [navigate],
+  )
 
   useEffect(() => {
     document.documentElement.dataset.font = fontScale

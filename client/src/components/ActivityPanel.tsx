@@ -114,7 +114,7 @@ export function ActivityPanel() {
     // the slot below the files, filled — it was a fixed column on the right,
     // beside the comments, squeezing the diff from the side being read
     <section className="flex min-h-0 grow flex-col bg-surface">
-      <div className="flex items-center gap-2 border-b border-edge px-3 py-2 text-xs">
+      <div className="flex shrink-0 items-center gap-2 px-3 py-2 text-xs">
         {/* what the record is, on the name rather than under the list: in the
             slot below the files a paragraph was a third of the panel */}
         <span
@@ -127,40 +127,6 @@ export function ActivityPanel() {
           {entries === null ? '' : entries.length}
         </span>
         <span className="grow" />
-        <div
-          className="flex overflow-hidden rounded-md bg-overlay"
-          role="group"
-          aria-label="activity in"
-        >
-          {(
-            [
-              {
-                key: 'review',
-                label: 'review',
-                why: 'what happened in the review that is open',
-              },
-              {
-                key: 'everywhere',
-                label: 'all',
-                why: 'across every repository and review, including removed repositories and expired reviews',
-              },
-            ] as const
-          ).map((choice) => (
-            <button
-              key={choice.key}
-              className={`px-1.5 py-0.5 ${scope === choice.key ? 'bg-accent text-white' : 'text-soft hover:text-ink'}`}
-              title={choice.why}
-              aria-pressed={scope === choice.key}
-              disabled={choice.key === 'review' && session === null}
-              onClick={() => {
-                setEntries(null)
-                setChosen(choice.key)
-              }}
-            >
-              {choice.label}
-            </button>
-          ))}
-        </div>
         <button
           className={icon_button}
           title="reload"
@@ -178,8 +144,44 @@ export function ActivityPanel() {
           <Close />
         </button>
       </div>
+      {/* its own row: beside the name, in the slot below the files, it was
+          squeezed to nothing */}
+      <div
+        className="mx-3 mb-2 flex shrink-0 overflow-hidden rounded-md bg-overlay text-xs"
+        role="group"
+        aria-label="activity in"
+      >
+        {(
+          [
+            {
+              key: 'review',
+              label: 'this review',
+              why: 'what happened in the review that is open',
+            },
+            {
+              key: 'everywhere',
+              label: 'everywhere',
+              why: 'across every repository and review, including removed repositories and expired reviews',
+            },
+          ] as const
+        ).map((choice) => (
+          <button
+            key={choice.key}
+            className={`flex-1 px-1.5 py-0.5 ${scope === choice.key ? 'bg-accent text-white' : 'text-soft hover:text-ink'}`}
+            title={choice.why}
+            aria-pressed={scope === choice.key}
+            disabled={choice.key === 'review' && session === null}
+            onClick={() => {
+              setEntries(null)
+              setChosen(choice.key)
+            }}
+          >
+            {choice.label}
+          </button>
+        ))}
+      </div>
 
-      <div className="min-h-0 grow overflow-y-auto px-3 py-2">
+      <div className="min-h-0 grow overflow-y-auto border-t border-edge px-3 py-2">
         {error !== null && <p className="text-xs text-rose-500">{error}</p>}
         {entries === null && error === null && (
           <Loading what="the record" className="space-y-3">
@@ -197,39 +199,40 @@ export function ActivityPanel() {
         {entries?.map((entry) => {
           const detail = detailText(entry)
           return (
+            // two lines that fit the slot below the files: what happened, then
+            // when and where. A fixed column for the time beside the sentence
+            // left the sentence a third of a narrow panel to wrap in
             <div
               key={entry.id}
-              className="border-b border-edge py-1.5 text-xs last:border-b-0"
+              className="border-b border-edge py-1.5 text-xs leading-snug last:border-b-0"
             >
-              <div className="flex items-baseline gap-1.5">
-                <TimeAgo
-                  at={entry.at}
-                  className="w-16 shrink-0 text-right text-faint"
-                />
-                <span className="text-ink">
-                  {scope === 'everywhere' && entry.repoId !== null && (
-                    <span className="text-faint">
-                      {repos.find((r) => r.id === entry.repoId)?.name ?? ''}{' '}
-                    </span>
+              <div className="text-ink">
+                <span className="font-medium">{actorOf(entry)}</span>{' '}
+                <span className="text-soft">
+                  {/* across every review, "this review" is not one */}
+                  {(
+                    phrases[`${entry.subject}.${entry.action}`] ??
+                    `${entry.subject} ${entry.action}`
+                  ).replace(
+                    'this review',
+                    scope === 'everywhere' ? 'a review' : 'this review',
                   )}
-                  <span className="font-medium">{actorOf(entry)}</span>{' '}
-                  <span className="text-soft">
-                    {/* across every review, "this review" is not one */}
-                    {(
-                      phrases[`${entry.subject}.${entry.action}`] ??
-                      `${entry.subject} ${entry.action}`
-                    ).replace(
-                      'this review',
-                      scope === 'everywhere' ? 'a review' : 'this review',
-                    )}
-                  </span>
                 </span>
               </div>
-              {detail !== null && (
-                <div className="mt-0.5 pl-11 font-mono break-all text-faint">
-                  {detail}
-                </div>
-              )}
+              <div
+                className="mt-0.5 flex min-w-0 items-baseline gap-1.5 text-faint"
+                title={detail ?? undefined}
+              >
+                <TimeAgo at={entry.at} className="shrink-0" />
+                {scope === 'everywhere' && entry.repoId !== null && (
+                  <span className="shrink-0">
+                    · {repos.find((r) => r.id === entry.repoId)?.name ?? ''}
+                  </span>
+                )}
+                {detail !== null && (
+                  <span className="min-w-0 truncate font-mono">· {detail}</span>
+                )}
+              </div>
             </div>
           )
         })}

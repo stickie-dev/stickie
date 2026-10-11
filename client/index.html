@@ -5,13 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/stickie.svg" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link rel="manifest" href="/manifest.webmanifest" />
     <!--
-      The installed app's title bar takes this colour, so it is the surface the
-      window opens on rather than the accent: a blue strip above a grey app was
-      the browser painting stickie's link colour across the top of it. Two of them
-      for the pre-script moment; App.tsx sets both from `--surface` once the
-      reader's own choice of theme is known.
+      Browsers that tint their own chrome take this colour, so it is the
+      surface the page opens on rather than the accent. Two of them for the
+      pre-script moment; App.tsx sets both from `--surface` once the reader's
+      own choice of theme is known, and tells the desktop app's title bar.
     -->
     <meta
       name="theme-color"

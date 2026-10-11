@@ -17,8 +17,12 @@ import type { BasePinState } from './basePin.js'
 import { classifyBasePin } from './basePin.js'
 import {
   configuredDatabaseUrl,
+  configuredPort,
   databaseFromEnv,
+  default_port,
+  portFromEnv,
   setDatabaseUrl,
+  setPort,
 } from './config.js'
 import type {
   ActivityAction,
@@ -36,6 +40,7 @@ import {
   dueDates,
   idleness,
   policyProblem,
+  readActivityDays,
   readClock,
   readPolicy,
   sweep,
@@ -526,6 +531,15 @@ function redactUrl(url: string | null): string | null {
  */
 function mcpCommand(): string {
   const here = path.dirname(fileURLToPath(import.meta.url))
+  // inside the desktop app there may be no Node on the machine at all, but
+  // the app is one: run as Node, its own binary starts the stdio bridge
+  if (process.versions.electron !== undefined) {
+    const stdio = path.resolve(here, 'mcp-stdio.js')
+    return (
+      'claude mcp add stickie -e ELECTRON_RUN_AS_NODE=1 -- ' +
+      `${JSON.stringify(process.execPath)} ${JSON.stringify(stdio)}`
+    )
+  }
   const bridge = path.resolve(here, '../../bin/stickie-mcp.js')
   return existsSync(bridge)
     ? `claude mcp add stickie -- node ${bridge}`
@@ -2693,6 +2707,15 @@ export function createApp(
             archiveAfterDays: z.number().int().nullable(),
             /** days left alone before a review is deleted; null is never */
             deleteAfterDays: z.number().int().nullable(),
+            /** days the activity record is kept; null is for ever */
+            activityKeepDays: z.number().int().nullable(),
+            /** the port stickie starts on, and the one this server is on now */
+            port: z.object({
+              configured: z.number().int(),
+              running: z.number().int(),
+              /** the environment decides; the page cannot change it */
+              fromEnv: z.boolean(),
+            }),
             identity: z.object({
               /** '' when nothing was set by hand and git config decides */
               chosenName: z.string(),
@@ -2740,6 +2763,12 @@ export function createApp(
         {
           archiveAfterDays: expiry.archiveAfterDays,
           deleteAfterDays: expiry.deleteAfterDays,
+          activityKeepDays: await readActivityDays(store),
+          port: {
+            configured: configuredPort(),
+            running: Number(new URL(c.req.url).port || default_port),
+            fromEnv: portFromEnv(),
+          },
           gitlabUrl: settings.url,
           gitlabTokenEnv: settings.tokenEnv,
           hasStoredToken: settings.token !== null && settings.token !== '',
@@ -2821,6 +2850,10 @@ export function createApp(
             /** null turns that step off */
             archiveAfterDays: z.number().int().min(1).max(3650).nullable().optional(),
             deleteAfterDays: z.number().int().min(1).max(3650).nullable().optional(),
+            /** null keeps the record for ever */
+            activityKeepDays: z.number().int().min(7).max(3650).nullable().optional(),
+            /** null goes back to 4870; takes effect on the next start */
+            port: z.number().int().min(1024).max(65535).nullable().optional(),
           }),
         ),
       },
@@ -2834,6 +2867,7 @@ export function createApp(
     }),
     async (c) => {
       const body = c.req.valid('json')
+      let restart = false
       // checked before anything is stored, against what the other number is
       // now, so a refused pair leaves both as they were
       if (body.archiveAfterDays !== undefined || body.deleteAfterDays !== undefined) {
@@ -2861,6 +2895,18 @@ export function createApp(
           wanted.deleteAfterDays === null ? '0' : String(wanted.deleteAfterDays),
         )
         // new numbers take effect now, not at the next sweep hours away
+        void sweep(store)
+      }
+      if (body.port !== undefined && !portFromEnv()) {
+        setPort(body.port)
+        const running = Number(new URL(c.req.url).port || default_port)
+        restart = (body.port ?? default_port) !== running
+      }
+      if (body.activityKeepDays !== undefined) {
+        await store.setSetting(
+          'activity_keep_days',
+          body.activityKeepDays === null ? '0' : String(body.activityKeepDays),
+        )
         void sweep(store)
       }
       if (body.gitlabUrl !== undefined) {
@@ -2900,13 +2946,12 @@ export function createApp(
         await store.setSetting('actor_name', body.actorName.trim())
         identity.forget()
       }
-      let restart = false
       if (body.databaseUrl !== undefined && !databaseFromEnv()) {
         const url = body.databaseUrl.trim()
         if (url !== '' && !/^postgres(ql)?:\/\//.test(url)) {
           return c.json({ error: 'expected a postgres:// url' }, 400)
         }
-        restart = url !== (configuredDatabaseUrl() ?? '')
+        restart ||= url !== (configuredDatabaseUrl() ?? '')
         setDatabaseUrl(url === '' ? null : url)
       }
       return c.json({ ok: true, restartRequired: restart }, 200)

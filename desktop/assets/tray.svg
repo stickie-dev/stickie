@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- the logo's outline: on a menu bar a filled square reads as a blot -->
+  <rect x="3" y="3" width="26" height="26" rx="6.5" fill="none" stroke="#000" stroke-width="2.4"/>
+  <path d="M9.5 11.5h13M9.5 16h13M9.5 20.5h6" stroke="#000" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="21.5" cy="20.5" r="2.4" fill="#000"/>
+</svg>

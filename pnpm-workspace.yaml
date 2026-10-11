@@ -2,6 +2,9 @@ packages:
   - client
   - server
   - shared
+  - desktop
 allowBuilds:
   esbuild: true
   "@vscode/ripgrep": true
+  electron: true
+  electron-winstaller: false

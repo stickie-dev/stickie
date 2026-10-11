@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- the logo inside the margin a macOS app icon keeps, so it sits the same
+       size as its neighbours in the Dock rather than a size larger -->
+  <g transform="translate(100 100) scale(25.75)">
+    <rect width="32" height="32" rx="7.2" fill="#0969da"/>
+    <path d="M9 11h14M9 16h14M9 21h7" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round"/>
+    <circle cx="22.5" cy="21" r="2.6" fill="#ffd166"/>
+  </g>
+</svg>

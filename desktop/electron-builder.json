@@ -1,0 +1,31 @@
+{
+  "appId": "dev.stickie.desktop",
+  "productName": "stickie",
+  "copyright": "Copyright © 2026 Hossain Mahmud",
+  "directories": {
+    "app": "stage",
+    "output": "release",
+    "buildResources": "assets"
+  },
+  "asar": false,
+  "electronVersion": "44.7.0",
+  "npmRebuild": false,
+  "artifactName": "stickie-${version}-${os}-${arch}.${ext}",
+  "mac": {
+    "target": ["dmg"],
+    "category": "public.app-category.developer-tools",
+    "identity": "-",
+    "hardenedRuntime": false
+  },
+  "win": {
+    "target": ["nsis"]
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false
+  },
+  "linux": {
+    "target": ["AppImage"],
+    "category": "Development"
+  }
+}

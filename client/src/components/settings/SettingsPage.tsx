@@ -36,7 +36,7 @@ const sections: Record<
   prompt: (access) => <PromptSection {...access} />,
   appearance: (access) => <AppearanceSection {...access} />,
   agents: (access) => <AgentsSection {...access} />,
-  app: () => <AppSection />,
+  app: (access) => <AppSection {...access} />,
 }
 
 /** Where a section starts, for the anchor and for the observer alike. */

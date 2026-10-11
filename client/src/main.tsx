@@ -3,11 +3,11 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import { App } from './App'
 import './index.css'
-import { registerWorker } from './install'
+import { retireWorker } from './desktop'
 import { tameUnfoldAll } from './collapsedRegions'
 import { installHints } from './hints'
 
-registerWorker()
+retireWorker()
 tameUnfoldAll()
 installHints()
 

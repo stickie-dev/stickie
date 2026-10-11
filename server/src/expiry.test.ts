@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { applySchema } from './db/schema.js'
 import { openSqlite } from './db/sqlite.js'
 import {
+  activityDaysFrom,
   dueDates,
   policyFrom,
   policyProblem,
@@ -116,5 +117,27 @@ describe('sweep', () => {
     expect(await store.getSession(session.id)).toBeUndefined()
     const record = await store.listActivity({ sessionId: session.id }, 10)
     expect(record.map((entry) => entry.action)).toContain('expired')
+  })
+})
+
+describe('activity retention', () => {
+  it('keeps 90 days unless told otherwise, and for ever when told 0', () => {
+    expect(activityDaysFrom(null)).toBe(90)
+    expect(activityDaysFrom('30')).toBe(30)
+    expect(activityDaysFrom('0')).toBeNull()
+  })
+
+  it('drops rows older than the window and keeps the rest', async () => {
+    const db = openSqlite(':memory:')
+    await applySchema(db)
+    const store = new Store(db)
+    await store.recordActivity({ subject: 'repo', action: 'added' })
+    await store.recordActivity({ subject: 'repo', action: 'added' })
+    await db.run(
+      "update activity set at = datetime('now', '-100 days') where id = 1",
+    )
+    expect(await store.pruneActivity(90)).toBe(1)
+    const left = await store.listActivity({}, 10)
+    expect(left.map((entry) => entry.id)).toEqual([2])
   })
 })

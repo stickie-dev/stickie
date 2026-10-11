@@ -60,6 +60,23 @@ export async function readPolicy(store: Store): Promise<ExpiryPolicy> {
   )
 }
 
+/**
+ * How long the activity record is kept, in days; null is for ever. Missing
+ * means the default, empty or 0 means for ever — the same reading as the two
+ * expiry numbers.
+ */
+export const default_activity_days = 90
+
+export function activityDaysFrom(stored: string | null): number | null {
+  if (stored === null) return default_activity_days
+  const value = Number(stored)
+  return Number.isInteger(value) && value > 0 ? value : null
+}
+
+export async function readActivityDays(store: Store): Promise<number | null> {
+  return activityDaysFrom(await store.getSetting('activity_keep_days'))
+}
+
 /** Deleting has to come after archiving, or there is no warning between. */
 export function policyProblem(policy: ExpiryPolicy): string | null {
   const { archiveAfterDays: archive, deleteAfterDays: remove } = policy
@@ -122,6 +139,7 @@ export function idleness(
       facts.createdAt,
       facts.seenAt,
       facts.lastRecordedAt,
+      facts.lastMessageAt,
       tipAt,
     ),
     archivedAt: facts.archivedAt === null ? null : Date.parse(facts.archivedAt),
@@ -193,6 +211,16 @@ export function sweep(store: Store, now = Date.now()): Promise<SweepResult> {
 
 async function sweepOnce(store: Store, now: number): Promise<SweepResult> {
   const result: SweepResult = { archived: [], deleted: [] }
+  // the record's own retention rides on the same sweep
+  const keep = await readActivityDays(store)
+  if (keep !== null) {
+    const pruned = await store.pruneActivity(keep)
+    if (pruned > 0) {
+      console.log(
+        `stickie: dropped ${String(pruned)} activity rows older than ${String(keep)} days`,
+      )
+    }
+  }
   const policy = await readPolicy(store)
   if (policy.archiveAfterDays === null && policy.deleteAfterDays === null) {
     return result

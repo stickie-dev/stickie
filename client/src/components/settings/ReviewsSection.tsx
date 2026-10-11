@@ -156,6 +156,60 @@ function Expiry({ state, save }: SettingsAccess) {
   )
 }
 
+/**
+ * How long the activity record is kept. It is read back by the Activity panel
+ * and nothing else yet — no audit trail is built on it — so it is not kept for
+ * ever by default. Expiry does not depend on it: a review's notes and replies
+ * say when it was last busy on their own.
+ */
+function Retention({ state, save }: SettingsAccess) {
+  const [days, setDays] = useState('')
+  useEffect(() => {
+    if (state !== null) {
+      setDays(
+        state.activityKeepDays === null ? '' : String(state.activityKeepDays),
+      )
+    }
+  }, [state])
+
+  const trimmed = days.trim()
+  const value = trimmed === '' ? null : Number(trimmed)
+  const bad =
+    value !== null && !(Number.isInteger(value) && value >= 7 && value <= 3650)
+
+  const commit = () => {
+    if (state === null || bad || value === state.activityKeepDays) return
+    void save({ activityKeepDays: value }, { quiet: true })
+  }
+
+  return (
+    <Field
+      label="Activity record"
+      hint="Older rows are dropped as stickie goes; empty keeps every row for ever. What is kept is who did what and where, never what a note said."
+    >
+      <span className="flex items-center gap-2 text-xs">
+        <span className="text-ink">keep for</span>
+        <input
+          // not `field_classes`: that is full width
+          className={`w-16 py-1.5 font-mono text-xs ${field}`}
+          inputMode="numeric"
+          placeholder="ever"
+          aria-label="keep the activity record for this many days"
+          value={days}
+          onChange={(e) => setDays(e.target.value)}
+          onBlur={commit}
+        />
+        <span className="text-faint">days</span>
+      </span>
+      {bad && (
+        <p className="mt-1 text-xs text-rose-500">
+          A whole number of days from 7 to 3650, or empty for ever.
+        </p>
+      )}
+    </Field>
+  )
+}
+
 export function ReviewsSection(access: SettingsAccess) {
   const { state, save } = access
   const [mode, setMode] = useState<RepinMode>('always')
@@ -303,6 +357,7 @@ export function ReviewsSection(access: SettingsAccess) {
       </Field>
 
       <Expiry {...access} />
+      <Retention {...access} />
     </Section>
   )
 }
