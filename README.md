@@ -1,13 +1,73 @@
+<img src="client/public/stickie.svg" width="56" alt="">
+
 # stickie
 
-**N**ot another **E**ditor — **N**otes for **A**gents.
+**Notes for your coding agents.** Review what an agent changed the way you
+would review a colleague: leave notes on the code. The agent reads them over
+MCP or a plain JSON API, fixes what they ask, replies, and resolves — and you
+watch it happen, without a reload.
+
+![You leave a note and submit the review; the agent edits the file, replies and resolves it, and the page follows live](docs/images/loop.gif)
 
 A local, read-only review surface for changes made by coding agents. Open a
 GitHub-style diff of any repo in your workspace — working tree, branch, or
 worktree — and leave line-anchored notes anywhere, including on unchanged
-code. Agents fetch the open notes over a plain JSON API, address them,
-reply, and resolve. Stickie never writes to your working tree; the notes are
-the only output.
+code. Stickie never writes to your working tree; the notes are the only
+output.
+
+## Get it
+
+```sh
+npx stickie                 # from npm
+uvx stickie                 # from PyPI — runs the npm package, so it needs Node 22+
+```
+
+The first release is on its way; until it is out, run stickie from this
+repository (see [Run](#run)), or install the desktop app ([As an app](#as-an-app)).
+Then point your agent at it:
+
+```sh
+claude mcp add --transport http stickie http://localhost:4870/mcp
+```
+
+and ask it to *check the stickies*: list the reviews, read the open notes,
+address each one, reply, and resolve.
+
+## A tour
+
+Every review in one place, sorted by what it is waiting for — *needs you*
+when an agent has answered, *with agent* once you have submitted, *draft*
+while you are still writing, *clear* when nothing is open.
+
+![The overview: four reviews across two repositories, labelled needs you, with agent, draft and clear](docs/images/overview.png)
+
+The diff, with the conversation on the code it is about. The agent signs its
+replies with its own name, and a resolved note folds away.
+
+![A review of a rate limiter: a note on a map that only grows, and the agent's answer asking a question back](docs/images/review.png)
+
+Notes cross repositories. While a note is open, select code in any
+registered repository and *↗ ref* puts a link to it in the note; the link
+opens that file at that line.
+
+![Writing a note in orbit-web, opening orbit-api, selecting the Retry-After line and adding it to the note as a reference](docs/images/refs.gif)
+
+*Find usages* looks through every registered repository at once, for a
+change whose blast radius does not stop at the repo it was made in.
+
+![A note in orbit-web linking to orbit-api, and the usages of retryAfter found in both repositories](docs/images/cross-repo.png)
+
+The server speaks MCP itself. Five tools — list the reviews, read the notes,
+list them, reply, resolve — over the same routes as the JSON API.
+
+![Settings → Agents: the MCP command and the five tools](docs/images/mcp.png)
+
+Light and dark, both built for reading diffs; the comments panel keeps every
+note of the review in one list.
+
+![The same review in the dark theme, with the comments panel open](docs/images/review-dark.png)
+
+The repositories, code and people in these pictures are made up.
 
 ## Features
 

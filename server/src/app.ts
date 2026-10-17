@@ -3720,7 +3720,7 @@ export function createApp(
       title: 'stickie API',
       version: '0.1.0',
       description:
-        'Not another Editor — Notes for Agents. Line-anchored review notes ' +
+        'Notes for your coding agents. Line-anchored review notes ' +
         'on local git changes, consumable by any coding agent.',
     },
   })

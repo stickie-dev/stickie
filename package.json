@@ -2,7 +2,7 @@
   "name": "stickie",
   "version": "0.1.0",
   "private": true,
-  "description": "Not another Editor \u2014 Notes for Agents. Local review surface for agent-made changes.",
+  "description": "Notes for your coding agents: a local review surface for agent-made changes.",
   "type": "module",
   "bin": {
     "stickie": "./bin/stickie.js",
