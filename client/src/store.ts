@@ -824,7 +824,12 @@ export const useReview = create<ReviewState>((set, get) => {
     })
   }
 
+  /** a repository whose folder is gone has no review git can read */
+  const isMissing = (repoId: number): boolean =>
+    get().repos.find((r) => r.id === repoId)?.missing === true
+
   async function ensureRepoSession(repoId: number): Promise<void> {
+    if (isMissing(repoId)) return
     try {
       const targets = await api.targets(repoId)
       const cached = get().perRepo[repoId]
@@ -1799,6 +1804,7 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     selectRepo: async (repoId) => {
+      if (isMissing(repoId)) return
       const targets = await api.targets(repoId)
       const cached = get().perRepo[repoId]
       const main = targets.worktrees.find((wt) => wt.isMain)

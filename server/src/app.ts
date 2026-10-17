@@ -63,6 +63,7 @@ import {
   fileInWorktree,
   gitOrigin,
   gitStatus,
+  workingTreeStatus,
   isAncestor,
   isGitRepo,
   lastFetchedAt,
@@ -109,6 +110,8 @@ const repo_info_schema = z
     branch: z.string(),
     clean: z.boolean(),
     changedFiles: z.number().int(),
+    /** its folder is gone or no longer a repository: moved or deleted */
+    missing: z.boolean().optional(),
   })
   .openapi('RepoInfo')
 
@@ -765,7 +768,7 @@ export function createApp(
       const repos = await store.listRepos()
       const infos: RepoInfo[] = await Promise.all(
         repos.map(async (repo) => {
-          const status = await gitStatus(repo.path)
+          const status = await workingTreeStatus(repo.path)
           return {
             id: repo.id,
             path: repo.path,
@@ -773,6 +776,7 @@ export function createApp(
             branch: status.branch,
             clean: status.clean,
             changedFiles: status.changedFiles,
+            ...(status.missing ? { missing: true } : {}),
           }
         }),
       )
@@ -1923,10 +1927,9 @@ export function createApp(
         {
           repos: await Promise.all(
             repos.map(async (repo) => {
-              const [status, default_branch] = await Promise.all([
-                gitStatus(repo.path),
-                defaultBranch(repo.path),
-              ])
+              const status = await workingTreeStatus(repo.path)
+              // a folder that is gone has no branches to choose between
+              const default_branch = status.missing ? '' : await defaultBranch(repo.path)
               return {
                 id: repo.id,
                 name: names.get(repo.id) ?? repo.path,
@@ -1934,6 +1937,7 @@ export function createApp(
                 branch: status.branch,
                 clean: status.clean,
                 changedFiles: status.changedFiles,
+                ...(status.missing ? { missing: true } : {}),
                 latestSessionId: latest.get(repo.id) ?? null,
                 defaultBranch: default_branch,
               }

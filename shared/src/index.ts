@@ -12,6 +12,8 @@ export interface RepoInfo {
   branch: string
   clean: boolean
   changedFiles: number
+  /** its folder is gone or no longer a repository: moved or deleted */
+  missing?: boolean
 }
 
 export type SourceKind = 'worktree' | 'ref'
@@ -298,6 +300,8 @@ export interface RepoOverview {
   branch: string
   clean: boolean
   changedFiles: number
+  /** its folder is gone or no longer a repository: moved or deleted */
+  missing?: boolean
   /** the newest review of this repo, if it has one */
   latestSessionId: number | null
   /**

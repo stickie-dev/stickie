@@ -322,7 +322,15 @@ function RepoNode({ repoId }: { repoId: number }) {
           </span>
         </span>
       </div>
-      {expanded && entry === undefined && (
+      {expanded && repo?.missing === true && (
+        <p
+          className="ml-[13px] px-3 py-1 text-amber-600 dark:text-amber-400"
+          title={`nothing at ${repo.path} is a git repository any more. If it moved, add it again at its new path; its reviews stay either way.`}
+        >
+          folder not found
+        </p>
+      )}
+      {expanded && entry === undefined && repo?.missing !== true && (
         <Loading
           what="the file tree"
           className="ml-[13px] space-y-1.5 py-1.5 pl-3"

@@ -161,6 +161,24 @@ export async function gitStatus(repo_path: string): Promise<GitStatus> {
   }
 }
 
+/**
+ * A registered repository's working tree, or word that its folder is no
+ * longer a repository — moved or deleted since it was added. A list of
+ * repositories asks this of every one, and a single missing folder used to
+ * fail the whole list, and with it the overview, which then loaded forever.
+ * Any other failure still throws: it is not a fact about the folder.
+ */
+export async function workingTreeStatus(
+  repo_path: string,
+): Promise<GitStatus & { missing: boolean }> {
+  try {
+    return { ...(await gitStatus(repo_path)), missing: false }
+  } catch (error) {
+    if (await isGitRepo(repo_path)) throw error
+    return { repoPath: repo_path, branch: '', changedFiles: 0, clean: true, missing: true }
+  }
+}
+
 export function parseWorktrees(porcelain: string, mainPath: string): WorktreeInfo[] {
   const result: WorktreeInfo[] = []
   let current: Partial<WorktreeInfo> = {}

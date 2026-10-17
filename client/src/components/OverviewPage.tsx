@@ -849,8 +849,11 @@ export function OverviewPage() {
                 {repos.map((repo) => (
                   <tr
                     key={repo.id}
-                    className={`group cursor-pointer ${row}`}
-                    onClick={() => void openRepo(repo)}
+                    className={`group ${repo.missing === true ? '' : 'cursor-pointer'} ${row}`}
+                    onClick={() => {
+                      // nothing to open: there is no folder for git to read
+                      if (repo.missing !== true) void openRepo(repo)
+                    }}
                   >
                     <td
                       className="px-2 py-2 font-semibold text-ink"
@@ -862,9 +865,18 @@ export function OverviewPage() {
                       {repo.branch}
                     </td>
                     <td className="px-2 py-2 text-soft">
-                      {repo.changedFiles === 0
-                        ? 'no changes'
-                        : `${String(repo.changedFiles)} ${repo.changedFiles === 1 ? 'file' : 'files'} changed`}
+                      {repo.missing === true ? (
+                        <span
+                          className="text-amber-600 dark:text-amber-400"
+                          title={`nothing at ${repo.path} is a git repository any more. If it moved, add it again at its new path; its reviews stay here either way.`}
+                        >
+                          folder not found
+                        </span>
+                      ) : repo.changedFiles === 0 ? (
+                        'no changes'
+                      ) : (
+                        `${String(repo.changedFiles)} ${repo.changedFiles === 1 ? 'file' : 'files'} changed`
+                      )}
                     </td>
                     <td className="px-2 py-2">
                       {/*
@@ -875,25 +887,27 @@ export function OverviewPage() {
                         the rows above, which name a review that already exists,
                         keep real links.
                       */}
-                      <span className="flex items-baseline gap-3">
-                        <span className="text-accent hover:underline">
-                          {on_default(repo)
-                            ? 'browse the working tree'
-                            : `review against ${repo.defaultBranch}`}
+                      {repo.missing !== true && (
+                        <span className="flex items-baseline gap-3">
+                          <span className="text-accent hover:underline">
+                            {on_default(repo)
+                              ? 'browse the working tree'
+                              : `review against ${repo.defaultBranch}`}
+                          </span>
+                          {!on_default(repo) && (
+                            <button
+                              className={`text-dense ${btn()}`}
+                              title="the working tree against the last commit — what is not committed yet, on its own"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void openRepo(repo, 'HEAD')
+                              }}
+                            >
+                              local changes
+                            </button>
+                          )}
                         </span>
-                        {!on_default(repo) && (
-                          <button
-                            className={`text-dense ${btn()}`}
-                            title="the working tree against the last commit — what is not committed yet, on its own"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              void openRepo(repo, 'HEAD')
-                            }}
-                          >
-                            local changes
-                          </button>
-                        )}
-                      </span>
+                      )}
                     </td>
                     <td className="px-2 py-2 text-right">
                       <button

@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   orderWorktrees,
@@ -7,6 +11,7 @@ import {
   parseWorktrees,
   shortSha,
   shortenRev,
+  workingTreeStatus,
 } from './git.js'
 
 describe('parseNameStatus', () => {
@@ -190,5 +195,22 @@ describe('parseLeftRight', () => {
   it('gives up on anything that is not two counts', () => {
     expect(parseLeftRight('')).toBeNull()
     expect(parseLeftRight('fatal: bad revision')).toBeNull()
+  })
+})
+
+describe('workingTreeStatus', () => {
+  it('reads a repository that is there', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stickie-git-'))
+    execFileSync('git', ['init', '-q', '-b', 'main', dir])
+    fs.writeFileSync(path.join(dir, 'a.txt'), 'a')
+    const status = await workingTreeStatus(dir)
+    expect([status.missing, status.branch, status.changedFiles]).toEqual([false, 'main', 1])
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('says a folder that has gone is missing, rather than failing', async () => {
+    const dir = path.join(os.tmpdir(), `stickie-gone-${String(process.pid)}`)
+    const status = await workingTreeStatus(dir)
+    expect([status.missing, status.branch, status.clean]).toEqual([true, '', true])
   })
 })
