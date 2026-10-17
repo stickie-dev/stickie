@@ -62,6 +62,13 @@ with even when it uses a newer server, so a change to the shell is only seen
 from the repository (`pnpm desktop`, `pnpm desktop:dev`) until a new
 installer is built.
 
+The PyPI package (`python/`) holds no copy of stickie: it runs the npm package
+of its own version, which it reads from the root `package.json`, so a release
+publishes the npm package first and the PyPI one after it, at the same
+version. A new binary in `package.json`'s `bin` needs an entry in
+`python/pyproject.toml`'s `[project.scripts]` too. `python/LICENSE` is a copy
+of the root one, since a package cannot reach a file outside its folder.
+
 ## Storage
 
 `server/src/db/` is the only place that knows a database exists: `driver.ts`

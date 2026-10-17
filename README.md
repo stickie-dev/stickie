@@ -236,14 +236,16 @@ started on its own port again (a button there restarts it).
 
 ### What the builds leave
 
-Three things are built from this repository — stickie run from the repository,
-the npm package and the desktop installer — and each leaves its own folder.
+Four things are built from this repository — stickie run from the repository,
+the npm package, its PyPI launcher and the desktop installer — and each leaves
+its own folder.
 All are ignored by git and made again by the command that made them.
 
 | Folder | Made by | What it is |
 | --- | --- | --- |
 | `client/dist`, `server/dist`, `desktop/dist` | `pnpm build` | Each package compiled; `pnpm start`, `bin/stickie.js` and `pnpm desktop` run these. |
 | `dist-pkg/` | `pnpm package` | The publishable npm package, with two binaries: `stickie` (the server) and `stickie-mcp` (the MCP bridge). Its dependencies are named, and installed by whoever installs it. |
+| `python/dist/` | `uv build` in `python/` | The PyPI package: a launcher whose `stickie` and `stickie-mcp` run the npm package of the same version through `npx`, so `pip install stickie` or `uvx stickie` work wherever Node 22 does. Its version is read from `package.json`. |
 | `desktop/stage/` | `pnpm desktop:dist` | The installer's contents, assembled: the three `dist` folders, and the server's dependencies installed as plain files, because pnpm's linked `node_modules` cannot be packed. |
 | `desktop/release/` | `pnpm desktop:dist` | The installer (a `.dmg` on macOS) and the app unpacked beside it. |
 
@@ -330,6 +332,7 @@ For clients that only speak stdio, `stickie-mcp` bridges to the same five tools:
 claude mcp add --transport http stickie http://localhost:4870/mcp
 claude mcp add stickie -- node /path/to/stickie/bin/stickie-mcp.js   # stdio instead
 claude mcp add stickie -- npx -y stickie stickie-mcp                 # once published
+claude mcp add stickie -- uvx --from stickie stickie-mcp             # the same, from PyPI
 ```
 
 Point it elsewhere with `--url http://host:port` or `STICKIE_URL`; it defaults

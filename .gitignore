@@ -9,3 +9,7 @@ dist-pkg/
 
 # private product notes, not part of the tool
 PRODUCT.md
+
+# the PyPI launcher (python/)
+__pycache__/
+.venv/

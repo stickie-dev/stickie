@@ -1,0 +1,32 @@
+# stickie on PyPI: a launcher for the npm package of the same version, so
+# `pip install stickie` (or `uvx stickie`) gives a working `stickie` without
+# the tool being written twice. The version is read from the root package.json.
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stickie"
+dynamic = ["version"]
+description = "Leave notes on code for your coding agent; it reads, replies and resolves them."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Hossain Mahmud" }]
+keywords = ["code-review", "agents", "mcp", "notes"]
+requires-python = ">=3.9"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Quality Assurance",
+]
+
+[project.scripts]
+stickie = "stickie:main"
+stickie-mcp = "stickie:mcp"
+
+[tool.hatch.version]
+path = "../package.json"
+pattern = '"version":\s*"(?P<version>[^"]+)"'
+
