@@ -22,6 +22,7 @@ export function useSettings(): SettingsAccess {
   const setRepinMode = useReview((s) => s.setRepinMode)
   const setSubmitKey = useReview((s) => s.setSubmitKey)
   const setNoteDefault = useReview((s) => s.setNoteDefault)
+  const setPortState = useReview((s) => s.setPortState)
   const [state, setState] = useState<SettingsState | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -57,6 +58,7 @@ export function useSettings(): SettingsAccess {
         setRepinMode(fresh.repinMode)
         setSubmitKey(fresh.submitKey)
         setNoteDefault(fresh.noteDefault)
+        setPortState(fresh.port)
         if (result.restartRequired) {
           pushToast('info', 'saved — it takes effect when stickie is started again')
         } else if (options?.quiet !== true) {
@@ -77,6 +79,7 @@ export function useSettings(): SettingsAccess {
       setRepinMode,
       setSubmitKey,
       setNoteDefault,
+      setPortState,
     ],
   )
 

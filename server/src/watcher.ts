@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { FsEvent } from '@stickie/shared'
+import type { FsEvent, RefsEvent } from '@stickie/shared'
+import { gitCommonDir } from './git.js'
 
 /**
  * Watches a reviewed repository so the diff can follow an agent editing it.
@@ -49,6 +50,22 @@ const ignored_dirs = new Set([
 const debounce_ms = 300
 
 /** Whether a path inside the repository is worth telling anyone about. */
+/**
+ * Whether a path inside the git directory is one that moves a ref: a branch
+ * or a tag, HEAD (a checkout), the packed refs, a linked worktree's HEAD, or
+ * FETCH_HEAD (a fetch, which is also when "behind origin" can change). Not
+ * the objects, the index or the logs, which churn on every operation and say
+ * nothing a review reads.
+ */
+export function refPath(relPath: string): boolean {
+  const parts = relPath.split(path.sep)
+  if (parts.length === 1) {
+    return ['HEAD', 'packed-refs', 'FETCH_HEAD'].includes(relPath)
+  }
+  if (parts[0] === 'refs') return !relPath.endsWith('.lock')
+  return parts[0] === 'worktrees' && parts[2] === 'HEAD'
+}
+
 export function watchable(relPath: string): boolean {
   if (relPath === '') return false
   return !relPath.split(path.sep).some((part) => ignored_dirs.has(part))
@@ -58,14 +75,18 @@ export class WatchHub {
   private watchers = new Map<string, fs.FSWatcher>()
   private pending = new Map<string, Set<string>>()
   private timers = new Map<string, NodeJS.Timeout>()
-  private listeners = new Set<(event: FsEvent) => void>()
+  private listeners = new Set<(event: FsEvent | RefsEvent) => void>()
+  /** one per repository's git directory, however many checkouts share it */
+  private ref_watchers = new Map<string, fs.FSWatcher>()
+  private ref_timers = new Map<string, NodeJS.Timeout>()
 
-  onEvent(listener: (event: FsEvent) => void): () => void {
+  onEvent(listener: (event: FsEvent | RefsEvent) => void): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
   }
 
   ensureWatch(repoPath: string): void {
+    void this.watchRefs(repoPath)
     if (this.watchers.has(repoPath)) return
     let watcher: fs.FSWatcher
     try {
@@ -90,6 +111,46 @@ export class WatchHub {
     this.watchers.set(repoPath, watcher)
   }
 
+  /**
+   * Watches the refs a checkout reads, which live in the repository's shared
+   * git directory and not in any working tree: `.git` is left out of the file
+   * watch above, so a pull of the base in another checkout, a commit, or a
+   * fetch moved what a review is measured against without a word reaching it.
+   */
+  private async watchRefs(checkout: string): Promise<void> {
+    const dir = await gitCommonDir(checkout)
+    if (dir === null || this.ref_watchers.has(dir)) return
+    // the repository is named by its root, which is what a review knows it by
+    const root = path.basename(dir) === '.git' ? path.dirname(dir) : dir
+    let watcher: fs.FSWatcher
+    try {
+      watcher = fs.watch(dir, { recursive: true, persistent: true })
+    } catch (error) {
+      console.warn(`stickie: not watching the refs of ${root}: ${String(error)}`)
+      return
+    }
+    watcher.on('change', (_type, filename) => {
+      if (filename === null) return
+      const rel = typeof filename === 'string' ? filename : filename.toString()
+      if (!refPath(rel)) return
+      const existing = this.ref_timers.get(dir)
+      if (existing !== undefined) clearTimeout(existing)
+      this.ref_timers.set(
+        dir,
+        setTimeout(() => {
+          this.ref_timers.delete(dir)
+          const event: RefsEvent = { type: 'refs', repoPath: root }
+          for (const listener of this.listeners) listener(event)
+        }, debounce_ms),
+      )
+    })
+    watcher.on('error', () => {
+      this.ref_watchers.delete(dir)
+      watcher.close()
+    })
+    this.ref_watchers.set(dir, watcher)
+  }
+
   /** Stops watching one repository — it left the workspace. */
   forget(repoPath: string): void {
     const watcher = this.watchers.get(repoPath)
@@ -105,6 +166,10 @@ export class WatchHub {
   close(): Promise<void> {
     for (const watcher of this.watchers.values()) watcher.close()
     this.watchers.clear()
+    for (const watcher of this.ref_watchers.values()) watcher.close()
+    this.ref_watchers.clear()
+    for (const timer of this.ref_timers.values()) clearTimeout(timer)
+    this.ref_timers.clear()
     for (const timer of this.timers.values()) clearTimeout(timer)
     this.timers.clear()
     return Promise.resolve()

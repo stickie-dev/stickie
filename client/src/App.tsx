@@ -255,6 +255,7 @@ export function App() {
   const error = useReview((s) => s.error)
   const refresh = useReview((s) => s.refresh)
   const syncThreads = useReview((s) => s.syncThreads)
+  const refreshRefs = useReview((s) => s.refreshRefs)
   const setConnected = useReview((s) => s.setConnected)
   const setReviewActive = useReview((s) => s.setReviewActive)
   const theme = useReview((s) => s.theme)
@@ -350,6 +351,7 @@ export function App() {
         try {
           const event = JSON.parse(message.data as string) as ClientEvent
           if (event.type === 'fs') void refresh(event.repoPath)
+          else if (event.type === 'refs') void refreshRefs(event.repoPath)
           else if (event.type === 'thread') void syncThreads(event.sessionId)
         } catch {
           // ignore malformed frames
@@ -365,7 +367,7 @@ export function App() {
       closed = true
       socket?.close()
     }
-  }, [refresh, syncThreads, setConnected])
+  }, [refresh, refreshRefs, syncThreads, setConnected])
 
   // the window itself never scrolls: every panel scrolls inside itself, and
   // anything that would push the frame wider or taller is clipped at it

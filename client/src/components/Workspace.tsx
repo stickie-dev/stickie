@@ -12,6 +12,7 @@ import { PageArea } from './PageArea'
 import { PanelBar } from './PanelBar'
 import { SearchOverlay } from './SearchOverlay'
 import { SidePane } from './SidePane'
+import { StandInBanner } from './StandInBanner'
 import { StatusBar } from './StatusBar'
 import { TabBar } from './TabBar'
 import { TopBar } from './TopBar'
@@ -266,6 +267,7 @@ export function Workspace({ page }: { page: Page }) {
         </div>
         </div>
         <UsagesPanel />
+        <StandInBanner />
         <StatusBar reviewInFront={active} />
       </div>
       {/* nothing covers the frame any more, so these are the reader's on

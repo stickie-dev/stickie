@@ -16,6 +16,7 @@ import type {
   MrThread,
   NavHit,
   NoteDefault,
+  PortState,
   RemoveMode,
   RepinMode,
   ResolvedNotes,
@@ -190,6 +191,9 @@ interface ReviewState {
   activeReplyRepoId: number | null
   error: string | null
   connected: boolean
+  /** the port as the settings report it; null until they have been read */
+  port: PortState | null
+  setPortState: (port: PortState) => void
   promptCopied: boolean
   theme: Theme
   fontScale: FontScale
@@ -598,6 +602,10 @@ interface ReviewState {
   openDir: (repoId: number, dir: string) => Promise<void>
   clearRevealDir: () => void
   refresh: (repoPath: string) => Promise<void>
+  /** a repository's refs moved: re-read whatever of it is open */
+  refreshRefs: (repoRoot: string) => Promise<void>
+  /** re-read everything open, for when something moved that stickie missed */
+  reloadAll: () => Promise<void>
   syncThreads: (sessionId: number) => Promise<void>
   setConnected: (connected: boolean) => void
 }
@@ -1172,6 +1180,7 @@ export const useReview = create<ReviewState>((set, get) => {
     activeReplyRepoId: null,
     error: null,
     connected: false,
+    port: null,
     promptCopied: false,
     mrCandidate: null,
     mrThreads: [],
@@ -1426,6 +1435,7 @@ export const useReview = create<ReviewState>((set, get) => {
               removeMode: settings.removeMode,
               submitKey: settings.submitKey,
               noteDefault: settings.noteDefault,
+              port: settings.port,
             }),
           )
           .catch(() => undefined)
@@ -2625,6 +2635,36 @@ export const useReview = create<ReviewState>((set, get) => {
       }
     },
 
+    refreshRefs: async (repoRoot) => {
+      const { session } = get()
+      if (session !== null && session.repoPath === repoRoot) {
+        await get().refresh(
+          session.source.kind === 'worktree'
+            ? session.source.value
+            : session.repoPath,
+        )
+        return
+      }
+      // a repository in the tree that is not the one being read
+      await get().refresh(repoRoot)
+    },
+
+    reloadAll: async () => {
+      // the overview reads its own data, and listens for this
+      window.dispatchEvent(new Event('stickie:reload'))
+      const repos = await api.repos().catch(() => null)
+      if (repos !== null) set({ repos, reposLoaded: true })
+      const { session, repoSessions } = get()
+      const reads: Promise<void>[] = []
+      for (const repo of get().repos) {
+        if (repoSessions[repo.id] === undefined) continue
+        if (session !== null && session.repoPath === repo.path) continue
+        reads.push(get().refresh(repo.path))
+      }
+      if (session !== null) reads.push(get().refreshRefs(session.repoPath))
+      await Promise.all(reads)
+    },
+
     // a note changed on the server (an agent replied, resolved, or added one)
     syncThreads: async (sessionId) => {
       const { session, repoSessions } = get()
@@ -2692,6 +2732,7 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     setConnected: (connected) => set({ connected }),
+    setPortState: (port) => set({ port }),
   }
 })
 

@@ -145,9 +145,10 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
         {/*
           The tail of the page is empty on purpose: without it the last section
           cannot reach the top of the window, so its anchor would scroll to a
-          stop halfway and never take the highlight.
+          stop halfway and never take the highlight. `min-w-0`, or a long
+          command in a section widens the page instead of scrolling in its box.
         */}
-        <div className={`grow px-6 pt-2 pb-[45vh] ${enter}`}>
+        <div className={`min-w-0 grow px-6 pt-2 pb-[45vh] ${enter}`}>
           {/*
             Sections render their own fields empty until the settings land,
             which reads as a page of blank controls. One silhouette of a

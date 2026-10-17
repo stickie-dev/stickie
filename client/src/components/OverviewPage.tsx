@@ -685,6 +685,13 @@ export function OverviewPage() {
     void load()
   }, [load, repos_in_store])
 
+  // the top bar's reload reaches this page too, though it reads its own data
+  useEffect(() => {
+    const again = () => void load()
+    window.addEventListener('stickie:reload', again)
+    return () => window.removeEventListener('stickie:reload', again)
+  }, [load])
+
   const repos = overview?.repos ?? []
   // archived rows leave everything the page counts, not only the table
   const every_row = rows(overview?.reviews ?? [])

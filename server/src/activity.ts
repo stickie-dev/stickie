@@ -42,9 +42,10 @@ export const activity_actions = {
    * A repository joining or leaving the workspace. `removed` took its reviews
    * and their notes with it, which is the one action here that destroys
    * anything — so it says how many notes went, in a row that outlives them.
-   * `unregistered` kept them.
+   * `unregistered` kept them. `pulled` is a branch moved up to its upstream
+   * from stickie — something done to the repository, not only read from it.
    */
-  repo: ['added', 'removed', 'unregistered'],
+  repo: ['added', 'removed', 'unregistered', 'pulled'],
 } as const
 
 export type ActivitySubject = keyof typeof activity_actions

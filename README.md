@@ -207,15 +207,31 @@ registers a repo (default: cwd) and opens the browser. During development:
 
 The port is 4870 unless set otherwise in Settings → App, which keeps it in
 `~/.stickie/config.json` so `stickie`, the desktop app and the MCP bridge all follow
-it; `--port` or `STICKIE_PORT` override it for one run. If the desktop app finds
-the port held by another program it offers the nearest free one. Vite's port
-for working on stickie is `STICKIE_DEV_PORT`, or `devPort` in the same file.
+it; `--port` or `STICKIE_PORT` override it for one run. An MCP connector added
+over HTTP has the address in it, so moving the port means adding that again —
+Settings gives the command. Vite's port for working on stickie is
+`STICKIE_DEV_PORT`, or `devPort` in the same file.
+
+stickie never moves its port by itself. If the desktop app finds it held by
+another program, it says which, and offers to try again once it is free, to
+quit, or to run on the nearest free port *this time only*: the setting stays
+as it was, and the window says that agents cannot reach stickie until it is
+started on its own port again (a button there restarts it).
 
 `pnpm package` assembles the publishable npm package under `dist-pkg/`, which
 carries two binaries: `stickie` (the server) and `stickie-mcp` (the MCP bridge).
 
-The server binds 127.0.0.1 only (`STICKIE_HOST` overrides). The GitLab import
-is the only outbound network call and only runs when you trigger it.
+The server binds 127.0.0.1 only (`STICKIE_HOST` overrides). Nothing reaches
+the network unless you press something: the GitLab import, and *fetch* in
+the status bar, which runs `git fetch --all` for the repository in front.
+
+stickie watches each repository's refs, so a commit, a pull or a checkout made
+anywhere — a terminal, an IDE, an agent — is in an open review without a
+reload; the reload button in the top bar is for anything it missed. The
+status bar marks a base or source branch that is behind or ahead of the
+branch it tracks, as of the last fetch, and a branch only behind can be
+pulled from there: a fast-forward, refused when it would have to merge or
+would overwrite changes in the checkout it is in.
 
 ## Storage
 

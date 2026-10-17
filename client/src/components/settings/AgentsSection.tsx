@@ -12,6 +12,12 @@ const mcp_tools: [string, string, string][] = [
 /** Reference only: nothing here is stored, so there is nothing to save. */
 export function AgentsSection({ state }: SettingsAccess) {
   const origin = window.location.origin
+  // where agents find stickie: the configured port, which is not this page's
+  // when the page is on Vite, or on a port this run stood in on
+  const mcp_url =
+    state === null
+      ? `${origin}/mcp`
+      : `http://localhost:${String(state.port.configured)}/mcp`
 
   return (
     <Section
@@ -53,7 +59,7 @@ export function AgentsSection({ state }: SettingsAccess) {
           This server speaks MCP itself, so a client that speaks streamable HTTP
           needs no bridge at all:
         </p>
-        <Command text={`claude mcp add --transport http stickie ${origin}/mcp`} />
+        <Command text={`claude mcp add --transport http stickie ${mcp_url}`} />
         <p className="pt-1 text-xs text-faint">
           For a client that only speaks stdio, <Mono>stickie-mcp</Mono> bridges to
           the same tools against a <em>running</em> stickie — it starts nothing

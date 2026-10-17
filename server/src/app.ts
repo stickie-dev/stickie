@@ -50,11 +50,14 @@ import type { Fetcher } from './mcp.js'
 import { handleMessage } from './mcp.js'
 import {
   branchTipDates,
+  branchTracking,
   changedFiles,
   commitFiles,
   defaultBranch,
   describeRevs,
   expandUserPath,
+  fastForward,
+  fetchRemotes,
   fileAtRef,
   fileAtSide,
   fileInWorktree,
@@ -62,6 +65,7 @@ import {
   gitStatus,
   isAncestor,
   isGitRepo,
+  lastFetchedAt,
   listAllFiles,
   listBranchNames,
   listCommitsBetween,
@@ -626,10 +630,16 @@ function errorMessage(error: unknown): string {
 /** Pushes an event to connected clients; a no-op outside the real server. */
 export type Emit = (event: ClientEvent) => void
 
+export interface AppOptions {
+  /** on another port than the configured one for this run (serve.ts) */
+  standIn?: boolean
+}
+
 export function createApp(
   store: Store,
   hub: WatchHub,
   emit: Emit = () => undefined,
+  options: AppOptions = {},
 ): OpenAPIHono {
   const app = new OpenAPIHono()
 
@@ -1111,6 +1121,142 @@ export function createApp(
         return c.json({ error: 'unknown session' }, 404)
       }
       return c.json({ ...session, ...(await reviewState(session)) }, 200)
+    },
+  )
+
+  const tracking_schema = z
+    .object({
+      branch: z.string(),
+      upstream: z.string(),
+      ahead: z.number().int(),
+      behind: z.number().int(),
+    })
+    .openapi('Tracking')
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/sessions/{id}/upstream',
+      tags: ['sessions'],
+      summary: 'How the base and the source stand against what they track',
+      description:
+        'Each of the review\'s base and source branches beside its upstream, ' +
+        'as of the last fetch — no network: what `origin/main` was then is ' +
+        'what this compares with. Null for a branch with no upstream, or a ' +
+        'base that is not a local branch. `fetchedAt` says how old that is.',
+      request: { params: id_param },
+      responses: {
+        200: json_response(
+          z.object({
+            base: tracking_schema.nullable(),
+            source: tracking_schema.nullable(),
+            fetchedAt: z.string().nullable(),
+          }),
+          'Upstream state',
+        ),
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const session = await store.getSession(c.req.valid('param').id)
+      if (session === undefined) {
+        return c.json({ error: 'unknown session' }, 404)
+      }
+      const of = async (branch: string) => {
+        if (branch === '' || branch === 'HEAD') return null
+        const tracking = await branchTracking(session.repoPath, branch)
+        return tracking === null ? null : { branch, ...tracking }
+      }
+      const [base, source, fetchedAt] = await Promise.all([
+        of(session.baseRef),
+        of(session.branch),
+        lastFetchedAt(session.repoPath),
+      ])
+      return c.json({ base, source, fetchedAt }, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/repos/{id}/fetch',
+      tags: ['repos'],
+      summary: 'Fetch every remote',
+      description:
+        'The one network call stickie makes on git\'s behalf, and only when ' +
+        'asked. A remote that wants credentials typed in fails rather than ' +
+        'waiting for a terminal that is not there.',
+      request: { params: id_param },
+      responses: {
+        200: json_response(z.object({ ok: z.boolean() }), 'Fetched'),
+        400: bad_request,
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const repo = await store.getRepo(c.req.valid('param').id)
+      if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
+      try {
+        await fetchRemotes(repo.path)
+      } catch (error) {
+        const detail = error as { stderr?: string }
+        return c.json(
+          { error: (detail.stderr ?? errorMessage(error)).trim().slice(0, 400) },
+          400,
+        )
+      }
+      return c.json({ ok: true }, 200)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/repos/{id}/fast-forward',
+      tags: ['repos'],
+      summary: 'Move a local branch up to its upstream, if nothing has to merge',
+      description:
+        'Fast-forward only: refused when the branch has commits its upstream ' +
+        'does not, and — for a branch checked out somewhere — when that ' +
+        'checkout has changes the move would overwrite. Recorded.',
+      request: {
+        params: id_param,
+        query: actor_query,
+        body: json_body(z.object({ branch: z.string().min(1) })),
+      },
+      responses: {
+        200: json_response(
+          z.object({ from: z.string(), to: z.string(), upstream: z.string() }),
+          'Moved',
+        ),
+        400: bad_request,
+        404: not_found,
+      },
+    }),
+    async (c) => {
+      const repo = await store.getRepo(c.req.valid('param').id)
+      if (repo === undefined) return c.json({ error: 'unknown repo' }, 404)
+      const { branch } = c.req.valid('json')
+      let moved
+      try {
+        moved = await fastForward(repo.path, branch)
+      } catch (error) {
+        const detail = error as { stderr?: string }
+        return c.json(
+          { error: (detail.stderr ?? errorMessage(error)).trim().slice(0, 400) },
+          400,
+        )
+      }
+      if (moved.from !== moved.to) {
+        await record({
+          subject: 'repo',
+          action: 'pulled',
+          actorId: (await identity.human(repo.path)).actor.id,
+          repoId: repo.id,
+          detail: { branch, ...moved },
+        })
+      }
+      return c.json(moved, 200)
     },
   )
 
@@ -2715,6 +2861,12 @@ export function createApp(
               running: z.number().int(),
               /** the environment decides; the page cannot change it */
               fromEnv: z.boolean(),
+              /**
+               * the configured port was taken at start, so this run is on
+               * another one and agents, which expect the configured one,
+               * cannot reach it
+               */
+              standIn: z.boolean(),
             }),
             identity: z.object({
               /** '' when nothing was set by hand and git config decides */
@@ -2768,6 +2920,7 @@ export function createApp(
             configured: configuredPort(),
             running: Number(new URL(c.req.url).port || default_port),
             fromEnv: portFromEnv(),
+            standIn: options.standIn ?? false,
           },
           gitlabUrl: settings.url,
           gitlabTokenEnv: settings.tokenEnv,

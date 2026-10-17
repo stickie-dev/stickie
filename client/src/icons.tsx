@@ -234,6 +234,15 @@ export function WrapLines(props: IconProps) {
   )
 }
 
+/** Fetch: down from the remote, onto the line that is this machine. */
+export function FetchDown(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" />
+    </Icon>
+  )
+}
+
 /** Archive: a box with its lid on, put away rather than thrown away. */
 export function Archive(props: IconProps) {
   return (

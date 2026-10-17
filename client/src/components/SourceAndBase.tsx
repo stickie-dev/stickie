@@ -3,6 +3,7 @@ import { api } from '../api'
 import { ask } from '../confirm'
 import { badge, btn } from '../ui'
 import { Picker } from './Picker'
+import { FetchButton, TrackingMark, useUpstream } from './Upstream'
 import { useReview } from '../store'
 
 function shortPath(path: string): string {
@@ -28,6 +29,7 @@ export function SourceAndBase() {
   const session = useReview((s) => s.session)
   const baseRef = useReview((s) => s.baseRef)
   const setBase = useReview((s) => s.setBase)
+  const { upstream, reread } = useUpstream(session)
   const repin = useReview((s) => s.repin)
   const undoBase = useReview((s) => s.undoBase)
   const threads = useReview((s) => s.threads)
@@ -219,6 +221,12 @@ export function SourceAndBase() {
         }
       />
 
+      <TrackingMark
+        tracking={upstream?.source ?? null}
+        fetchedAt={upstream?.fetchedAt ?? null}
+        onMoved={reread}
+      />
+
       <label className="text-faint">base</label>
       <Picker
         className="min-w-20 max-w-52 shrink"
@@ -246,6 +254,16 @@ export function SourceAndBase() {
           },
         ]}
       />
+
+      <TrackingMark
+        tracking={upstream?.base ?? null}
+        fetchedAt={upstream?.fetchedAt ?? null}
+        onMoved={reread}
+      />
+      {/* only where there is something tracked to compare against */}
+      {(upstream?.base != null || upstream?.source != null) && (
+        <FetchButton fetchedAt={upstream.fetchedAt} onFetched={reread} />
+      )}
 
       {session?.prevBaseRef != null && (
         <button

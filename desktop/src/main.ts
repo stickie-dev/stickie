@@ -13,6 +13,7 @@ import {
   Tray,
 } from 'electron'
 import type { IpcMainEvent, IpcMainInvokeEvent, MenuItemConstructorOptions } from 'electron'
+import { portHolder } from './portHolder.js'
 import { readPreferences, writePreferences } from './preferences.js'
 import { adoptShellPath } from './shellPath.js'
 
@@ -46,10 +47,12 @@ const config = (await import(
 )) as {
   configuredPort: () => number
   configuredDevPort: () => number
-  setPort: (port: number | null) => void
 }
 
-let port = config.configuredPort()
+/** where agents expect stickie; set in Settings, never moved by the app itself */
+const configured_port = config.configuredPort()
+/** where this run serves: the configured port, unless that was taken */
+let port = configured_port
 let origin = `http://localhost:${String(port)}`
 const mac = process.platform === 'darwin'
 
@@ -108,13 +111,25 @@ async function runningStickie(): Promise<boolean> {
   }
 }
 
-/** Whether nothing is listening on a port, so a server could have it. */
-function free(candidate: number): Promise<boolean> {
+/** Whether a port can be listened on at one address. */
+function bindable(candidate: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const probe = net.createServer()
     probe.once('error', () => resolve(false))
-    probe.listen(candidate, '127.0.0.1', () => probe.close(() => resolve(true)))
+    probe.listen(candidate, host, () => probe.close(() => resolve(true)))
   })
+}
+
+/**
+ * Whether nothing is listening on a port, so a server could have it. Both
+ * addresses: macOS lets 127.0.0.1 be bound under a program listening on all
+ * of them, and stickie would then answer in its place on that port.
+ */
+async function free(candidate: number): Promise<boolean> {
+  return (
+    (await bindable(candidate, '127.0.0.1')) &&
+    (await bindable(candidate, '0.0.0.0'))
+  )
 }
 
 /** The nearest free port above the one that is taken, if any is close. */
@@ -126,40 +141,90 @@ async function nearestFree(after: number): Promise<number | null> {
 }
 
 /**
- * The port is held by something that is not stickie. Rather than only saying so,
- * offer the nearest free one — kept in Settings, so `stickie`, the MCP bridge and
- * the next start all follow — or quit.
+ * The configured port is held by something that is not stickie. The port is not
+ * the app's to move: agents' MCP connectors were set up with it beforehand,
+ * and moving it would leave them knocking at the old address with nothing to
+ * say why. So name what holds it, and let the reader free it and try again,
+ * or run on a free port for this start only — the setting stays, and the
+ * window says for as long as it lasts that agents cannot reach it.
  */
-async function offerAnotherPort(error: unknown): Promise<boolean> {
-  const instead = await nearestFree(port)
+async function whenTaken(error: unknown): Promise<'retry' | 'quit' | number> {
+  const [holder, instead] = await Promise.all([
+    portHolder(port),
+    nearestFree(port),
+  ])
   const reason = error instanceof Error ? error.message : String(error)
+  const held_by =
+    holder === null
+      ? 'another program'
+      : `${holder.name} (pid ${String(holder.pid)})`
+  const buttons = [
+    ...(instead === null ? [] : [`Run on ${String(instead)} This Time`]),
+    'Try Again',
+    'Quit',
+  ]
   const { response } = await dialog.showMessageBox({
     type: 'warning',
-    message: `Port ${String(port)} is taken by another program`,
+    message: `Port ${String(port)} is in use by ${held_by}`,
     detail:
-      instead === null
-        ? `${reason}\n\nNo free port is close by. ` +
-          'Free the port, or set one with STICKIE_PORT.'
-        : `${reason}\n\nstickie can use port ${String(instead)} instead, ` +
-          'from now on — the command line and agents follow it, and it can ' +
-          'be changed in Settings → App.',
-    buttons: instead === null ? ['Quit'] : [`Use ${String(instead)}`, 'Quit'],
+      `Agents' MCP connectors are set up with localhost:${String(configured_port)}, ` +
+      'so stickie stays on it. Free the port and try again' +
+      (instead === null
+        ? ' — no free port is close by to run on meanwhile.'
+        : `, or run on ${String(instead)} this time: the setting does not ` +
+          `change, and agents cannot reach stickie until it is on ` +
+          `${String(configured_port)} again.`) +
+      '\n\nTo move stickie for good, change the port in Settings → App and ' +
+      `add the agents' connectors again.\n\n${reason}`,
+    buttons,
     defaultId: 0,
-    cancelId: instead === null ? 0 : 1,
+    cancelId: buttons.length - 1,
   })
-  if (instead === null || response !== 0) return false
-  config.setPort(instead)
-  port = instead
-  origin = `http://localhost:${String(port)}`
-  return true
+  if (buttons[response] === 'Try Again') return 'retry'
+  if (buttons[response] === 'Quit' || instead === null) return 'quit'
+  return instead
 }
 
 async function startOwnServer(): Promise<void> {
   const entry = pathToFileURL(path.join(root, 'server', 'dist', 'serve.js')).href
   const { startServer } = (await import(entry)) as {
-    startServer: (options: { port: number }) => Promise<{ close: () => Promise<void> }>
+    startServer: (options: {
+      port: number
+      standIn: boolean
+    }) => Promise<{ close: () => Promise<void> }>
   }
-  server = await startServer({ port })
+  server = await startServer({ port, standIn: port !== configured_port })
+}
+
+/**
+ * Serves on the configured port, or uses the stickie already serving it. False
+ * when it can do neither and the reader chose to quit.
+ */
+async function serve(): Promise<boolean> {
+  for (;;) {
+    // asked again on every try: what held the port may have been a stickie
+    // still starting, or one started from a terminal meanwhile
+    if (port === configured_port && (await runningStickie())) return true
+    try {
+      await startOwnServer()
+      return true
+    } catch (error) {
+      const taken =
+        error instanceof Error &&
+        (error as NodeJS.ErrnoException).code === 'EADDRINUSE'
+      if (!taken) {
+        dialog.showErrorBox(
+          'stickie could not start',
+          error instanceof Error ? error.message : String(error),
+        )
+        return false
+      }
+      const answer = await whenTaken(error)
+      if (answer === 'quit') return false
+      port = answer === 'retry' ? configured_port : answer
+      origin = `http://localhost:${String(port)}`
+    }
+  }
 }
 
 function fromOurPage(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
@@ -293,6 +358,14 @@ function ensureTray(): void {
       { label: 'Open in Browser', click: () => void shell.openExternal(origin) },
       { type: 'separator' },
       { label: `Serving ${origin.replace('http://', '')}`, enabled: false },
+      ...(port === configured_port
+        ? []
+        : [
+            {
+              label: `Agents expect port ${String(configured_port)}`,
+              enabled: false,
+            },
+          ]),
       { type: 'separator' },
       { label: 'Quit stickie', click: () => app.quit() },
     ]),
@@ -414,27 +487,10 @@ function listen(): void {
 
 async function start(): Promise<void> {
   adoptShellPath()
-  if (dev_url === null && !(await runningStickie())) {
-    for (;;) {
-      try {
-        await startOwnServer()
-        break
-      } catch (error) {
-        const taken =
-          error instanceof Error &&
-          (error as NodeJS.ErrnoException).code === 'EADDRINUSE'
-        if (taken && (await offerAnotherPort(error))) continue
-        if (!taken) {
-          dialog.showErrorBox(
-            'stickie could not start',
-            error instanceof Error ? error.message : String(error),
-          )
-        }
-        quitting = true
-        app.quit()
-        return
-      }
-    }
+  if (dev_url === null && !(await serve())) {
+    quitting = true
+    app.quit()
+    return
   }
   listen()
   Menu.setApplicationMenu(buildMenu())

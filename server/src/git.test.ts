@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
-  parseNameStatus,
   orderWorktrees,
+  parseLeftRight,
+  parseNameStatus,
   parseRefNames,
   parseWorktrees,
-  shortenRev,
   shortSha,
+  shortenRev,
 } from './git.js'
 
 describe('parseNameStatus', () => {
@@ -177,5 +178,17 @@ describe('shortSha', () => {
   it('agrees with what shortenRev abbreviates to', () => {
     const sha = 'c45e78221bb7009e8e54c6598f6530a04cd992b2'
     expect(shortenRev(sha)).toBe(shortSha(sha))
+  })
+})
+
+describe('parseLeftRight', () => {
+  it('reads what each side has that the other lacks', () => {
+    expect(parseLeftRight('2\t5\n')).toEqual({ ahead: 2, behind: 5 })
+    expect(parseLeftRight('0 0')).toEqual({ ahead: 0, behind: 0 })
+  })
+
+  it('gives up on anything that is not two counts', () => {
+    expect(parseLeftRight('')).toBeNull()
+    expect(parseLeftRight('fatal: bad revision')).toBeNull()
   })
 })

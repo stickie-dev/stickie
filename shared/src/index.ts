@@ -320,6 +320,37 @@ export interface FsEvent {
   paths: string[]
 }
 
+/**
+ * A repository's refs moved — a commit, a pull, a fetch, a checkout — which
+ * changes what a review reads against without touching a file in it. Keyed
+ * by the repository's own root, since every checkout of it shares the refs.
+ */
+export interface RefsEvent {
+  type: 'refs'
+  repoPath: string
+}
+
+/**
+ * A local branch beside the branch it tracks, as of the last fetch: stickie does
+ * not fetch to find out, so this is what the remote looked like then.
+ */
+export interface Tracking {
+  branch: string
+  /** e.g. origin/main */
+  upstream: string
+  /** commits on the branch the upstream does not have */
+  ahead: number
+  /** commits on the upstream the branch does not have */
+  behind: number
+}
+
+export interface UpstreamState {
+  base: Tracking | null
+  source: Tracking | null
+  /** when this repository last fetched, from any tool; null if never */
+  fetchedAt: string | null
+}
+
 /** A note changed server-side, e.g. an agent replied or resolved. */
 export interface ThreadEvent {
   type: 'thread'
@@ -329,4 +360,4 @@ export interface ThreadEvent {
   threadId?: number
 }
 
-export type ClientEvent = FsEvent | ThreadEvent
+export type ClientEvent = FsEvent | ThreadEvent | RefsEvent

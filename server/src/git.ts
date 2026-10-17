@@ -300,6 +300,117 @@ export async function branchTipDates(repo: string): Promise<Map<string, string>>
   return dates
 }
 
+/**
+ * The repository's shared git directory — where the refs live for every
+ * checkout of it, a linked worktree's `.git` being only a pointer.
+ */
+export async function gitCommonDir(repo: string): Promise<string | null> {
+  const out = await gitOrNull(repo, [
+    'rev-parse',
+    '--path-format=absolute',
+    '--git-common-dir',
+  ])
+  return out === null || out === '' ? null : out
+}
+
+/** `rev-list --left-right --count a...b`: what a has that b lacks, and back. */
+export function parseLeftRight(
+  out: string,
+): { ahead: number; behind: number } | null {
+  const [left = '', right = ''] = out.trim().split(/\s+/)
+  const ahead = Number(left)
+  const behind = Number(right)
+  if (left === '' || !Number.isInteger(ahead) || !Number.isInteger(behind)) {
+    return null
+  }
+  return { ahead, behind }
+}
+
+/**
+ * A local branch beside its upstream, read from the remote-tracking ref —
+ * what the last fetch saw. Null for a branch with no upstream, or one whose
+ * upstream is gone.
+ */
+export async function branchTracking(
+  repo: string,
+  branch: string,
+): Promise<{ upstream: string; ahead: number; behind: number } | null> {
+  const upstream = await gitOrNull(repo, [
+    'for-each-ref',
+    '--format=%(upstream:short)',
+    `refs/heads/${branch}`,
+  ])
+  if (upstream === null || upstream === '') return null
+  const counts = await gitOrNull(repo, [
+    'rev-list',
+    '--left-right',
+    '--count',
+    `refs/heads/${branch}...${upstream}`,
+  ])
+  const parsed = counts === null ? null : parseLeftRight(counts)
+  return parsed === null ? null : { upstream, ...parsed }
+}
+
+/** When anything last fetched into this repository, from FETCH_HEAD. */
+export async function lastFetchedAt(repo: string): Promise<string | null> {
+  const dir = await gitCommonDir(repo)
+  if (dir === null) return null
+  try {
+    const stat = await fs.stat(path.join(dir, 'FETCH_HEAD'))
+    return stat.mtime.toISOString()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Fetches every remote. The one network call stickie makes on git's behalf, and
+ * only when asked; credentials it would have to prompt for make it fail
+ * rather than hang, since there is no terminal to type them into.
+ */
+export async function fetchRemotes(repo: string): Promise<void> {
+  await execa('git', ['-C', repo, 'fetch', '--all', '--prune'], {
+    env: { GIT_TERMINAL_PROMPT: '0' },
+    timeout: 60_000,
+  })
+}
+
+/**
+ * Moves a local branch up to its upstream, only if that is a fast-forward:
+ * nothing is merged, so nothing can conflict. A branch checked out somewhere
+ * is moved there, by `merge --ff-only`, which also refuses to overwrite
+ * uncommitted changes in that checkout; one checked out nowhere has its ref
+ * moved, compare-and-swap, so a ref that moved meanwhile is left alone.
+ */
+export async function fastForward(
+  repo: string,
+  branch: string,
+): Promise<{ from: string; to: string; upstream: string }> {
+  const tracking = await branchTracking(repo, branch)
+  if (tracking === null) {
+    throw new Error(`${branch} has no upstream to pull from`)
+  }
+  if (tracking.ahead > 0) {
+    throw new Error(
+      `${branch} has ${String(tracking.ahead)} ` +
+        `${tracking.ahead === 1 ? 'commit' : 'commits'} ${tracking.upstream} ` +
+        'does not — that is a merge, not a fast-forward',
+    )
+  }
+  const from = await resolveRef(repo, `refs/heads/${branch}`)
+  const to = await resolveRef(repo, tracking.upstream)
+  if (from === to) return { from, to, upstream: tracking.upstream }
+  const checkout = (await listWorktrees(repo)).find(
+    (wt) => wt.branch === branch,
+  )
+  if (checkout !== undefined) {
+    await git(checkout.path, ['merge', '--ff-only', tracking.upstream])
+  } else {
+    await git(repo, ['update-ref', `refs/heads/${branch}`, to, from])
+  }
+  return { from, to, upstream: tracking.upstream }
+}
+
 /** Every local branch, for asking whether one still exists. */
 export async function listBranchNames(repo: string): Promise<string[]> {
   const out = await gitOrNull(repo, [

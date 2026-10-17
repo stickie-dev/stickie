@@ -22,6 +22,16 @@ the server reads — `stickie`, the desktop app, the MCP bridge and Vite:
 `STICKIE_CONFIG` names another config file, which is how a second copy runs
 beside the one in use without either changing the other's.
 
+The port is fixed rather than found: agents' MCP connectors are configured
+before stickie runs, and an HTTP one has the address written into it. Nothing
+moves it but the reader. When the desktop app finds it held by another
+program, it names the program and offers to try again, to quit, or to run on
+a free port for that start only — `startServer({ standIn: true })` — which
+leaves the setting alone and puts a banner in the page (`StandInBanner`)
+until stickie is back on the configured port. Do not add a fallback that
+quietly picks another port, or one that writes the port it found to the
+config.
+
 ## Checks
 
 ```sh

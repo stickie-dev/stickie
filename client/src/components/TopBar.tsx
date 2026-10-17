@@ -5,6 +5,7 @@ import {
   CopyPrompt,
   NavBack,
   NavForward,
+  Refresh,
   Send,
 } from '../icons'
 import { btn, icon_button, title_bar } from '../ui'
@@ -20,6 +21,7 @@ export function TopBar() {
   const promptCopied = useReview((s) => s.promptCopied)
   const navBack = useReview((s) => s.navBack)
   const navForward = useReview((s) => s.navForward)
+  const reloadAll = useReview((s) => s.reloadAll)
   const canBack = useReview((s) => s.navIndex > 0)
   const canForward = useReview((s) => s.navIndex < s.navHistory.length - 1)
   const pending_count = threads.filter(
@@ -64,6 +66,20 @@ export function TopBar() {
           onClick={() => void navForward()}
         >
           <NavForward />
+        </button>
+        {/*
+          With the arrows, since it is about where you are rather than what to
+          do there. Refs are watched, so this is for what stickie missed — a
+          change on a network drive, a watch the system dropped — and for
+          not having to wonder.
+        */}
+        <button
+          className={icon_button}
+          title={'read every open repository again — the diff, the notes, the branches\nnothing is fetched from a remote'}
+          aria-label="reload"
+          onClick={() => void reloadAll()}
+        >
+          <Refresh />
         </button>
       </div>
       <span className="grow" />

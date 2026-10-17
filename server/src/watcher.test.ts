@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { watchable } from './watcher.js'
+import { refPath, watchable } from './watcher.js'
 
 describe('what a repository watch reports', () => {
   it('reports source files, however deep', () => {
@@ -25,5 +25,29 @@ describe('what a repository watch reports', () => {
 
   it('ignores the repository root itself, which is not a change', () => {
     expect(watchable('')).toBe(false)
+  })
+})
+
+describe('what a refs watch reports', () => {
+  it('reports a branch, a tag, a remote branch and the packed refs', () => {
+    expect(refPath('refs/heads/main')).toBe(true)
+    expect(refPath('refs/heads/feature/x')).toBe(true)
+    expect(refPath('refs/remotes/origin/main')).toBe(true)
+    expect(refPath('refs/tags/v1')).toBe(true)
+    expect(refPath('packed-refs')).toBe(true)
+  })
+
+  it('reports a checkout, a linked worktree moving, and a fetch', () => {
+    expect(refPath('HEAD')).toBe(true)
+    expect(refPath('worktrees/feature/HEAD')).toBe(true)
+    expect(refPath('FETCH_HEAD')).toBe(true)
+  })
+
+  it('ignores what churns on every operation', () => {
+    expect(refPath('objects/ab/cdef')).toBe(false)
+    expect(refPath('index')).toBe(false)
+    expect(refPath('logs/HEAD')).toBe(false)
+    expect(refPath('refs/heads/main.lock')).toBe(false)
+    expect(refPath('worktrees/feature/index')).toBe(false)
   })
 })

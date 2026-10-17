@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { CloseBehaviour } from '../../desktop'
 import { desktop, inBrowserApp } from '../../desktop'
-import { Field, Mono, Section } from './parts'
+import { Command, Field, Mono, Section } from './parts'
 import type { SettingsAccess } from './useSettings'
 import { field } from '../../ui'
 
@@ -85,12 +85,21 @@ function InTheApp({ bridge }: { bridge: NonNullable<typeof desktop> }) {
  * can ask stickie anything: `stickie`, the desktop app, the MCP bridge an agent
  * starts, and Vite. Taking effect means starting again, so the app offers to
  * do that; a terminal's `stickie` has to be started again by hand.
+ *
+ * The one thing that does not follow is an MCP connector added over HTTP: its
+ * address is written into the agent's own configuration. So a change says
+ * so, and gives the command to add it again.
  */
 function Port({ state, save }: SettingsAccess) {
   const [text, setText] = useState('')
+  // the port agents were added with, as far as this page knows: what was
+  // configured when it opened, so a change away from it shows the command
+  const [before, setBefore] = useState<number | null>(null)
   const [about, setAbout] = useState<{ serving: boolean } | null>(null)
   useEffect(() => {
-    if (state !== null) setText(String(state.port.configured))
+    if (state === null) return
+    setText(String(state.port.configured))
+    setBefore((known) => known ?? state.port.configured)
   }, [state])
   useEffect(() => {
     void desktop?.about().then(setAbout)
@@ -114,8 +123,9 @@ function Port({ state, save }: SettingsAccess) {
         ) : (
           <>
             Used from the next start, by <Mono>stickie</Mono>, the desktop app and
-            the MCP bridge alike — agents need no change. A browser tab on the
-            old address stops working when stickie restarts.
+            the stdio MCP bridge alike. An MCP connector added over HTTP has
+            the address written into it, so it has to be added again; a
+            browser tab on the old address stops working when stickie restarts.
           </>
         )
       }
@@ -154,6 +164,17 @@ function Port({ state, save }: SettingsAccess) {
         <p className="mt-1 text-xs text-rose-500">
           A port from 1024 to 65535.
         </p>
+      )}
+      {before !== null && before !== configured && (
+        <div className="mt-2 space-y-1">
+          <p className="text-xs text-faint">
+            An agent that reaches stickie over HTTP needs adding again — remove
+            the old one first (<Mono>claude mcp remove stickie</Mono>):
+          </p>
+          <Command
+            text={`claude mcp add --transport http stickie http://localhost:${String(configured)}/mcp`}
+          />
+        </div>
       )}
     </Field>
   )

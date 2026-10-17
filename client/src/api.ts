@@ -1,15 +1,16 @@
 import type {
   ActivityEntry,
   Author,
-  Overview,
   ChangedFile,
   FileContent,
+  Overview,
   RepoInfo,
   ReviewSource,
   Session,
   Side,
   TargetOptions,
   Thread,
+  UpstreamState,
 } from '@stickie/shared'
 
 /** An open merge request, as much of one as a review needs to name it. */
@@ -70,6 +71,13 @@ export type RemoveMode = 'delete' | 'unregister'
  */
 const as_user = 'author=user'
 
+export interface PortState {
+  configured: number
+  running: number
+  fromEnv: boolean
+  standIn: boolean
+}
+
 export interface SettingsState {
   gitlabUrl: string | null
   gitlabTokenEnv: string | null
@@ -95,8 +103,11 @@ export interface SettingsState {
   deleteAfterDays: number | null
   /** days the activity record is kept; null is for ever */
   activityKeepDays: number | null
-  /** the port stickie starts on, the one it is on now, and whether env decides */
-  port: { configured: number; running: number; fromEnv: boolean }
+  /**
+   * the port stickie starts on, the one it is on now, whether env decides, and
+   * whether this run is standing in on another because that one was taken
+   */
+  port: PortState
   identity: {
     chosenName: string
     perRepo: {
@@ -336,6 +347,20 @@ export const api = {
   setArchived: (sessionId: number, archived: boolean) =>
     request(`/api/sessions/${sessionId}/archived`, 'PUT', { archived }).then(
       toJson<Session>,
+    ),
+
+  /** The base and source beside what they track, as of the last fetch. */
+  upstream: (sessionId: number) =>
+    fetch(`/api/sessions/${sessionId}/upstream`).then(toJson<UpstreamState>),
+
+  /** Fetch every remote of a repository — the one network call, when asked. */
+  fetchRemotes: (repoId: number) =>
+    post(`/api/repos/${repoId}/fetch`, {}).then(toJson<{ ok: boolean }>),
+
+  /** Move a local branch up to its upstream; refused unless a fast-forward. */
+  fastForward: (repoId: number, branch: string) =>
+    post(`/api/repos/${repoId}/fast-forward?${as_user}`, { branch }).then(
+      toJson<{ from: string; to: string; upstream: string }>,
     ),
 
   /** Keep a review from expiring, or let it go again. */

@@ -19,6 +19,12 @@ export interface StartOptions {
   hostname?: string
   /** a repository to register on the way up, if it is one */
   addRepo?: string
+  /**
+   * This run is on another port than the configured one, because that one
+   * was taken — for this start only. Agents still expect the configured one,
+   * and the page says so.
+   */
+  standIn?: boolean
 }
 
 export interface RunningServer {
@@ -54,7 +60,9 @@ export async function startServer(options: StartOptions = {}): Promise<RunningSe
     for (const ws of sockets) ws.send(payload)
   }
 
-  const app = createApp(store, hub, broadcast)
+  const app = createApp(store, hub, broadcast, {
+    standIn: options.standIn ?? false,
+  })
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app })
   app.get(
     '/ws',
