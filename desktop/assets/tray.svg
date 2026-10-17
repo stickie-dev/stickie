@@ -1,6 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- the logo's outline: on a menu bar a filled square reads as a blot -->
-  <rect x="3" y="3" width="26" height="26" rx="6.5" fill="none" stroke="#000" stroke-width="2.4"/>
-  <path d="M9.5 11.5h13M9.5 16h13M9.5 20.5h6" stroke="#000" stroke-width="2.6" stroke-linecap="round"/>
-  <circle cx="21.5" cy="20.5" r="2.4" fill="#000"/>
+  <!-- the logo in one ink for the menu bar, where only transparency counts:
+       the note is cut out of the lines beneath it, and its folded corner is
+       a hole with the fold's own outline left standing -->
+  <defs>
+    <mask id="under-note">
+      <rect width="32" height="32" fill="#fff"/>
+      <path d="M14 8h13v10.5L21.5 24H14z" transform="rotate(6 22 17)" fill="#000" stroke="#000" stroke-width="2.4" stroke-linejoin="round"/>
+    </mask>
+    <mask id="fold">
+      <rect width="32" height="32" fill="#fff"/>
+      <path d="M27 18.5L21.5 24v-3.5a2 2 0 0 1 2-2z" fill="#000" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <g mask="url(#under-note)">
+    <rect x="1.3" y="1.3" width="29.4" height="29.4" rx="6.6" fill="none" stroke="#000" stroke-width="2.6"/>
+    <path d="M6.5 9h8.5M10 14h8.5M10 19h5.5M6.5 24h4.5" stroke="#000" stroke-width="2.6" stroke-linecap="round"/>
+  </g>
+  <g transform="rotate(6 22 17)">
+    <path d="M14 8h13v10.5L21.5 24H14z" fill="#000" mask="url(#fold)"/>
+  </g>
 </svg>
