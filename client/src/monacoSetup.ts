@@ -83,7 +83,12 @@ monaco.editor.defineTheme('stickie-light', {
     'diffEditorGutter.insertedLineBackground': '#c3ecd0',
     'diffEditorGutter.removedLineBackground': '#ffd4d1',
     'diffEditor.diagonalFill': '#00000010',
-    'diffEditor.unchangedRegionBackground': '#f6f8fa',
+    /*
+     * The code's own colour: a fold is a line of text inside a file. A tinted
+     * bar matched the file header's band, so a fold looked like the start of
+     * the next file (ContinuousDiff).
+     */
+    'diffEditor.unchangedRegionBackground': '#ffffff',
     'diffEditor.unchangedRegionForeground': '#57606a',
     'editorRuler.foreground': '#d8dee4',
     'scrollbarSlider.background': '#8c959f33',
@@ -131,7 +136,8 @@ monaco.editor.defineTheme('stickie-dark', {
     'diffEditorGutter.insertedLineBackground': '#23863960',
     'diffEditorGutter.removedLineBackground': '#da363360',
     'diffEditor.diagonalFill': '#ffffff0d',
-    'diffEditor.unchangedRegionBackground': '#1f1f23',
+    /* the code's own colour, as in the light theme */
+    'diffEditor.unchangedRegionBackground': '#17171a',
     'diffEditor.unchangedRegionForeground': '#a1a1aa',
     'editorRuler.foreground': '#2b3038',
     'scrollbarSlider.background': '#6e768133',

@@ -18,7 +18,7 @@ import { ReviewDiff } from './ReviewDiff'
 import { FileName } from './FileName'
 import { Loading, SkeletonCode } from './Skeleton'
 import { ChevronDown, ChevronRight, WrapLines } from '../icons'
-import { card, icon_button, icon_button_on, reveal_line_count } from '../ui'
+import { badge, card, icon_button, icon_button_on, reveal_line_count } from '../ui'
 
 type Attach = (
   instance: editor.IStandaloneCodeEditor,
@@ -202,8 +202,11 @@ function DiffSection({
     // only thing saying where one ends and the next begins was a hairline,
     // and a sticky header sliding over it read as part of the file above
     <section ref={containerRef} className={`mb-3 ${card}`}>
+      {/* a band of its own, not the panel: the editor is painted the panel's
+          colour, so a panel header was the code's own white with a hairline
+          under it, and scrolling, a new file's start went by unseen */}
       <div
-        className={`sticky top-0 z-20 flex items-center gap-3 rounded-t-lg bg-panel px-3 py-1.5 text-xs ${folded ? '' : 'border-b border-edge'}`}
+        className={`sticky top-0 z-20 flex items-center gap-3 rounded-t-lg bg-overlay px-3 py-1.5 text-xs ${folded ? '' : 'border-b border-edge'}`}
       >
         {/* a real target, not a glyph: this is the control the reader reaches
             for most in a long diff, and 6px of text was a dart board. The
@@ -219,7 +222,7 @@ function DiffSection({
           {folded ? <ChevronRight /> : <ChevronDown />}
         </button>
         <FileName path={file.path} />
-        <span className="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-soft">
+        <span className={`shrink-0 bg-panel text-soft ${badge}`}>
           {file.status}
         </span>
         <label className="flex shrink-0 cursor-pointer items-center gap-1 text-soft hover:text-ink">
