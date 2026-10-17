@@ -43,6 +43,25 @@ pnpm build
 All three must pass before a PR. New server logic that parses external
 output (git, ripgrep, GitLab) should come with unit tests on the parser.
 
+## Builds
+
+README's "What the builds leave" lists the output folders; two of them are
+assembled by scripts that have to be kept in step with the code. The npm
+package (`scripts/package.mjs` → `dist-pkg/`) and the desktop app
+(`desktop/scripts/stage.mjs` → `desktop/stage/`) each copy the build outputs
+by an explicit list and take the server's dependencies from
+`server/package.json` — so a new folder the server or the client needs at
+run time has to be added to both lists, and a dependency the server needs
+belongs in `dependencies`, not `devDependencies`, or the installed copies run
+without it. The stage installs those dependencies with npm, flat and real,
+because pnpm's linked `node_modules` cannot be packed into an installer; the
+package only names them.
+
+An installed desktop app keeps the app shell (`desktop/src`) it was built
+with even when it uses a newer server, so a change to the shell is only seen
+from the repository (`pnpm desktop`, `pnpm desktop:dev`) until a new
+installer is built.
+
 ## Storage
 
 `server/src/db/` is the only place that knows a database exists: `driver.ts`

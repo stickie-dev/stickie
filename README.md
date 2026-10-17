@@ -183,6 +183,22 @@ stickie already serving its port, the dev server included, and
 client change is in the window at once. In that mode the app starts no
 server of its own, and waits for `pnpm dev` if it is not up yet.
 
+An installed app is a copy of the build it was made from, so what reaches it
+without a new installer depends on what changed:
+
+- **The app itself** — `desktop/src` (the window, menus, tray, the close and
+  port dialogs, the title bar), `desktop/assets`, `electron-builder.json`, the
+  Electron version, the version number: only a new installer.
+- **The server's dependencies**: only a new installer, since they are
+  installed into it when it is built.
+- **The server and the client**: a new installer for the app to serve them
+  itself. While another stickie serves its port — the dev server, or `stickie`
+  from a terminal — the app uses that server, its window shows that server's
+  page, and the change is there without one.
+
+So build one to use the app on its own, without `pnpm dev`, or after
+changing the app or how it is packaged.
+
 Installers are built on the platform they are for — the `desktop` workflow
 does all four (macOS on Apple Silicon and Intel, Windows, Linux). They are
 not signed: macOS asks before the first launch (right-click → Open).
@@ -218,8 +234,18 @@ quit, or to run on the nearest free port *this time only*: the setting stays
 as it was, and the window says that agents cannot reach stickie until it is
 started on its own port again (a button there restarts it).
 
-`pnpm package` assembles the publishable npm package under `dist-pkg/`, which
-carries two binaries: `stickie` (the server) and `stickie-mcp` (the MCP bridge).
+### What the builds leave
+
+Three things are built from this repository — stickie run from the repository,
+the npm package and the desktop installer — and each leaves its own folder.
+All are ignored by git and made again by the command that made them.
+
+| Folder | Made by | What it is |
+| --- | --- | --- |
+| `client/dist`, `server/dist`, `desktop/dist` | `pnpm build` | Each package compiled; `pnpm start`, `bin/stickie.js` and `pnpm desktop` run these. |
+| `dist-pkg/` | `pnpm package` | The publishable npm package, with two binaries: `stickie` (the server) and `stickie-mcp` (the MCP bridge). Its dependencies are named, and installed by whoever installs it. |
+| `desktop/stage/` | `pnpm desktop:dist` | The installer's contents, assembled: the three `dist` folders, and the server's dependencies installed as plain files, because pnpm's linked `node_modules` cannot be packed. |
+| `desktop/release/` | `pnpm desktop:dist` | The installer (a `.dmg` on macOS) and the app unpacked beside it. |
 
 The server binds 127.0.0.1 only (`STICKIE_HOST` overrides). Nothing reaches
 the network unless you press something: the GitLab import, and *fetch* in
