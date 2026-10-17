@@ -961,15 +961,38 @@ export class Store {
     return rows.map((r) => r.path)
   }
 
-  async setThreadAnchor(
+  /*
+   * Re-anchoring's two writes, each made only over the status it read. A note
+   * can be resolved between that read and the write — an agent resolving it
+   * while an open review re-reads its notes — and a check that started before
+   * the resolve must not undo it. Both say whether they wrote.
+   */
+
+  async setThreadStatusFrom(
     threadId: number,
+    from: ThreadStatus,
+    to: ThreadStatus,
+  ): Promise<boolean> {
+    const { changes } = await this.db.run(
+      'update threads set status = ? where id = ? and status = ?',
+      [to, threadId, from],
+    )
+    return changes > 0
+  }
+
+  async setThreadAnchorFrom(
+    threadId: number,
+    from: ThreadStatus,
     startLine: number,
     endLine: number,
-  ): Promise<void> {
-    await this.db.run(
-      'update threads set start_line = ?, end_line = ? where id = ?',
-      [startLine, endLine, threadId],
+    to: ThreadStatus,
+  ): Promise<boolean> {
+    const { changes } = await this.db.run(
+      'update threads set start_line = ?, end_line = ?, status = ? ' +
+        'where id = ? and status = ?',
+      [startLine, endLine, to, threadId, from],
     )
+    return changes > 0
   }
 
   private async threadFromRow(row: ThreadRow): Promise<Thread> {

@@ -3766,15 +3766,10 @@ async function reanchorThreads(
       content = blob.content
       contents.set(key, content)
     }
-    if (content === null) {
-      await store.setThreadStatus(thread.id, 'detached')
-      result.push({ ...thread, status: 'detached' })
-      continue
-    }
-    const anchor = reanchor(thread.snippet, content, thread.startLine)
+    const anchor =
+      content === null ? null : reanchor(thread.snippet, content, thread.startLine)
     if (anchor === null) {
-      await store.setThreadStatus(thread.id, 'detached')
-      result.push({ ...thread, status: 'detached' })
+      result.push(await detachThread(store, thread))
       continue
     }
     if (
@@ -3782,16 +3777,35 @@ async function reanchorThreads(
       anchor.endLine !== thread.endLine ||
       thread.status === 'detached'
     ) {
-      await store.setThreadAnchor(thread.id, anchor.startLine, anchor.endLine)
-      if (thread.status === 'detached') await store.setThreadStatus(thread.id, 'open')
-      result.push({
-        ...thread,
-        ...anchor,
-        status: thread.status === 'detached' ? 'open' : thread.status,
-      })
+      const status = thread.status === 'detached' ? 'open' : thread.status
+      const moved = await store.setThreadAnchorFrom(
+        thread.id,
+        thread.status,
+        anchor.startLine,
+        anchor.endLine,
+        status,
+      )
+      result.push(
+        moved ? { ...thread, ...anchor, status } : await threadNow(store, thread),
+      )
       continue
     }
     result.push(thread)
   }
   return result
+}
+
+/**
+ * A note whose code is gone turns `detached` — unless it stopped being what
+ * the re-anchoring read: resolved meanwhile, it is history and stays resolved.
+ */
+async function detachThread(store: Store, thread: Thread): Promise<Thread> {
+  if (thread.status === 'detached') return thread
+  const detached = await store.setThreadStatusFrom(thread.id, thread.status, 'detached')
+  return detached ? { ...thread, status: 'detached' } : threadNow(store, thread)
+}
+
+/** the note as it is now, for when it changed under a re-anchoring */
+async function threadNow(store: Store, thread: Thread): Promise<Thread> {
+  return (await store.getThread(thread.id)) ?? thread
 }

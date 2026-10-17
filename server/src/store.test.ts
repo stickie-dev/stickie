@@ -796,3 +796,54 @@ describe('numbering notes within a review', () => {
     expect(await store.getThreadByNumber(first.id, 1)).toBeUndefined()
   })
 })
+
+describe('re-anchoring a note that changed under it', () => {
+  // the read happens first, the resolve lands, and only then the write: what
+  // an open review re-reading its notes does while an agent resolves one
+  const resolvedMidway = async () => {
+    const store = await freshStore()
+    const repo = await store.addRepo('/tmp/repo')
+    const session = await store.getOrCreateSession(
+      repo.id,
+      'master',
+      { kind: 'worktree', value: '/tmp/repo' },
+      'master',
+      'abc123',
+    )
+    const read = await store.createThread(
+      session.id,
+      'a.ts',
+      'source',
+      4,
+      4,
+      null,
+      'x = 1',
+      'user',
+      'look at this',
+    )
+    await store.setThreadStatus(read.id, 'resolved')
+    return { store, read }
+  }
+
+  it('does not detach a note resolved since it was read', async () => {
+    const { store, read } = await resolvedMidway()
+    expect(await store.setThreadStatusFrom(read.id, read.status, 'detached')).toBe(false)
+    expect((await store.getThread(read.id))?.status).toBe('resolved')
+  })
+
+  it('does not move a note resolved since it was read', async () => {
+    const { store, read } = await resolvedMidway()
+    expect(await store.setThreadAnchorFrom(read.id, read.status, 9, 9, read.status)).toBe(false)
+    const now = await store.getThread(read.id)
+    expect([now?.status, now?.startLine]).toEqual(['resolved', 4])
+  })
+
+  it('still detaches, moves and brings back a note nobody touched', async () => {
+    const { store, read } = await resolvedMidway()
+    await store.setThreadStatus(read.id, 'open')
+    expect(await store.setThreadStatusFrom(read.id, 'open', 'detached')).toBe(true)
+    expect(await store.setThreadAnchorFrom(read.id, 'detached', 7, 8, 'open')).toBe(true)
+    const now = await store.getThread(read.id)
+    expect([now?.status, now?.startLine, now?.endLine]).toEqual(['open', 7, 8])
+  })
+})
