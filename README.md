@@ -298,8 +298,9 @@ started on its own port again (a button there restarts it).
 
 Four things are built from this repository — stickie run from the repository,
 the npm package, its PyPI launcher and the desktop installer — and each leaves
-its own folder.
-All are ignored by git and made again by the command that made them.
+its own folder; so does the script that draws this README's pictures.
+All but the pictures are ignored by git and made again by the command that
+made them.
 
 | Folder | Made by | What it is |
 | --- | --- | --- |
@@ -308,6 +309,7 @@ All are ignored by git and made again by the command that made them.
 | `python/dist/` | `uv build` in `python/` | The PyPI package: a launcher whose `stickie` and `stickie-mcp` run the npm package of the same version through `npx`, so `pip install stickie` or `uvx stickie` work wherever Node 22 does. Its version is read from `package.json`. |
 | `desktop/stage/` | `pnpm desktop:dist` | The installer's contents, assembled: the three `dist` folders, and the server's dependencies installed as plain files, because pnpm's linked `node_modules` cannot be packed. |
 | `desktop/release/` | `pnpm desktop:dist` | The installer (a `.dmg` on macOS) and the app unpacked beside it. |
+| `docs/images/` | `pnpm showcase` | The pictures in this README, made from a made-up project; see CONTRIBUTING's "The README's pictures". Committed, unlike the rest. |
 
 The server binds 127.0.0.1 only (`STICKIE_HOST` overrides). Nothing reaches
 the network unless you press something: the GitLab import, and *fetch* in

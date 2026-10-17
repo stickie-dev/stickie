@@ -69,6 +69,40 @@ version. A new binary in `package.json`'s `bin` needs an entry in
 `python/pyproject.toml`'s `[project.scripts]` too. `python/LICENSE` is a copy
 of the root one, since a package cannot reach a file outside its folder.
 
+### Everything that gets built, and how
+
+| What | Command | Lands in |
+| --- | --- | --- |
+| The npm package | `pnpm package` | `dist-pkg/`, published from there with `npm publish` |
+| The PyPI launcher | `pnpm package:pypi` (needs `uv`) | `python/dist/`, published after the npm one with `uvx twine upload python/dist/*` |
+| The desktop app, for this machine | `pnpm desktop:dist` | `desktop/release/` |
+| The desktop app, for every platform | push a `v*` tag, or run the *desktop* workflow by hand | the workflow run's artifacts: a `.dmg` for Apple Silicon and for Intel, a Windows installer, a Linux AppImage |
+| The README's pictures | `pnpm showcase` (`shots`, `gifs` or `demo` for part of it) | `docs/images/` |
+
+Each desktop installer is built on the platform it is for
+(`.github/workflows/desktop.yml`), because the server's ripgrep is fetched for
+the machine it is installed on: a Linux AppImage built on a Mac would search
+with a Mac binary. So there is no command for all three on one machine.
+
+### The README's pictures
+
+`scripts/showcase/` makes them from a made-up project: two small
+repositories, `orbit-api` and `orbit-web`, written from scratch by
+`make-repos.sh` with fixed authors and dates, and four reviews of them seeded by
+`seed.mjs` — the person's notes through the REST API, every agent move through
+MCP, the way an agent would make it. It runs its own stickie on port 4879 with
+its own database, config and git identity (Jane Doe), so nothing of the person
+running it ends up in a picture, and drives a headless Chrome (`CHROME` names
+the binary if it is not found) through `cdp.mjs`. Its throwaway state lives in
+the ignored `scripts/showcase/.work/`. The repositories and the database are
+not committed: the scripts make them again in seconds, and a database would
+carry the absolute paths of the machine that made it.
+
+`pnpm showcase demo` stops after seeding and leaves that stickie running, to
+try things on without touching your own reviews. A recording never comes out
+byte for byte the same, so commit new pictures only when the UI in them has
+changed.
+
 ## Storage
 
 `server/src/db/` is the only place that knows a database exists: `driver.ts`

@@ -20,7 +20,9 @@
     "start": "node server/dist/index.js",
     "test": "pnpm --recursive test",
     "typecheck": "pnpm --recursive typecheck",
-    "package": "pnpm build && node scripts/package.mjs"
+    "package": "pnpm build && node scripts/package.mjs",
+    "package:pypi": "uv build python",
+    "showcase": "bash scripts/showcase/run.sh"
   },
   "packageManager": "pnpm@11.18.0",
   "license": "Apache-2.0"
