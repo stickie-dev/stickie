@@ -2,6 +2,22 @@ import { useState } from 'react'
 import { activeFiles, useReview } from '../store'
 import { btn } from '../ui'
 import { SourceAndBase } from './SourceAndBase'
+import type { LiveState } from '../watchHint'
+import { liveHint, liveState } from '../watchHint'
+
+const live_colour: Record<LiveState, string> = {
+  watching: 'text-emerald-600 dark:text-emerald-400',
+  'not-watching': 'text-amber-500',
+  disconnected: 'text-rose-500',
+}
+
+const live_label: Record<LiveState, string> = {
+  watching: 'watching for changes',
+  'not-watching': 'not watching every repository',
+  disconnected: 'not connected to stickie',
+}
+
+const mac = /Mac/.test(navigator.userAgent)
 
 /** The bar's frame, with the height a row of its buttons gives it either way. */
 const bar =
@@ -34,6 +50,7 @@ export function StatusBar({ reviewInFront }: { reviewInFront: boolean }) {
   const threads = useReview((s) => s.threads)
   const viewed = useReview((s) => s.viewed)
   const connected = useReview((s) => s.connected)
+  const watchProblems = useReview((s) => s.watchProblems)
   const selectRepo = useReview((s) => s.selectRepo)
   const openDir = useReview((s) => s.openDir)
   const openFileInRepo = useReview((s) => s.openFileInRepo)
@@ -41,10 +58,13 @@ export function StatusBar({ reviewInFront }: { reviewInFront: boolean }) {
   const [open, setOpen] = useState<number | null>(null)
 
   const repo = repos.find((r) => r.id === activeRepoId)
+  const live_state = liveState(connected, watchProblems)
   const live = (
     <span
-      className={`ml-2 shrink-0 ${connected ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}
-      title={connected ? 'watching for changes' : 'not connected'}
+      className={`ml-2 shrink-0 ${live_colour[live_state]}`}
+      title={liveHint(connected, watchProblems, mac)}
+      aria-label={live_label[live_state]}
+      role="status"
     >
       ●
     </span>

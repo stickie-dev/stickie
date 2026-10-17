@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import { refPath, watchable } from './watcher.js'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { refPath, watchable, WatchHub } from './watcher.js'
 
 describe('what a repository watch reports', () => {
   it('reports source files, however deep', () => {
@@ -49,5 +52,86 @@ describe('what a refs watch reports', () => {
     expect(refPath('logs/HEAD')).toBe(false)
     expect(refPath('refs/heads/main.lock')).toBe(false)
     expect(refPath('worktrees/feature/index')).toBe(false)
+  })
+})
+
+describe('a watch that fails', () => {
+  /** an fs.watch that refuses until told otherwise */
+  function refusingWatch() {
+    const control = { refuse: true, calls: 0 }
+    const watch = (
+      target: string,
+      options: { recursive: boolean; persistent: boolean },
+    ) => {
+      control.calls += 1
+      if (control.refuse) {
+        throw Object.assign(new Error(`EPERM: operation not permitted, watch '${target}'`), {
+          code: 'EPERM',
+        })
+      }
+      return fs.watch(target, options)
+    }
+    return { control, watch }
+  }
+
+  let dir = ''
+  let hub: WatchHub
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stickie-watch-'))
+  })
+  afterEach(async () => {
+    await hub.close()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('is reported, retried, and caught up on once it works', async () => {
+    const { control, watch } = refusingWatch()
+    hub = new WatchHub({ watch })
+    const events: unknown[] = []
+    hub.onEvent((event) => events.push(event))
+
+    hub.ensureWatch(dir)
+    expect(hub.watchProblems()).toEqual([
+      expect.objectContaining({ path: dir, what: 'files', code: 'EPERM' }),
+    ])
+    expect(events).toContainEqual({ type: 'watch', problems: hub.watchProblems() })
+
+    // asked again while failing, it waits for its retry rather than trying now
+    hub.ensureWatch(dir)
+    expect(control.calls).toBe(1)
+
+    // still refused at the first retry; then it waits twice as long
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(control.calls).toBe(2)
+    control.refuse = false
+    await vi.advanceTimersByTimeAsync(9999)
+    expect(control.calls).toBe(2)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(control.calls).toBe(3)
+
+    expect(hub.watchProblems()).toEqual([])
+    expect(events).toContainEqual({ type: 'watch', problems: [] })
+    // what changed while it was not watching was never reported, so the page
+    // is told to read the repository again
+    expect(events).toContainEqual({ type: 'fs', repoPath: dir, paths: [] })
+  })
+
+  it('is not a problem when the folder is gone', () => {
+    const { watch } = refusingWatch()
+    hub = new WatchHub({ watch })
+    hub.ensureWatch(path.join(dir, 'deleted-worktree'))
+    expect(hub.watchProblems()).toEqual([])
+  })
+
+  it('stops being a problem when its repository is removed', () => {
+    const { watch } = refusingWatch()
+    hub = new WatchHub({ watch })
+    hub.ensureWatch(dir)
+    hub.forget(dir)
+    expect(hub.watchProblems()).toEqual([])
   })
 })

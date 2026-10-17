@@ -254,6 +254,10 @@ the status bar, which runs `git fetch --all` for the repository in front.
 stickie watches each repository's refs, so a commit, a pull or a checkout made
 anywhere — a terminal, an IDE, an agent — is in an open review without a
 reload; the reload button in the top bar is for anything it missed. The
+dot at the end of the status bar says whether changes are reaching the page:
+green, they are; amber, the server is not watching a repository it should
+(it says which and why, and how to fix it, on hover — and retries by
+itself); red, the page has lost the server. The
 status bar marks a base or source branch that is behind or ahead of the
 branch it tracks, as of the last fetch, and a branch only behind can be
 pulled from there: a fast-forward, refused when it would have to merge or

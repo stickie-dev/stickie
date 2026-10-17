@@ -67,7 +67,13 @@ export async function startServer(options: StartOptions = {}): Promise<RunningSe
   app.get(
     '/ws',
     upgradeWebSocket(() => ({
-      onOpen: (_event, ws) => sockets.add(ws),
+      onOpen: (_event, ws) => {
+        sockets.add(ws)
+        // what is not being watched is known before this page arrived, and
+        // only changes are broadcast
+        const state: ClientEvent = { type: 'watch', problems: hub.watchProblems() }
+        ws.send(JSON.stringify(state))
+      },
       onClose: (_event, ws) => sockets.delete(ws),
     })),
   )

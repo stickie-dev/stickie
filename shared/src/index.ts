@@ -360,4 +360,25 @@ export interface ThreadEvent {
   threadId?: number
 }
 
-export type ClientEvent = FsEvent | ThreadEvent | RefsEvent
+/**
+ * A watch that should be running and is not: the folder is there, but the
+ * system refused to watch it or stopped. The server retries on its own; until
+ * then that repository's changes do not reach the page by themselves.
+ */
+export interface WatchProblem {
+  /** the checkout watched, or for refs the repository's root */
+  path: string
+  /** its files, or its refs (branches, HEAD, fetches) */
+  what: 'files' | 'refs'
+  /** the system's error code, e.g. EPERM or EMFILE; null if it gave none */
+  code: string | null
+  message: string
+}
+
+/** Every watch problem there is now — the whole list, each time it changes. */
+export interface WatchEvent {
+  type: 'watch'
+  problems: WatchProblem[]
+}
+
+export type ClientEvent = FsEvent | ThreadEvent | RefsEvent | WatchEvent

@@ -257,6 +257,7 @@ export function App() {
   const syncThreads = useReview((s) => s.syncThreads)
   const refreshRefs = useReview((s) => s.refreshRefs)
   const setConnected = useReview((s) => s.setConnected)
+  const setWatchProblems = useReview((s) => s.setWatchProblems)
   const setReviewActive = useReview((s) => s.setReviewActive)
   const theme = useReview((s) => s.theme)
   const fontScale = useReview((s) => s.fontScale)
@@ -353,6 +354,7 @@ export function App() {
           if (event.type === 'fs') void refresh(event.repoPath)
           else if (event.type === 'refs') void refreshRefs(event.repoPath)
           else if (event.type === 'thread') void syncThreads(event.sessionId)
+          else if (event.type === 'watch') setWatchProblems(event.problems)
         } catch {
           // ignore malformed frames
         }
@@ -367,7 +369,7 @@ export function App() {
       closed = true
       socket?.close()
     }
-  }, [refresh, refreshRefs, syncThreads, setConnected])
+  }, [refresh, refreshRefs, syncThreads, setConnected, setWatchProblems])
 
   // the window itself never scrolls: every panel scrolls inside itself, and
   // anything that would push the frame wider or taller is clipped at it

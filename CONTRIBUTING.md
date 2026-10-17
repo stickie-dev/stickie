@@ -194,6 +194,17 @@ half of one. Anything that opens a descriptor per file in a repository is
 therefore a performance decision about every git call stickie makes, not a local
 one.
 
+A watch that fails — refused (EPERM, a macOS privacy setting), out of
+descriptors or watchers, or dropped by the system — is a `WatchProblem`, not a
+line in the server's log: `WatchHub` keeps the list, broadcasts it whole as a
+`watch` event (and sends it to each page as it connects), and retries each on
+its own, from 5 seconds doubling to a minute. A retry that works sends the
+`fs` or `refs` event nobody heard while it was down, so the page catches up.
+A folder that is gone is not a problem — agents' worktrees are deleted when
+they are done — and is only tried again when a review asks for it. The
+status bar's dot is green, amber or red from this and the socket, and what it
+says on hover, cause and fix included, is `watchHint.ts`.
+
 ## Look and feel
 
 `client/src/ui.ts` is the language: `card`, `sunken`, `field`, `field_flush`,

@@ -8,6 +8,7 @@ import type {
   Side,
   TargetOptions,
   Thread,
+  WatchProblem,
 } from '@stickie/shared'
 import { api } from './api'
 import type {
@@ -191,6 +192,9 @@ interface ReviewState {
   activeReplyRepoId: number | null
   error: string | null
   connected: boolean
+  /** watches the server should be running and is not; see watchHint.ts */
+  watchProblems: WatchProblem[]
+  setWatchProblems: (problems: WatchProblem[]) => void
   /** the port as the settings report it; null until they have been read */
   port: PortState | null
   setPortState: (port: PortState) => void
@@ -1180,6 +1184,7 @@ export const useReview = create<ReviewState>((set, get) => {
     activeReplyRepoId: null,
     error: null,
     connected: false,
+    watchProblems: [],
     port: null,
     promptCopied: false,
     mrCandidate: null,
@@ -2733,6 +2738,7 @@ export const useReview = create<ReviewState>((set, get) => {
 
     setConnected: (connected) => set({ connected }),
     setPortState: (port) => set({ port }),
+    setWatchProblems: (watchProblems) => set({ watchProblems }),
   }
 })
 

@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { FsEvent, RefsEvent } from '@stickie/shared'
+import type { FsEvent, RefsEvent, WatchEvent, WatchProblem } from '@stickie/shared'
 import { gitCommonDir } from './git.js'
 
 /**
@@ -49,6 +49,20 @@ const ignored_dirs = new Set([
 
 const debounce_ms = 300
 
+/** A failed watch is tried again after this, doubling up to the cap. */
+const first_retry_ms = 5000
+const last_retry_ms = 60_000
+
+type HubEvent = FsEvent | RefsEvent | WatchEvent
+
+export interface WatchHubOptions {
+  /** `fs.watch`, or a stand-in that can be made to fail in a test */
+  watch?: (
+    target: string,
+    options: { recursive: boolean; persistent: boolean },
+  ) => fs.FSWatcher
+}
+
 /** Whether a path inside the repository is worth telling anyone about. */
 /**
  * Whether a path inside the git directory is one that moves a ref: a branch
@@ -75,26 +89,49 @@ export class WatchHub {
   private watchers = new Map<string, fs.FSWatcher>()
   private pending = new Map<string, Set<string>>()
   private timers = new Map<string, NodeJS.Timeout>()
-  private listeners = new Set<(event: FsEvent | RefsEvent) => void>()
+  private listeners = new Set<(event: HubEvent) => void>()
   /** one per repository's git directory, however many checkouts share it */
   private ref_watchers = new Map<string, fs.FSWatcher>()
   private ref_timers = new Map<string, NodeJS.Timeout>()
+  /**
+   * Watches that should be running and are not, by `what:path`. Without this
+   * a failed watch was one line in the server's log, and the page went on
+   * saying it was watching while an agent's edits stopped arriving.
+   */
+  private problems = new Map<string, WatchProblem>()
+  private retries = new Map<string, { timer: NodeJS.Timeout; delay: number }>()
+  private watch: NonNullable<WatchHubOptions['watch']>
 
-  onEvent(listener: (event: FsEvent | RefsEvent) => void): () => void {
+  constructor(options: WatchHubOptions = {}) {
+    this.watch = options.watch ?? ((target, opts) => fs.watch(target, opts))
+  }
+
+  onEvent(listener: (event: HubEvent) => void): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
+  }
+
+  /** What is not being watched now; sent to a page as it connects. */
+  watchProblems(): WatchProblem[] {
+    return [...this.problems.values()]
   }
 
   ensureWatch(repoPath: string): void {
     void this.watchRefs(repoPath)
     if (this.watchers.has(repoPath)) return
+    // already failing: its retry is on the way, and starting another here
+    // would only fail the same way and reset the wait
+    if (this.retries.has(`files:${repoPath}`)) return
+    this.startFiles(repoPath)
+  }
+
+  private startFiles(repoPath: string): void {
     let watcher: fs.FSWatcher
     try {
-      watcher = fs.watch(repoPath, { recursive: true, persistent: true })
+      watcher = this.watch(repoPath, { recursive: true, persistent: true })
     } catch (error) {
-      // a repository that has been moved or unmounted is not worth failing a
-      // request over; the diff simply stops following it
       console.warn(`stickie: not watching ${repoPath}: ${String(error)}`)
+      this.failed('files', repoPath, error, () => this.startFiles(repoPath))
       return
     }
     watcher.on('change', (_event, filename) => {
@@ -107,8 +144,10 @@ export class WatchHub {
       console.warn(`stickie: watch of ${repoPath} failed: ${String(error)}`)
       this.watchers.delete(repoPath)
       watcher.close()
+      this.failed('files', repoPath, error, () => this.startFiles(repoPath))
     })
     this.watchers.set(repoPath, watcher)
+    this.recovered('files', repoPath)
   }
 
   /**
@@ -122,11 +161,17 @@ export class WatchHub {
     if (dir === null || this.ref_watchers.has(dir)) return
     // the repository is named by its root, which is what a review knows it by
     const root = path.basename(dir) === '.git' ? path.dirname(dir) : dir
+    if (this.retries.has(`refs:${root}`)) return
+    this.startRefs(dir, root)
+  }
+
+  private startRefs(dir: string, root: string): void {
     let watcher: fs.FSWatcher
     try {
-      watcher = fs.watch(dir, { recursive: true, persistent: true })
+      watcher = this.watch(dir, { recursive: true, persistent: true })
     } catch (error) {
       console.warn(`stickie: not watching the refs of ${root}: ${String(error)}`)
+      this.failed('refs', root, error, () => this.startRefs(dir, root))
       return
     }
     watcher.on('change', (_type, filename) => {
@@ -139,20 +184,96 @@ export class WatchHub {
         dir,
         setTimeout(() => {
           this.ref_timers.delete(dir)
-          const event: RefsEvent = { type: 'refs', repoPath: root }
-          for (const listener of this.listeners) listener(event)
+          this.emit({ type: 'refs', repoPath: root })
         }, debounce_ms),
       )
     })
-    watcher.on('error', () => {
+    watcher.on('error', (error) => {
+      console.warn(`stickie: watch of the refs of ${root} failed: ${String(error)}`)
       this.ref_watchers.delete(dir)
       watcher.close()
+      this.failed('refs', root, error, () => this.startRefs(dir, root))
     })
     this.ref_watchers.set(dir, watcher)
+    this.recovered('refs', root)
+  }
+
+  /**
+   * A watch could not start, or stopped. If the folder is gone there is
+   * nothing to follow — an agent's worktree is deleted when it is done, and
+   * that is not a fault — so it is dropped quietly and tried again only when
+   * a review asks for it. Otherwise it is a problem the page shows, and it is
+   * tried again on its own, waiting longer each time.
+   */
+  private failed(
+    what: WatchProblem['what'],
+    target: string,
+    error: unknown,
+    restart: () => void,
+  ): void {
+    const key = `${what}:${target}`
+    const delay = Math.min(
+      (this.retries.get(key)?.delay ?? first_retry_ms / 2) * 2,
+      last_retry_ms,
+    )
+    this.clearRetry(key)
+    if (!fs.existsSync(target)) {
+      if (this.problems.delete(key)) this.announce()
+      return
+    }
+    const code = (error as NodeJS.ErrnoException | null)?.code
+    this.problems.set(key, {
+      path: target,
+      what,
+      code: code ?? null,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    this.announce()
+    // the entry outlives its timer firing: a retry that fails again reads
+    // `delay` from it to wait longer, and one that works clears it
+    const timer = setTimeout(restart, delay)
+    timer.unref()
+    this.retries.set(key, { timer, delay })
+  }
+
+  /** A watch is running: if it had failed, say so and catch the page up. */
+  private recovered(what: WatchProblem['what'], target: string): void {
+    const key = `${what}:${target}`
+    this.clearRetry(key)
+    if (!this.problems.delete(key)) return
+    this.announce()
+    // whatever changed while nobody was watching was never reported
+    this.emit(
+      what === 'files'
+        ? { type: 'fs', repoPath: target, paths: [] }
+        : { type: 'refs', repoPath: target },
+    )
+  }
+
+  private clearRetry(key: string): void {
+    const retry = this.retries.get(key)
+    if (retry === undefined) return
+    clearTimeout(retry.timer)
+    this.retries.delete(key)
+  }
+
+  private announce(): void {
+    this.emit({ type: 'watch', problems: this.watchProblems() })
+  }
+
+  private emit(event: HubEvent): void {
+    for (const listener of this.listeners) listener(event)
   }
 
   /** Stops watching one repository — it left the workspace. */
   forget(repoPath: string): void {
+    // a watch that was failing is no longer anyone's problem either
+    let changed = false
+    for (const key of [`files:${repoPath}`, `refs:${repoPath}`]) {
+      this.clearRetry(key)
+      changed = this.problems.delete(key) || changed
+    }
+    if (changed) this.announce()
     const watcher = this.watchers.get(repoPath)
     if (watcher === undefined) return
     watcher.close()
@@ -172,6 +293,9 @@ export class WatchHub {
     this.ref_timers.clear()
     for (const timer of this.timers.values()) clearTimeout(timer)
     this.timers.clear()
+    for (const retry of this.retries.values()) clearTimeout(retry.timer)
+    this.retries.clear()
+    this.problems.clear()
     return Promise.resolve()
   }
 
@@ -192,9 +316,6 @@ export class WatchHub {
     this.pending.delete(repoPath)
     this.timers.delete(repoPath)
     if (bucket === undefined || bucket.size === 0) return
-    const event: FsEvent = { type: 'fs', repoPath, paths: [...bucket] }
-    for (const listener of this.listeners) {
-      listener(event)
-    }
+    this.emit({ type: 'fs', repoPath, paths: [...bucket] })
   }
 }
