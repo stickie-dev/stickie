@@ -428,6 +428,9 @@ export function FileView() {
   const [helpOpen, setHelpOpen] = useState(false)
   const attachCapture = makeCaptureAttacher(setCaptureTarget, setDefinitionPick)
   const activeRepoId = useReview((s) => s.activeRepoId)
+  const repoMissing = useReview(
+    (s) => s.repos.find((r) => r.id === s.activeRepoId)?.missing === true,
+  )
   const viewed = useReview((s) => s.viewed)
   const toggleViewed = useReview((s) => s.toggleViewed)
   const files = useReview(activeFiles)
@@ -700,7 +703,9 @@ export function FileView() {
       // files, which is what sends a reader looking for what went missing.
       return (
         <div className="flex h-full items-center justify-center px-6 text-center text-sm text-faint">
-          {session.sourceGone === true
+          {repoMissing
+            ? `This review's repository is gone: nothing at ${session.repoPath} is a git repository any more. Its notes are kept, in the comments panel — add the repository again at its new path to read them against the code.`
+            : session.sourceGone === true
             ? 'What this review is of is no longer in the repository. Its notes are kept — point the source above at something else to carry on.'
             : session.merged === true
               ? `Everything this review is of is already in ${session.baseRef}.`

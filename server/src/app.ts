@@ -3745,6 +3745,7 @@ async function reanchorThreads(
 ): Promise<Thread[]> {
   // keyed by side as well as path: the same file reads differently on each
   const contents = new Map<string, string | null>()
+  let repo_gone: boolean | undefined
   const result: Thread[] = []
   for (const thread of threads) {
     // a note with no code anchor has nothing to re-locate, and a resolved one
@@ -3769,6 +3770,12 @@ async function reanchorThreads(
       )
       content = blob.content
       contents.set(key, content)
+    }
+    // a repository whose folder is gone has no file to find, and finding none
+    // says nothing about the notes; marking every one detached for it would
+    // be a write a moved folder caused. Asked only once a file is unreadable.
+    if (content === null && (repo_gone ??= !(await isGitRepo(session.repoPath)))) {
+      return threads
     }
     const anchor =
       content === null ? null : reanchor(thread.snippet, content, thread.startLine)

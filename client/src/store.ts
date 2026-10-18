@@ -884,6 +884,10 @@ export const useReview = create<ReviewState>((set, get) => {
     } catch {
       return null
     }
+    if (isMissing(review.repoId)) {
+      await openGoneReview(review)
+      return get().session
+    }
     rememberSession(review)
     set({
       perRepo: {
@@ -897,6 +901,50 @@ export const useReview = create<ReviewState>((set, get) => {
     })
     await get().selectRepo(review.repoId)
     return get().session
+  }
+
+  /**
+   * Opens a review of a repository whose folder is gone. Git can read nothing
+   * of it — no diff, no tree, no branches — so none is asked for; its notes
+   * are in the database and come back as they are, and the diff tab says what
+   * happened where the diff would be. Going through `selectRepo` instead left
+   * the page on whatever review was open before, under this review's address.
+   */
+  async function openGoneReview(review: Session): Promise<void> {
+    const threads = await api.threads(review.id, true).catch(() => [])
+    rememberSession(review)
+    set({
+      activeRepoId: review.repoId,
+      targets: null,
+      source: review.source,
+      baseRef: review.baseRef,
+      showAll: false,
+      session: review,
+      threads,
+      viewed: new Set(),
+      allFiles: null,
+      selectedPath: null,
+      baseContent: null,
+      sourceContent: null,
+      error: null,
+      mrThreads: [],
+      mrLoaded: true,
+      mrCandidate: null,
+      repoSessions: {
+        ...get().repoSessions,
+        [review.repoId]: {
+          sessionId: review.id,
+          session: review,
+          files: [],
+          openCount: threads.filter((t) => t.status === 'open').length,
+          allFiles: null,
+          showAll: false,
+          expanded: true,
+        },
+      },
+    })
+    const flow_tab = ensureFlowTab(review.repoId, review.id)
+    set({ viewMode: 'flow', activeTabId: flow_tab.id })
   }
 
   /** Brings back notes that were being written when the page went away. */

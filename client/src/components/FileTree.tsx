@@ -340,7 +340,7 @@ function RepoNode({ repoId }: { repoId: number }) {
           ))}
         </Loading>
       )}
-      {expanded && tree !== null && (
+      {expanded && tree !== null && repo?.missing !== true && (
         <div className="ml-[13px] border-l border-edge/70">
           {renderDir(tree)}
           {entry?.showAll !== true && files.length === 0 && (
