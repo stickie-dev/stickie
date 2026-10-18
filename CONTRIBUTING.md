@@ -78,11 +78,21 @@ of the root one, since a package cannot reach a file outside its folder.
 | The desktop app, for this machine | `pnpm desktop:dist` | `desktop/release/` |
 | The desktop app, for every platform | push a `v*` tag, or run the *desktop* workflow by hand | the workflow run's artifacts: a `.dmg` for Apple Silicon and for Intel, a Windows installer, a Linux AppImage |
 | The README's pictures | `pnpm showcase` (`shots`, `gifs` or `demo` for part of it) | `docs/images/` |
+| **A release of all of it** | set `version` in `package.json`, commit, then `git tag vX.Y.Z && git push origin vX.Y.Z` | npm and PyPI, and the installers on a GitHub release (`.github/workflows/release.yml`) |
 
 Each desktop installer is built on the platform it is for
 (`.github/workflows/desktop.yml`), because the server's ripgrep is fetched for
 the machine it is installed on: a Linux AppImage built on a Mac would search
 with a Mac binary. So there is no command for all three on one machine.
+
+A release tag has to match `package.json`'s version, and the workflow stops if
+it does not. A version with a pre-release part (`0.1.0-rc1`) goes to npm as
+`next` rather than `latest` and is marked a pre-release on GitHub; PyPI
+spells it `0.1.0rc1` and leaves it out of plain installs, and the PyPI
+launcher turns that spelling back into npm's. The workflow holds no tokens:
+npm and PyPI trust it by name, which is set up once on each site under the
+package's settings, as a trusted publisher of `stickie-dev/stickie`'s
+`release.yml`.
 
 ### The README's pictures
 

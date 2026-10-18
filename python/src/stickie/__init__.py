@@ -5,10 +5,21 @@ stickie is a Node program; this package only finds Node and hands over, so the
 """
 
 import os
+import re
 import shutil
 import subprocess
 import sys
-from importlib.metadata import version
+from importlib.metadata import version as _installed
+
+
+def version(name: str) -> str:
+    """This package's version as npm spells it.
+
+    Both come from one package.json version, but PyPI normalises a
+    pre-release to `0.1.0rc1` where npm keeps `0.1.0-rc1`, and npx asking for
+    the PyPI spelling would ask npm for a version it has never had.
+    """
+    return re.sub(r"^(\d+\.\d+\.\d+)(a|b|rc)(\d+)$", r"\1-\2\3", _installed(name))
 
 
 def _run(binary: str) -> None:

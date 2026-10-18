@@ -2,12 +2,12 @@ name: desktop
 
 # Installers for the desktop app, each built on the platform it is for: the
 # server's ripgrep is fetched for the machine it is installed on, so a Linux
-# AppImage built on a Mac would search with a Mac binary. Run by hand, or by
-# pushing a version tag; the installers are attached to the run.
+# AppImage built on a Mac would search with a Mac binary. Run by hand, which
+# leaves the installers on the run for a week, or by the release workflow,
+# which puts them on the GitHub release where they stay.
 on:
   workflow_dispatch:
-  push:
-    tags: ['v*']
+  workflow_call:
 
 jobs:
   build:
@@ -17,7 +17,7 @@ jobs:
         include:
           - os: macos-14 # Apple Silicon
             flags: --mac
-          - os: macos-13 # Intel
+          - os: macos-15-intel # Intel; macos-13 is retired
             flags: --mac
           - os: windows-latest
             flags: --win
@@ -26,9 +26,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # the version is package.json's packageManager; naming one here as
+      # well is refused, even when the two agree
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -45,3 +45,6 @@ jobs:
             desktop/release/*.exe
             desktop/release/*.AppImage
           if-no-files-found: error
+          # four installers are ~450 MB a run; kept long enough to fetch, not
+          # long enough to fill a free account's artifact storage
+          retention-days: 7

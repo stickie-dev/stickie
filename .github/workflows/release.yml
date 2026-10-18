@@ -1,0 +1,95 @@
+name: release
+
+# A version tag publishes that version everywhere: `git tag v0.1.0-rc1 && git
+# push origin v0.1.0-rc1`. The tag has to match package.json's version. npm
+# first, then PyPI, since the PyPI package runs the npm one of its version;
+# the installers build meanwhile and go on a GitHub release. A version with a
+# pre-release part (0.1.0-rc1) is published as npm's `next` and marked a
+# pre-release on GitHub; PyPI keeps pre-releases out of plain installs itself.
+#
+# Nothing here holds a token: npm and PyPI trust this workflow by name
+# (trusted publishing, set up once on npmjs.com and pypi.org).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      prerelease: ${{ steps.read.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json's version $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          case "$version" in *-*) echo "prerelease=true" ;; *) echo "prerelease=false" ;; esac >> "$GITHUB_OUTPUT"
+
+  npm:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # trusted publishing, and npm's provenance statement
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      # trusted publishing needs npm 11.5.1 or later; Node 22 brings 10
+      - run: npm install -g npm@^11.5.1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm package
+      - working-directory: dist-pkg
+        run: npm publish --access public --provenance --tag ${{ needs.version.outputs.prerelease == 'true' && 'next' || 'latest' }}
+
+  pypi:
+    needs: [version, npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build python
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist
+
+  installers:
+    needs: version
+    uses: ./.github/workflows/desktop.yml
+
+  github-release:
+    needs: [version, installers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" installers/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "stickie ${{ needs.version.outputs.version }}" \
+            --generate-notes \
+            ${{ needs.version.outputs.prerelease == 'true' && '--prerelease' || '' }}

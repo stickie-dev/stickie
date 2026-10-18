@@ -51,6 +51,8 @@ fs.writeFileSync(
       productName: 'stickie',
       version: root_pkg.version,
       description: root_pkg.description,
+      homepage: root_pkg.homepage,
+      repository: root_pkg.repository,
       license: root_pkg.license,
       author: 'Hossain Mahmud',
       type: 'module',

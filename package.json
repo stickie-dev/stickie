@@ -1,8 +1,16 @@
 {
   "name": "stickie",
-  "version": "0.1.0",
+  "version": "0.1.0-rc1",
   "private": true,
   "description": "Notes for your coding agents: a local review surface for agent-made changes.",
+  "homepage": "https://github.com/stickie-dev/stickie#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stickie-dev/stickie.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stickie-dev/stickie/issues"
+  },
   "type": "module",
   "bin": {
     "stickie": "./bin/stickie.js",
