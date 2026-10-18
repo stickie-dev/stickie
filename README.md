@@ -22,13 +22,11 @@ npx stickie                 # from npm
 uvx stickie                 # from PyPI — runs the npm package, so it needs Node 22+
 ```
 
-Release candidates are `npx stickie@next` and `pip install --pre stickie`;
-installers for macOS, Windows and Linux are on the
-[releases page](https://github.com/stickie-dev/stickie/releases).
+or install the desktop app for macOS, Windows or Linux from the
+[releases page](https://github.com/stickie-dev/stickie/releases) (see
+[As an app](#as-an-app)). Release candidates, when there are any, are
+`npx stickie@next` and `pip install --pre stickie`.
 
-Until 0.1.0 itself is out, plain `npx stickie` and `uvx stickie` find only a
-placeholder: use the release candidate above, run stickie from this repository
-(see [Run](#run)), or install the desktop app ([As an app](#as-an-app)).
 Then point your agent at it:
 
 ```sh

@@ -92,7 +92,10 @@ spells it `0.1.0rc1` and leaves it out of plain installs, and the PyPI
 launcher turns that spelling back into npm's. The workflow holds no tokens:
 npm and PyPI trust it by name, which is set up once on each site under the
 package's settings, as a trusted publisher of `stickie-dev/stickie`'s
-`release.yml`.
+`release.yml` in the `release` environment. That environment waits for a
+maintainer to approve each run before anything is published (the run page's
+*Review deployments*), and a ruleset keeps the creation of `v*` tags to the
+repository's admins.
 
 ### The README's pictures
 

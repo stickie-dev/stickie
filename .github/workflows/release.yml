@@ -8,7 +8,10 @@ name: release
 # pre-release on GitHub; PyPI keeps pre-releases out of plain installs itself.
 #
 # Nothing here holds a token: npm and PyPI trust this workflow by name
-# (trusted publishing, set up once on npmjs.com and pypi.org).
+# (trusted publishing, set up once on npmjs.com and pypi.org), and only when it
+# runs in the `release` environment, which waits for a maintainer to approve
+# the run and only takes v* tags. Pushing such a tag is itself kept to the
+# repository's admins, by a ruleset.
 on:
   push:
     tags: ['v*']
@@ -36,6 +39,9 @@ jobs:
 
   npm:
     needs: version
+    # waits for the environment's reviewer to approve the run; npm and PyPI
+    # accept only a run in this environment
+    environment: release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -59,6 +65,7 @@ jobs:
 
   pypi:
     needs: [version, npm]
+    environment: release
     runs-on: ubuntu-latest
     permissions:
       contents: read
