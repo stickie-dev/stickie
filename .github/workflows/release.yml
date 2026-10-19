@@ -43,6 +43,10 @@ jobs:
     # accept only a run in this environment
     environment: release
     runs-on: ubuntu-latest
+    env:
+      # the client's vite build outgrows Node's default ~2 GB heap now and then
+      # (it ran a macOS installer build out of memory for v0.1.0)
+      NODE_OPTIONS: --max-old-space-size=4096
     permissions:
       contents: read
       id-token: write # trusted publishing, and npm's provenance statement

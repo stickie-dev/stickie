@@ -11,6 +11,9 @@ jobs:
     # the checks typecheck the desktop app but never run it
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      # the client's vite build outgrows Node's default ~2 GB heap now and then
+      # (it ran a macOS installer build out of memory for v0.1.0)
+      NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - uses: actions/checkout@v4
       # the version is package.json's packageManager; naming one here as
